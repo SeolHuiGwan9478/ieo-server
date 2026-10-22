@@ -1,0 +1,20 @@
+# 로컬 개발: H2 파일 DB (서버를 재시작해도 데이터 유지, server/data/ 아래에 저장)
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/ieo;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: true
+  h2:
+    console:
+      enabled: true
+
+logging:
+  level:
+    com.ieo.server: debug
