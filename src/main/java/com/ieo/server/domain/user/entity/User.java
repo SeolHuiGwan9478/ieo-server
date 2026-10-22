@@ -1,6 +1,10 @@
 package com.ieo.server.domain.user.entity;
 
+import com.ieo.server.domain.user.enums.UserRole;
+import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.global.entity.BaseTimeEntity;
+import com.ieo.server.global.error.BusinessException;
+import com.ieo.server.global.error.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -9,12 +13,16 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * Ieo 사용자. 휴대폰 번호로 가입하고 로그인한다. (요구사항: docs/requirements/08_계정_차량.md)
+ * 차주와 주선사 담당자의 공통 계정. 로그인과 계정 상태를 관리한다.
+ * 역할별 정보는 drivers(차주), broker_members(주선사 담당자) 테이블에 따로 둔다.
  */
 @Getter
 @Entity
@@ -26,45 +34,88 @@ public class User extends BaseTimeEntity {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
-	/** 숫자만 저장한다. 예: 01012345678 */
-	@Column(nullable = false, unique = true, length = 11)
+	/** 로그인 아이디. 숫자만 저장한다 (예: 01012345678). 탈퇴하면 null로 지운다. */
+	@Column(unique = true, length = 11)
 	private String phone;
 
 	@Column(length = 30)
 	private String name;
 
 	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.VARCHAR)
 	@Column(nullable = false, length = 20)
 	private UserRole role;
 
-	/** 위치 수집 동의 (ACC-002, 필수) */
-	@Column(nullable = false)
-	private boolean consentLocation;
+	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.VARCHAR)
+	@Column(nullable = false, length = 20)
+	private UserStatus status;
 
-	/** 주선사에 위치·운행 정보 공유 동의 (ACC-002, 선택) */
-	@Column(nullable = false)
-	private boolean consentBrokerShare;
+	/** 정지·탈퇴 사유 */
+	@Column(length = 200)
+	private String statusReason;
 
-	/** 음성 데이터 처리 동의 (ACC-002, 선택) */
-	@Column(nullable = false)
-	private boolean consentVoice;
+	private Instant statusChangedAt;
+
+	private Instant lastLoginAt;
 
 	private User(String phone, UserRole role) {
 		this.phone = phone;
 		this.role = role;
+		this.status = UserStatus.ACTIVE;
 	}
 
-	public static User createDriver(String phone) {
-		return new User(phone, UserRole.DRIVER);
+	public static User create(String phone, UserRole role) {
+		return new User(phone, role);
+	}
+
+	public boolean isActive() {
+		return status == UserStatus.ACTIVE;
 	}
 
 	public void changeName(String name) {
+		requireNotWithdrawn();
 		this.name = name;
 	}
 
-	public void changeConsents(boolean location, boolean brokerShare, boolean voice) {
-		this.consentLocation = location;
-		this.consentBrokerShare = brokerShare;
-		this.consentVoice = voice;
+	public void recordLogin(Instant now) {
+		if (!isActive()) {
+			throw new BusinessException(ErrorCode.USER_NOT_ACTIVE);
+		}
+		this.lastLoginAt = now;
+	}
+
+	public void suspend(String reason, Instant now) {
+		if (status != UserStatus.ACTIVE) {
+			throw new BusinessException(ErrorCode.USER_INVALID_STATUS);
+		}
+		changeStatus(UserStatus.SUSPENDED, reason, now);
+	}
+
+	public void reactivate(Instant now) {
+		if (status != UserStatus.SUSPENDED) {
+			throw new BusinessException(ErrorCode.USER_INVALID_STATUS);
+		}
+		changeStatus(UserStatus.ACTIVE, null, now);
+	}
+
+	/** 탈퇴. 운행·장부 기록과의 연결을 위해 행은 남기고 개인정보만 지운다. */
+	public void withdraw(String reason, Instant now) {
+		requireNotWithdrawn();
+		this.phone = null;
+		this.name = null;
+		changeStatus(UserStatus.WITHDRAWN, reason, now);
+	}
+
+	private void changeStatus(UserStatus status, String reason, Instant now) {
+		this.status = status;
+		this.statusReason = reason;
+		this.statusChangedAt = now;
+	}
+
+	private void requireNotWithdrawn() {
+		if (status == UserStatus.WITHDRAWN) {
+			throw new BusinessException(ErrorCode.USER_INVALID_STATUS);
+		}
 	}
 }

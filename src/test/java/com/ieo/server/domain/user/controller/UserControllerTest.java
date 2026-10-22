@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ieo.server.domain.user.entity.User;
+import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,37 +47,35 @@ class UserControllerTest {
 
 	@Test
 	void 내_정보_조회와_수정() throws Exception {
-		User user = userRepository.save(User.createDriver("01012345678"));
+		User user = userRepository.save(User.create("01012345678", UserRole.DRIVER));
 
 		mockMvc.perform(get("/api/users/me").requestAttr("userId", user.getId()))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.phone").value("01012345678"))
 				.andExpect(jsonPath("$.role").value("DRIVER"))
-				.andExpect(jsonPath("$.consentLocation").value(false));
-
-		mockMvc.perform(patch("/api/users/me").requestAttr("userId", user.getId())
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("""
-								{"name": "설기사", "consentLocation": true, "consentBrokerShare": false, "consentVoice": true}
-								"""))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.name").value("설기사"))
-				.andExpect(jsonPath("$.consentLocation").value(true))
-				.andExpect(jsonPath("$.consentVoice").value(true));
-	}
-
-	@Test
-	void 동의_항목이_빠지면_400() throws Exception {
-		User user = userRepository.save(User.createDriver("01012345678"));
+				.andExpect(jsonPath("$.status").value("ACTIVE"));
 
 		mockMvc.perform(patch("/api/users/me").requestAttr("userId", user.getId())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{"name": "설기사"}
 								"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.name").value("설기사"));
+	}
+
+	@Test
+	void 이름이_30자를_넘으면_400() throws Exception {
+		User user = userRepository.save(User.create("01012345678", UserRole.DRIVER));
+
+		mockMvc.perform(patch("/api/users/me").requestAttr("userId", user.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"name": "%s"}
+								""".formatted("가".repeat(31))))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("COMMON_400"))
-				.andExpect(jsonPath("$.fieldErrors.length()").value(3));
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("name"));
 	}
 
 	@Test

@@ -25,7 +25,6 @@ public class UserService {
 	public UserResponse updateUser(Long userId, UpdateUserRequest request) {
 		User user = findUser(userId);
 		user.changeName(request.name());
-		user.changeConsents(request.consentLocation(), request.consentBrokerShare(), request.consentVoice());
 		return UserResponse.from(user);
 	}
 

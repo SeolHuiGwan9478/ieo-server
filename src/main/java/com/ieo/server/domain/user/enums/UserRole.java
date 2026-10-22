@@ -1,4 +1,4 @@
-package com.ieo.server.domain.user.entity;
+package com.ieo.server.domain.user.enums;
 
 public enum UserRole {
 	/** 화물차 기사 */
