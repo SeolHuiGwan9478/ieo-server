@@ -3,6 +3,7 @@ package com.ieo.server.domain.driver.entity;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.global.entity.BaseTimeEntity;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
@@ -32,6 +33,10 @@ public class Driver extends BaseTimeEntity {
 	@JoinColumn(name = "user_id")
 	private User user;
 
+	/** 화물운송 종사자격증 번호 (선택, ACC-003) */
+	@Column(length = 30)
+	private String licenseNumber;
+
 	private Driver(User user) {
 		this.user = user;
 	}
@@ -42,5 +47,9 @@ public class Driver extends BaseTimeEntity {
 			throw new IllegalArgumentException("차주 역할 계정이 아닙니다: " + user.getRole());
 		}
 		return new Driver(user);
+	}
+
+	public void changeLicenseNumber(String licenseNumber) {
+		this.licenseNumber = licenseNumber;
 	}
 }
