@@ -1,16 +1,10 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/ieo_icon_white.svg">
-  <img src="docs/assets/ieo_icon_black.svg" alt="Ieo icon" width="96">
-</picture>
+<img src="docs/assets/ieo_icon_orange.svg" alt="Ieo icon" width="96">
 
 <br><br>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/ieo_wordmark_white.svg">
-  <img src="docs/assets/ieo_wordmark_black.svg" alt="ieo." width="180">
-</picture>
+<img src="docs/assets/ieo_wordmark_orange.svg" alt="ieo." width="180">
 
 ### Backend for Ieo (이에오)
 
@@ -22,7 +16,7 @@ accounts, loads and dispatch, trips, waiting records and the ledger.
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-6DB33F?logo=springboot&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
-![H2](https://img.shields.io/badge/H2-local-1E1E1E)
+![H2](https://img.shields.io/badge/H2-local-FF6C37)
 
 [In-car app & docs (ieo-app)](https://github.com/SeolHuiGwan9478/ieo-app)
 
