@@ -1,41 +1,64 @@
 package com.ieo.server.domain.user.controller;
 
+import com.ieo.server.domain.user.dto.PhoneLoginRequest;
+import com.ieo.server.domain.user.dto.PhoneVerifyResponse;
 import com.ieo.server.domain.user.dto.RefreshTokenRequest;
 import com.ieo.server.domain.user.dto.SendCodeRequest;
+import com.ieo.server.domain.user.dto.SignUpRequest;
 import com.ieo.server.domain.user.dto.TokenResponse;
 import com.ieo.server.domain.user.dto.VerifyCodeRequest;
-import com.ieo.server.global.error.BusinessException;
-import com.ieo.server.global.error.ErrorCode;
+import com.ieo.server.domain.user.service.AuthService;
+import com.ieo.server.domain.user.service.PhoneAuthService;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 휴대폰 인증번호 로그인. (요구사항: ACC-001)
- *
- * TODO: 인증번호 발송·확인과 토큰 발급은 아직 구현하지 않았다. 지금은 모두 501을 돌려준다.
+ * 휴대폰 로그인·가입. (요구사항: ACC-001)
+ * 문자 인증 → phoneToken → 로그인(가입된 번호) 또는 약관·기본 정보 입력 뒤 가입(새 번호).
  */
 @RestController
 @RequestMapping("/api/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
-	/** 휴대폰 번호로 인증번호를 보낸다. */
-	@PostMapping("/code")
+	private final PhoneAuthService phoneAuthService;
+	private final AuthService authService;
+
+	/** 인증번호를 보낸다. 같은 번호는 1분에 한 번, 하루 5번까지. */
+	@PostMapping("/phone/code")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void sendCode(@Valid @RequestBody SendCodeRequest request) {
-		throw new BusinessException(ErrorCode.NOT_IMPLEMENTED);
+		phoneAuthService.sendCode(request.phone());
 	}
 
-	/** 인증번호를 확인하고 토큰을 발급한다. 처음 로그인하는 번호면 차주로 가입시킨다. */
-	@PostMapping("/verify")
-	public TokenResponse verifyCode(@Valid @RequestBody VerifyCodeRequest request) {
-		throw new BusinessException(ErrorCode.NOT_IMPLEMENTED);
+	/** 인증번호를 확인하고 phoneToken을 준다. 가입된 계정이 있으면 그 정보도 같이 준다. */
+	@PostMapping("/phone/verify")
+	public PhoneVerifyResponse verifyCode(@Valid @RequestBody VerifyCodeRequest request) {
+		return phoneAuthService.verifyCode(request);
 	}
 
-	/** 리프레시 토큰으로 액세스 토큰을 다시 발급한다. */
+	/** 가입된 번호면 phoneToken으로 로그인한다. */
+	@PostMapping("/phone/login")
+	public TokenResponse loginWithPhone(@Valid @RequestBody PhoneLoginRequest request) {
+		return authService.loginWithPhone(request);
+	}
+
+	/** 새 번호면 약관 동의·기본 정보와 함께 가입한다. */
+	@PostMapping("/signup")
+	@ResponseStatus(HttpStatus.CREATED)
+	public TokenResponse signUp(@Valid @RequestBody SignUpRequest request) {
+		return authService.signUp(request);
+	}
+
+	/** 리프레시 토큰으로 토큰을 다시 발급한다. */
 	@PostMapping("/refresh")
 	public TokenResponse refresh(@Valid @RequestBody RefreshTokenRequest request) {
-		throw new BusinessException(ErrorCode.NOT_IMPLEMENTED);
+		return authService.refresh(request);
 	}
 }

@@ -7,3 +7,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+
+ieo:
+  jwt:
+    secret: test-only-secret-0123456789-abcdefghij

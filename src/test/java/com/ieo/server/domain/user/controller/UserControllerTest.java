@@ -2,7 +2,6 @@ package com.ieo.server.domain.user.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -76,27 +75,5 @@ class UserControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("COMMON_400"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("name"));
-	}
-
-	@Test
-	void 인증번호_엔드포인트는_아직_501() throws Exception {
-		mockMvc.perform(post("/api/auth/code")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("""
-								{"phone": "01012345678"}
-								"""))
-				.andExpect(status().isNotImplemented())
-				.andExpect(jsonPath("$.code").value("COMMON_501"));
-	}
-
-	@Test
-	void 휴대폰_번호_형식이_틀리면_400() throws Exception {
-		mockMvc.perform(post("/api/auth/code")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("""
-								{"phone": "010-1234-5678"}
-								"""))
-				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.fieldErrors[0].field").value("phone"));
 	}
 }

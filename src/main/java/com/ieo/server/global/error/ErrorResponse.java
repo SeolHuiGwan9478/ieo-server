@@ -15,6 +15,10 @@ public record ErrorResponse(String code, String message, List<FieldError> fieldE
 		return new ErrorResponse(errorCode.getCode(), errorCode.getMessage(), List.of());
 	}
 
+	public static ErrorResponse of(ErrorCode errorCode, String message) {
+		return new ErrorResponse(errorCode.getCode(), message, List.of());
+	}
+
 	public static ErrorResponse of(ErrorCode errorCode, List<FieldError> fieldErrors) {
 		return new ErrorResponse(errorCode.getCode(), errorCode.getMessage(), fieldErrors);
 	}

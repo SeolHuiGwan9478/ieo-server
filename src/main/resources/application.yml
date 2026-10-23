@@ -15,3 +15,10 @@ management:
     web:
       exposure:
         include: health,info
+
+# 토큰. secret은 32바이트 이상, 환경변수로 주입 (local·test는 각 파일에 개발용 값)
+ieo:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-token-ttl: 30m
+    refresh-token-ttl: 30d

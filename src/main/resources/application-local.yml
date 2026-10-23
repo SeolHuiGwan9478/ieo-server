@@ -18,3 +18,7 @@ spring:
 logging:
   level:
     com.ieo.server: debug
+
+ieo:
+  jwt:
+    secret: local-only-secret-change-me-0123456789
