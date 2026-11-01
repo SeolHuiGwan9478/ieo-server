@@ -52,4 +52,9 @@ public class Driver extends BaseTimeEntity {
 	public void changeLicenseNumber(String licenseNumber) {
 		this.licenseNumber = licenseNumber;
 	}
+
+	/** 탈퇴할 때 개인정보를 지운다. 운행·장부와의 연결을 위해 행은 남긴다. */
+	public void clearPersonalInfo() {
+		this.licenseNumber = null;
+	}
 }

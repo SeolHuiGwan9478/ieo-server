@@ -2,14 +2,18 @@ package com.ieo.server.domain.user.controller;
 
 import com.ieo.server.domain.user.dto.UpdateUserRequest;
 import com.ieo.server.domain.user.dto.UserResponse;
+import com.ieo.server.domain.user.dto.WithdrawRequest;
 import com.ieo.server.domain.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -30,5 +34,12 @@ public class UserController {
 	@PatchMapping("/me")
 	public UserResponse updateMe(@RequestAttribute("userId") Long userId, @Valid @RequestBody UpdateUserRequest request) {
 		return userService.updateUser(userId, request);
+	}
+
+	/** 탈퇴. 개인정보를 지우고 되돌릴 수 없다. */
+	@PostMapping("/me/withdraw")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void withdraw(@RequestAttribute("userId") Long userId, @Valid @RequestBody(required = false) WithdrawRequest request) {
+		userService.withdraw(userId, request);
 	}
 }

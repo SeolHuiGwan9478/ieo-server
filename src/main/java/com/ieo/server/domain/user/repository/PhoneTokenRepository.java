@@ -17,4 +17,8 @@ public interface PhoneTokenRepository extends JpaRepository<PhoneToken, String> 
 	@Modifying
 	@Query("delete from PhoneToken t where t.expiresAt < :now")
 	int deleteExpired(@Param("now") Instant now);
+
+	@Modifying
+	@Query("delete from PhoneToken t where t.phone = :phone")
+	int deleteByPhone(@Param("phone") String phone);
 }

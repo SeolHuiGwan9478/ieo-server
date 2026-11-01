@@ -21,4 +21,8 @@ public interface PhoneVerificationRepository extends JpaRepository<PhoneVerifica
 	@Modifying
 	@Query("delete from PhoneVerification v where v.updatedAt < :before and (v.lockedUntil is null or v.lockedUntil < :now)")
 	int deleteStale(@Param("before") Instant before, @Param("now") Instant now);
+
+	@Modifying
+	@Query("delete from PhoneVerification v where v.phone = :phone")
+	int deleteByPhone(@Param("phone") String phone);
 }
