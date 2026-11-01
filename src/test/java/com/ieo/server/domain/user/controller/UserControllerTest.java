@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.repository.UserRepository;
+import com.ieo.server.global.auth.JwtProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +29,9 @@ class UserControllerTest {
 	@Autowired
 	private UserRepository userRepository;
 
+	@Autowired
+	private JwtProvider jwtProvider;
+
 	private MockMvc mockMvc;
 
 	@BeforeEach
@@ -39,7 +43,7 @@ class UserControllerTest {
 
 	@Test
 	void 없는_사용자면_404() throws Exception {
-		mockMvc.perform(get("/api/users/me").requestAttr("userId", 999L))
+		mockMvc.perform(get("/api/users/me").header("Authorization", bearer(999L)))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.code").value("USER_404"));
 	}
@@ -48,13 +52,13 @@ class UserControllerTest {
 	void 내_정보_조회와_수정() throws Exception {
 		User user = userRepository.save(User.create("01012345678", UserRole.DRIVER));
 
-		mockMvc.perform(get("/api/users/me").requestAttr("userId", user.getId()))
+		mockMvc.perform(get("/api/users/me").header("Authorization", bearer(user.getId())))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.phone").value("01012345678"))
 				.andExpect(jsonPath("$.role").value("DRIVER"))
 				.andExpect(jsonPath("$.status").value("ACTIVE"));
 
-		mockMvc.perform(patch("/api/users/me").requestAttr("userId", user.getId())
+		mockMvc.perform(patch("/api/users/me").header("Authorization", bearer(user.getId()))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{"name": "설기사"}
@@ -67,7 +71,7 @@ class UserControllerTest {
 	void 이름이_30자를_넘으면_400() throws Exception {
 		User user = userRepository.save(User.create("01012345678", UserRole.DRIVER));
 
-		mockMvc.perform(patch("/api/users/me").requestAttr("userId", user.getId())
+		mockMvc.perform(patch("/api/users/me").header("Authorization", bearer(user.getId()))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{"name": "%s"}
@@ -75,5 +79,26 @@ class UserControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("COMMON_400"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("name"));
+	}
+
+	@Test
+	void 토큰이_없으면_401() throws Exception {
+		mockMvc.perform(get("/api/users/me"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.code").value("COMMON_401"));
+	}
+
+	@Test
+	void 리프레시_토큰으로는_API를_부를_수_없다() throws Exception {
+		User user = userRepository.save(User.create("01012345678", UserRole.DRIVER));
+
+		mockMvc.perform(get("/api/users/me")
+						.header("Authorization", "Bearer " + jwtProvider.issue(user.getId()).refreshToken()))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.code").value("AUTH_401_TOKEN"));
+	}
+
+	private String bearer(Long userId) {
+		return "Bearer " + jwtProvider.issue(userId).accessToken();
 	}
 }

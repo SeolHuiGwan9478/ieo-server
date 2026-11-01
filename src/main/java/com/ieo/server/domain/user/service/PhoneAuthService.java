@@ -12,16 +12,13 @@ import com.ieo.server.domain.user.repository.UserRepository;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import com.ieo.server.global.sms.SmsSender;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import com.ieo.server.global.util.Hashes;
+import com.ieo.server.global.util.RandomTokens;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.Base64;
-import java.util.HexFormat;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -57,7 +54,7 @@ public class PhoneAuthService {
 				.orElseGet(() -> phoneVerificationRepository.save(PhoneVerification.create(phone)));
 
 		String code = "%06d".formatted(random.nextInt(1_000_000));
-		verification.issueCode(sha256(phone + ":" + code), now, LocalDate.ofInstant(now, KST));
+		verification.issueCode(Hashes.sha256Hex(phone + ":" + code), now, LocalDate.ofInstant(now, KST));
 		smsSender.send(phone, "[이에오] 인증번호 " + code + " (3분 안에 입력해 주세요)");
 	}
 
@@ -66,11 +63,11 @@ public class PhoneAuthService {
 		Instant now = clock.instant();
 		PhoneVerification verification = phoneVerificationRepository.findByPhoneForUpdate(request.phone())
 				.orElseThrow(() -> new BusinessException(ErrorCode.AUTH_CODE_EXPIRED));
-		verification.verify(sha256(request.phone() + ":" + request.code()), now);
+		verification.verify(Hashes.sha256Hex(request.phone() + ":" + request.code()), now);
 
-		String rawToken = newToken();
+		String rawToken = RandomTokens.urlSafe();
 		PhoneToken phoneToken = phoneTokenRepository.save(
-				PhoneToken.issue(sha256(rawToken), request.phone(), request.deviceId(), now));
+				PhoneToken.issue(Hashes.sha256Hex(rawToken), request.phone(), request.deviceId(), now));
 
 		Optional<User> user = userRepository.findByPhone(request.phone());
 		return new PhoneVerifyResponse(
@@ -85,7 +82,7 @@ public class PhoneAuthService {
 	 * 인증된 번호를 돌려준다. 호출한 쪽 트랜잭션이 롤백되면 토큰도 되살아난다.
 	 */
 	public String consumePhoneToken(String rawToken, String deviceId) {
-		String tokenHash = sha256(rawToken);
+		String tokenHash = Hashes.sha256Hex(rawToken);
 		PhoneToken phoneToken = phoneTokenRepository.findById(tokenHash)
 				.orElseThrow(() -> new BusinessException(ErrorCode.AUTH_PHONE_TOKEN_INVALID));
 		if (phoneTokenRepository.deleteByTokenHash(tokenHash) == 0
@@ -93,20 +90,5 @@ public class PhoneAuthService {
 			throw new BusinessException(ErrorCode.AUTH_PHONE_TOKEN_INVALID);
 		}
 		return phoneToken.getPhone();
-	}
-
-	private String newToken() {
-		byte[] bytes = new byte[32];
-		random.nextBytes(bytes);
-		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-	}
-
-	private static String sha256(String value) {
-		try {
-			byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-			return HexFormat.of().formatHex(digest);
-		} catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException(e);
-		}
 	}
 }

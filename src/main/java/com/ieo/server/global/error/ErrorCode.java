@@ -28,7 +28,13 @@ public enum ErrorCode {
 	AUTH_PHONE_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_401_PHONE", "휴대폰 인증이 만료되었습니다. 다시 인증해 주세요."),
 	AUTH_INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_TOKEN", "로그인 정보가 올바르지 않습니다. 다시 로그인해 주세요."),
 	AUTH_PHONE_ALREADY_REGISTERED(HttpStatus.CONFLICT, "AUTH_409_PHONE", "이미 가입된 번호입니다."),
-	AUTH_REQUIRED_CONSENT_MISSING(HttpStatus.BAD_REQUEST, "AUTH_400_CONSENT", "필수 약관에 동의해 주세요.");
+	AUTH_REQUIRED_CONSENT_MISSING(HttpStatus.BAD_REQUEST, "AUTH_400_CONSENT", "필수 약관에 동의해 주세요."),
+
+	// 차량 QR 로그인
+	CAR_LOGIN_NOT_FOUND(HttpStatus.NOT_FOUND, "CAR_LOGIN_404", "로그인 요청을 찾을 수 없습니다. 차량 화면의 코드를 확인해 주세요."),
+	CAR_LOGIN_EXPIRED(HttpStatus.GONE, "CAR_LOGIN_410", "로그인 요청이 만료되었습니다. 차량 화면의 새 QR을 찍어 주세요."),
+	CAR_LOGIN_ALREADY_DECIDED(HttpStatus.CONFLICT, "CAR_LOGIN_409", "이미 승인하거나 거절한 요청입니다."),
+	CAR_LOGIN_NOT_APPROVED(HttpStatus.CONFLICT, "CAR_LOGIN_409_NOT_APPROVED", "아직 승인되지 않은 요청입니다.");
 
 	private final HttpStatus status;
 	private final String code;
