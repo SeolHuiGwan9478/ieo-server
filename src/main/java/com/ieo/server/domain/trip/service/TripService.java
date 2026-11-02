@@ -17,9 +17,11 @@ import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.vehicle.entity.Vehicle;
 import com.ieo.server.domain.vehicle.repository.VehicleRepository;
+import com.ieo.server.domain.wait.service.WaitService;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 운행 등록·조회와 출발·완료·취소 (TRIP-001, 002, 010). 차주 계정만 쓸 수 있다.
- * 상하차지 진입·이탈에 따른 상태 전환(AT_PICKUP, IN_TRANSIT, AT_DROPOFF)은 대기 기록이 맡는다.
+ * 상하차지 진입·이탈에 따른 상태 전환(AT_PICKUP, IN_TRANSIT, AT_DROPOFF, 하차지 이탈 → COMPLETED)은 WaitService가 맡는다.
  * 출발한 운행은 차주당 하나만 둔다: 차량 앱이 지오펜스를 걸 운행이 하나로 정해져야 한다.
  */
 @Service
@@ -45,6 +47,7 @@ public class TripService {
 	private final BrokerRepository brokerRepository;
 	private final SiteRepository siteRepository;
 	private final SiteService siteService;
+	private final WaitService waitService;
 	private final Clock clock;
 
 	/** 직접 등록. 예약 상태로 만든다 */
@@ -95,10 +98,12 @@ public class TripService {
 		return TripResponse.from(trip);
 	}
 
-	/** 하차 완료. 하차지에 도착한 운행만 */
+	/** 하차 완료. 하차지에 도착한 운행만. 하차지 대기 기록이 남아 있으면 지금 시각으로 이탈 처리한다 */
 	public TripResponse complete(Long userId, Long tripId) {
 		Trip trip = findMine(userId, tripId);
-		trip.complete(clock.instant());
+		Instant now = clock.instant();
+		trip.complete(now);
+		waitService.departDropoffIfOpen(trip, now);
 		return TripResponse.from(trip);
 	}
 

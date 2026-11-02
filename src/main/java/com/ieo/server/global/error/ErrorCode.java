@@ -57,6 +57,9 @@ public enum ErrorCode {
 	TRIP_NOT_DRIVER(HttpStatus.FORBIDDEN, "TRIP_403_ROLE", "차주 계정만 운행을 등록할 수 있습니다."),
 
 	// 대기
+	WAIT_NOT_FOUND(HttpStatus.NOT_FOUND, "WAIT_404", "대기 기록이 없습니다. 상하차지에 진입한 뒤에 할 수 있습니다."),
+	WAIT_PROOF_NOT_FOUND(HttpStatus.NOT_FOUND, "WAIT_404_PROOF", "증빙을 찾을 수 없거나 링크가 만료되었습니다."),
+	WAIT_POLICY_FORBIDDEN(HttpStatus.FORBIDDEN, "WAIT_403_POLICY", "주선사 대표만 대기비 정책을 바꿀 수 있습니다."),
 	WAIT_INVALID_POLICY(HttpStatus.BAD_REQUEST, "WAIT_400_POLICY", "대기비 정책 값이 올바르지 않습니다. 단위 시간은 1분 이상, 상한은 단위 금액 이상이어야 합니다."),
 	WAIT_INVALID_TIME(HttpStatus.BAD_REQUEST, "WAIT_400_TIME", "시각은 진입, 작업 시작, 이탈 순서여야 합니다."),
 	WAIT_INVALID_STATUS(HttpStatus.CONFLICT, "WAIT_409_STATUS", "지금 대기 상태에서는 할 수 없는 요청입니다."),
