@@ -2,6 +2,7 @@ package com.ieo.server.domain.vehicle.service;
 
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
+import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.vehicle.dto.CreateVehicleRequest;
 import com.ieo.server.domain.vehicle.dto.FuelEconomyRequest;
@@ -34,6 +35,7 @@ public class VehicleService {
 
 	private final VehicleRepository vehicleRepository;
 	private final DriverRepository driverRepository;
+	private final TripRepository tripRepository;
 	private final VinHasher vinHasher;
 	private final Clock clock;
 
@@ -125,9 +127,12 @@ public class VehicleService {
 		return VehicleResponse.from(vehicle);
 	}
 
-	/** TODO: 운행 도메인이 생기면 진행 중인 운행에 쓰는 차량은 지우지 못하게 막는다 */
+	/** 운행 기록이 있는 차량은 지우면 운행·장부 기록이 깨지므로 막는다 */
 	public void delete(Long userId, Long vehicleId) {
 		Vehicle vehicle = findMine(userId, vehicleId);
+		if (tripRepository.existsByVehicleId(vehicleId)) {
+			throw new BusinessException(ErrorCode.VEHICLE_IN_USE);
+		}
 		boolean wasDefault = vehicle.isDefaultVehicle();
 		vehicleRepository.delete(vehicle);
 		vehicleRepository.flush();

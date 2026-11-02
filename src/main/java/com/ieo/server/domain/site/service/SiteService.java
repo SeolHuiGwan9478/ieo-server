@@ -64,18 +64,28 @@ public class SiteService {
 	@Transactional
 	public Registration register(Long userId, CreateSiteRequest request) {
 		requireActiveUser(userId);
-		Site.validateLocation(request.lat(), request.lng());
+		SiteMatch match = findOrCreate(request, driverRepository.findById(userId).orElse(null));
+		return new Registration(SiteResponse.of(match.site(), !match.created()), match.created());
+	}
 
+	public record SiteMatch(Site site, boolean created) {
+	}
+
+	/**
+	 * 100m 안의 기존 상하차지를 쓰고, 없으면 새로 만든다 (SITE-002).
+	 * 운행 등록처럼 다른 도메인이 상하차지를 함께 만들 때도 쓴다
+	 */
+	@Transactional
+	public SiteMatch findOrCreate(CreateSiteRequest request, Driver createdBy) {
+		Site.validateLocation(request.lat(), request.lng());
 		Optional<Site> same = findWithin(request.lat(), request.lng(), SAME_SITE_METERS).stream().findFirst();
 		if (same.isPresent()) {
-			return new Registration(SiteResponse.of(same.get(), true), false);
+			return new SiteMatch(same.get(), false);
 		}
-
-		Driver createdBy = driverRepository.findById(userId).orElse(null);
 		int radius = request.geofenceRadiusM() == null ? Site.DEFAULT_GEOFENCE_RADIUS_M : request.geofenceRadiusM();
 		Site site = siteRepository.save(
 				Site.create(request.name(), request.address(), request.lat(), request.lng(), radius, createdBy));
-		return new Registration(SiteResponse.of(site, false), true);
+		return new SiteMatch(site, true);
 	}
 
 	/** 가까운 순, 최대 50곳 */
