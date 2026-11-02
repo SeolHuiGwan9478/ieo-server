@@ -15,7 +15,6 @@ import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,8 +51,11 @@ public class SiteStatsCalculator {
 		statsRepository.save(stats);
 	}
 
-	/** 매일 새벽: 통계가 있거나 최근 기록이 있는 상하차지를 모두 다시 계산한다 */
-	@Scheduled(cron = "0 30 4 * * *", zone = "Asia/Seoul")
+	/**
+	 * 매일 새벽: 통계가 있거나 최근 기록이 있는 상하차지를 모두 다시 계산한다.
+	 * TODO: 지금은 자동 실행을 꺼 두었다. 켤 때 아래 주석을 풀고, 서버를 여러 대 띄우면 ShedLock 같은 잠금을 붙인다
+	 */
+	// @Scheduled(cron = "0 30 4 * * *", zone = "Asia/Seoul")
 	@Transactional
 	public void recalculateAll() {
 		Set<Long> siteIds = new HashSet<>(statsRepository.findAllSiteIds());

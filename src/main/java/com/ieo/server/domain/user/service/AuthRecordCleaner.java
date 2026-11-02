@@ -8,7 +8,6 @@ import java.time.Duration;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +29,8 @@ public class AuthRecordCleaner {
 	private final CarLoginSessionRepository carLoginSessionRepository;
 	private final Clock clock;
 
-	@Scheduled(cron = "0 0 4 * * *", zone = "Asia/Seoul")
+	// TODO: 지금은 자동 실행을 꺼 두었다. 켤 때 아래 주석을 푼다
+	// @Scheduled(cron = "0 0 4 * * *", zone = "Asia/Seoul")
 	@Transactional
 	public void clean() {
 		Instant now = clock.instant();
