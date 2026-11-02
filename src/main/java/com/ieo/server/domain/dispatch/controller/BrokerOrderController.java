@@ -1,6 +1,7 @@
 package com.ieo.server.domain.dispatch.controller;
 
 import com.ieo.server.domain.dispatch.dto.ApplicantResponse;
+import com.ieo.server.domain.dispatch.dto.CancelOrderRequest;
 import com.ieo.server.domain.dispatch.dto.CreateOrderRequest;
 import com.ieo.server.domain.dispatch.dto.OrderPageResponse;
 import com.ieo.server.domain.dispatch.dto.OrderResponse;
@@ -66,6 +67,15 @@ public class BrokerOrderController {
 			@PathVariable Long orderId,
 			@PathVariable Long requestId) {
 		return brokerOrderService.confirm(userId, orderId, requestId);
+	}
+
+	/** 확정된 배차 취소. 사유 필수, 오더는 다시 모집(기본)하거나 내린다 */
+	@PostMapping("/{orderId}/cancel")
+	public OrderResponse cancelDispatch(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long orderId,
+			@Valid @RequestBody CancelOrderRequest request) {
+		return brokerOrderService.cancelDispatch(userId, orderId, request);
 	}
 
 	/** 오더 내리기 */

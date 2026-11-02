@@ -224,6 +224,24 @@ public class Order extends BaseTimeEntity {
 		this.status = OrderStatus.CLOSED;
 	}
 
+	/** 확정된 배차가 취소되어 다시 모집한다. 상차 시간이 이미 지났으면 모집 중으로 보이지 않는다 */
+	public void reopen() {
+		requireAssigned();
+		this.status = OrderStatus.OPEN;
+	}
+
+	/** 확정된 배차가 취소되고 오더도 내린다 */
+	public void closeAfterCancel() {
+		requireAssigned();
+		this.status = OrderStatus.CLOSED;
+	}
+
+	private void requireAssigned() {
+		if (status != OrderStatus.ASSIGNED) {
+			throw new BusinessException(ErrorCode.ORDER_NOT_ASSIGNED);
+		}
+	}
+
 	public boolean belongsTo(Long brokerId) {
 		return broker.getId().equals(brokerId);
 	}

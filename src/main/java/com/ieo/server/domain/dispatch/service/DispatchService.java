@@ -1,13 +1,17 @@
 package com.ieo.server.domain.dispatch.service;
 
 import com.ieo.server.domain.dispatch.dto.CreateDispatchRequestRequest;
+import com.ieo.server.domain.dispatch.dto.CreateOrderReportRequest;
 import com.ieo.server.domain.dispatch.dto.DispatchRequestResponse;
+import com.ieo.server.domain.dispatch.dto.OrderReportResponse;
 import com.ieo.server.domain.dispatch.dto.OrderResponse;
 import com.ieo.server.domain.dispatch.entity.DispatchRequest;
 import com.ieo.server.domain.dispatch.entity.Order;
+import com.ieo.server.domain.dispatch.entity.OrderReport;
 import com.ieo.server.domain.dispatch.enums.ConfirmMode;
 import com.ieo.server.domain.dispatch.enums.DispatchRequestStatus;
 import com.ieo.server.domain.dispatch.repository.DispatchRequestRepository;
+import com.ieo.server.domain.dispatch.repository.OrderReportRepository;
 import com.ieo.server.domain.dispatch.repository.OrderRepository;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
@@ -53,6 +57,7 @@ public class DispatchService {
 	private final VehicleRepository vehicleRepository;
 	private final TripRepository tripRepository;
 	private final DispatchConfirmer confirmer;
+	private final OrderReportRepository reportRepository;
 	private final Clock clock;
 
 	/** 모집 중 오더. 상차가 빠른 순서. 좌표를 주면 상차지까지 직선거리로 거르고 distanceM을 붙인다 */
@@ -141,7 +146,26 @@ public class DispatchService {
 		return DispatchRequestResponse.of(request, now, null);
 	}
 
-	/** 내 요청. 최근 것 먼저. 확정된 요청은 생긴 운행 id를 붙인다 */
+	/**
+	 * 오더 신고 (DSP-042): 허위, 과적 요구, 운임 미지급, 정보 불일치. 오더 하나에 한 번만.
+	 * 운임 미지급처럼 끝난 오더도 신고할 수 있게 상태는 따지지 않는다.
+	 * TODO: 운영자 확인·이용 제한(DSP-043)은 운영자 화면을 만들 때 붙인다
+	 */
+	public OrderReportResponse report(Long userId, Long orderId, CreateOrderReportRequest request) {
+		Driver driver = requireDriver(userId);
+		Order order = findVisible(userId, orderId);
+		if (reportRepository.existsByOrderIdAndReporterUserId(orderId, userId)) {
+			throw new BusinessException(ErrorCode.ORDER_ALREADY_REPORTED);
+		}
+		try {
+			return OrderReportResponse.from(
+					reportRepository.saveAndFlush(OrderReport.of(order, driver, request.type(), request.memo())));
+		} catch (DataIntegrityViolationException e) {
+			throw new BusinessException(ErrorCode.ORDER_ALREADY_REPORTED);
+		}
+	}
+
+	/** 내 요청. 최근 것 먼저. 확정되거나 확정 뒤 취소된 요청은 생긴 운행 id를 붙인다 */
 	@Transactional(readOnly = true)
 	public List<DispatchRequestResponse> getMyRequests(Long userId) {
 		requireDriver(userId);
@@ -155,8 +179,11 @@ public class DispatchService {
 		if (request == null) {
 			return null;
 		}
-		Long tripId = request.getStatus() == DispatchRequestStatus.CONFIRMED
-				? tripRepository.findByOrderId(request.getOrder().getId()).map(Trip::getId).orElse(null)
+		boolean hasTrip = request.getStatus() == DispatchRequestStatus.CONFIRMED
+				|| request.getStatus() == DispatchRequestStatus.CANCELED;
+		Long tripId = hasTrip
+				? tripRepository.findFirstByOrderIdAndDriverUserIdOrderByCreatedAtDesc(
+						request.getOrder().getId(), request.getDriver().getUserId()).map(Trip::getId).orElse(null)
 				: null;
 		return DispatchRequestResponse.of(request, now, tripId);
 	}

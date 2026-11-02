@@ -7,6 +7,8 @@ import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.site.repository.SiteRepository;
 import com.ieo.server.domain.site.service.SiteService;
+import com.ieo.server.domain.dispatch.service.DispatchCanceller;
+import com.ieo.server.domain.trip.dto.CancelTripRequest;
 import com.ieo.server.domain.trip.dto.CreateTripRequest;
 import com.ieo.server.domain.trip.dto.TripResponse;
 import com.ieo.server.domain.trip.dto.TripStopRequest;
@@ -48,6 +50,7 @@ public class TripService {
 	private final SiteRepository siteRepository;
 	private final SiteService siteService;
 	private final WaitService waitService;
+	private final DispatchCanceller dispatchCanceller;
 	private final Clock clock;
 
 	/** 직접 등록. 예약 상태로 만든다 */
@@ -107,9 +110,19 @@ public class TripService {
 		return TripResponse.from(trip);
 	}
 
-	public TripResponse cancel(Long userId, Long tripId) {
+	/**
+	 * 운행 취소. Ieo 배차로 생긴 운행이면 사유를 받아 취소 기록을 남기고 오더를 다시 모집한다 (DSP-030).
+	 * 직접 등록한 운행은 운행만 취소한다
+	 */
+	public TripResponse cancel(Long userId, Long tripId, CancelTripRequest request) {
 		Trip trip = findMine(userId, tripId);
-		trip.cancel(clock.instant());
+		Instant now = clock.instant();
+		if (trip.getOrder() == null) {
+			trip.cancel(now);
+		} else {
+			dispatchCanceller.cancel(trip, trip.getDriver().getUser(),
+					request == null ? null : request.reason(), request == null ? null : request.memo(), true, now);
+		}
 		return TripResponse.from(trip);
 	}
 

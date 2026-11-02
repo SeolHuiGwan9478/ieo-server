@@ -107,6 +107,14 @@ public class DispatchRequest extends BaseTimeEntity {
 		this.status = DispatchRequestStatus.WITHDRAWN;
 	}
 
+	/** 확정된 배차를 취소. 확정된 요청만 */
+	public void cancel() {
+		if (status != DispatchRequestStatus.CONFIRMED) {
+			throw new BusinessException(ErrorCode.DISPATCH_REQUEST_NOT_PENDING);
+		}
+		this.status = DispatchRequestStatus.CANCELED;
+	}
+
 	public boolean isRequestedBy(Long userId) {
 		return driver.getUserId().equals(userId);
 	}

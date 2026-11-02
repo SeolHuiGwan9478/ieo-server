@@ -239,8 +239,93 @@ class DispatchControllerTest {
 				.andExpect(jsonPath("$.totalCount").value(0));
 	}
 
+	@Test
+	void 차주가_배차를_취소하면_사유가_남고_오더는_다시_모집되어_다른_차주가_맡는다() throws Exception {
+		Integer orderId = idOf(registerOrder(orderJson("TON_5", "WING", "FIRST", null)));
+		Integer tripId = JsonPath.read(request(driver, orderId).andReturn().getResponse().getContentAsString(), "$.tripId");
+
+		mockMvc.perform(post("/api/trips/" + tripId + "/cancel").header("Authorization", driver))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(post("/api/trips/" + tripId + "/cancel").header("Authorization", driver)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"VEHICLE_PROBLEM\",\"memo\":\"타이어 펑크\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("CANCELLED"));
+
+		mockMvc.perform(get("/api/dispatch-requests").header("Authorization", driver))
+				.andExpect(jsonPath("$[0].status").value("CANCELED"));
+		mockMvc.perform(get("/api/broker/orders/" + orderId).header("Authorization", broker))
+				.andExpect(jsonPath("$.status").value("OPEN"))
+				.andExpect(jsonPath("$.open").value(true));
+
+		String other = bearer(newDriver(Tonnage.TON_5, BodyType.WING));
+		request(other, orderId)
+				.andExpect(jsonPath("$.status").value("CONFIRMED"))
+				.andExpect(jsonPath("$.tripId").value(org.hamcrest.Matchers.not(tripId)));
+	}
+
+	@Test
+	void 주선사가_배차를_취소하고_오더를_내릴_수_있다() throws Exception {
+		Integer orderId = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
+		cancelByBroker(orderId, "{\"reason\":\"SHIPPER_CANCELED\"}")
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("ORDER_409_NOT_ASSIGNED"));
+
+		Integer requestId = idOf(request(driver, orderId));
+		mockMvc.perform(post("/api/broker/orders/" + orderId + "/requests/" + requestId + "/confirm").header("Authorization", broker));
+		cancelByBroker(orderId, "{\"reason\":\"SHIPPER_CANCELED\",\"reopen\":false}")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("CLOSED"));
+
+		String requests = mockMvc.perform(get("/api/dispatch-requests").header("Authorization", driver))
+				.andExpect(jsonPath("$[0].status").value("CANCELED"))
+				.andReturn().getResponse().getContentAsString();
+		Integer tripId = JsonPath.read(requests, "$[0].tripId");
+		mockMvc.perform(get("/api/trips/" + tripId).header("Authorization", driver))
+				.andExpect(jsonPath("$.status").value("CANCELLED"));
+	}
+
+	@Test
+	void 상차_2시간_이내_취소는_차주_이행_기록에_남는다() throws Exception {
+		Integer soon = idOf(registerOrder(orderJson("TON_5", "WING", "FIRST", null, Instant.now().plus(Duration.ofHours(1)))));
+		Integer tripId = JsonPath.read(request(driver, soon).andReturn().getResponse().getContentAsString(), "$.tripId");
+		mockMvc.perform(post("/api/trips/" + tripId + "/cancel").header("Authorization", driver)
+				.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"SCHEDULE_CONFLICT\"}"));
+
+		Integer next = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
+		request(driver, next);
+		mockMvc.perform(get("/api/broker/orders/" + next + "/requests").header("Authorization", broker))
+				.andExpect(jsonPath("$[0].lateCancelCount").value(1))
+				.andExpect(jsonPath("$[0].completedTripCount").value(0));
+	}
+
+	@Test
+	void 오더는_한_번만_신고할_수_있다() throws Exception {
+		Integer orderId = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
+
+		report(orderId, "{\"type\":\"OVERLOAD\",\"memo\":\"5톤 오더인데 7톤 실으라고 함\"}")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.typeLabel").value("과적 요구"));
+		report(orderId, "{\"type\":\"FALSE_INFO\"}")
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("ORDER_409_REPORTED"));
+		report(orderId, "{}").andExpect(status().isBadRequest());
+	}
+
+	private ResultActions cancelByBroker(Integer orderId, String json) throws Exception {
+		return mockMvc.perform(post("/api/broker/orders/" + orderId + "/cancel").header("Authorization", broker)
+				.contentType(MediaType.APPLICATION_JSON).content(json));
+	}
+
+	private ResultActions report(Integer orderId, String json) throws Exception {
+		return mockMvc.perform(post("/api/orders/" + orderId + "/reports").header("Authorization", driver)
+				.contentType(MediaType.APPLICATION_JSON).content(json));
+	}
+
 	private String orderJson(String tonnage, String bodyType, String confirmMode, Long targetDriverId) {
-		Instant pickupFrom = Instant.now().plus(Duration.ofDays(1));
+		return orderJson(tonnage, bodyType, confirmMode, targetDriverId, Instant.now().plus(Duration.ofDays(1)));
+	}
+
+	private String orderJson(String tonnage, String bodyType, String confirmMode, Long targetDriverId, Instant pickupFrom) {
 		return """
 				{"pickup": {"siteId": %d},
 				 "dropoff": {"site": {"name": "대구 성서 공단", "address": "대구 달서구", "lat": 35.84, "lng": 128.49}},

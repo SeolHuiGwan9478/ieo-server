@@ -62,9 +62,9 @@ public class Trip extends BaseTimeEntity {
 	@JoinColumn(name = "vehicle_id")
 	private Vehicle vehicle;
 
-	/** Ieo 배차로 생긴 운행이면 그 오더. 오더 하나에 운행 하나 */
+	/** Ieo 배차로 생긴 운행이면 그 오더. 배차가 취소되고 다시 확정되면 한 오더에 운행이 여럿 생긴다(끝나지 않은 것은 하나) */
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "order_id", unique = true)
+	@JoinColumn(name = "order_id")
 	private Order order;
 
 	/** Ieo에 있는 주선사. 대기비 정책을 찾을 때 쓴다 */

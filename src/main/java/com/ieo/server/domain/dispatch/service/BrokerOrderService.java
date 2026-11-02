@@ -3,13 +3,16 @@ package com.ieo.server.domain.dispatch.service;
 import com.ieo.server.domain.broker.entity.BrokerMember;
 import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
 import com.ieo.server.domain.dispatch.dto.ApplicantResponse;
+import com.ieo.server.domain.dispatch.dto.CancelOrderRequest;
 import com.ieo.server.domain.dispatch.dto.CreateOrderRequest;
 import com.ieo.server.domain.dispatch.dto.OrderPageResponse;
 import com.ieo.server.domain.dispatch.dto.OrderResponse;
 import com.ieo.server.domain.dispatch.dto.OrderSiteRequest;
+import com.ieo.server.domain.dispatch.entity.Cancellation;
 import com.ieo.server.domain.dispatch.entity.DispatchRequest;
 import com.ieo.server.domain.dispatch.entity.Order;
 import com.ieo.server.domain.dispatch.enums.OrderStatus;
+import com.ieo.server.domain.dispatch.repository.CancellationRepository;
 import com.ieo.server.domain.dispatch.repository.DispatchRequestRepository;
 import com.ieo.server.domain.dispatch.repository.OrderRepository;
 import com.ieo.server.domain.driver.entity.Driver;
@@ -17,6 +20,7 @@ import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.site.repository.SiteRepository;
 import com.ieo.server.domain.site.service.SiteService;
+import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.trip.enums.TripStatus;
 import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.user.enums.UserStatus;
@@ -52,6 +56,8 @@ public class BrokerOrderService {
 	private final SiteService siteService;
 	private final TripRepository tripRepository;
 	private final DispatchConfirmer confirmer;
+	private final DispatchCanceller canceller;
+	private final CancellationRepository cancellationRepository;
 	private final Clock clock;
 
 	public OrderResponse register(Long userId, CreateOrderRequest request) {
@@ -108,14 +114,20 @@ public class BrokerOrderService {
 		return OrderResponse.of(order, now, null, null, pendingCounts(List.of(order), now).getOrDefault(orderId, 0L));
 	}
 
-	/** 요청한 차주 목록 (DSP-021). 먼저 요청한 순서. 이행 기록은 Ieo에서 완료한 운행 수 */
+	/** 요청한 차주 목록 (DSP-021). 먼저 요청한 순서. 이행 기록은 Ieo에서 완료한 운행 수와 늦은 취소 수 (DSP-031) */
 	@Transactional(readOnly = true)
 	public List<ApplicantResponse> getApplicants(Long userId, Long orderId) {
 		Order order = findMine(requireMember(userId), orderId);
 		Instant now = clock.instant();
 		return requestRepository.findAllByOrderIdOrderByCreatedAtAsc(order.getId()).stream()
-				.map(request -> ApplicantResponse.of(request, now,
-						tripRepository.countByDriverUserIdAndStatus(request.getDriver().getUserId(), TripStatus.COMPLETED)))
+				.map(request -> {
+					Long driverId = request.getDriver().getUserId();
+					long completed = tripRepository.countByDriverUserIdAndStatus(driverId, TripStatus.COMPLETED);
+					long lateCancels = cancellationRepository.findAllByCanceledById(driverId).stream()
+							.filter(Cancellation::isLate)
+							.count();
+					return ApplicantResponse.of(request, now, completed, lateCancels);
+				})
 				.toList();
 	}
 
@@ -127,6 +139,21 @@ public class BrokerOrderService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.DISPATCH_REQUEST_NOT_FOUND));
 		Instant now = clock.instant();
 		confirmer.confirm(order, request, now);
+		return OrderResponse.of(order, now, null, null, 0L);
+	}
+
+	/**
+	 * 확정된 배차 취소 (DSP-030). 끝나지 않은 운행을 취소하고, 오더는 다시 모집하거나(reopen 기본) 내린다.
+	 * 상차 예정 2시간 이내 취소도 기록에 남는다
+	 */
+	public OrderResponse cancelDispatch(Long userId, Long orderId, CancelOrderRequest request) {
+		BrokerMember member = requireMember(userId);
+		Order order = findMine(member, orderId);
+		Trip trip = tripRepository.findFirstByOrderIdAndStatusIn(orderId, TripStatus.ACTIVE)
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_ASSIGNED));
+		Instant now = clock.instant();
+		canceller.cancel(trip, member.getUser(), request.reason(), request.memo(),
+				request.reopen() == null || request.reopen(), now);
 		return OrderResponse.of(order, now, null, null, 0L);
 	}
 

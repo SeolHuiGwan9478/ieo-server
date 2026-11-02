@@ -53,6 +53,8 @@ public enum ErrorCode {
 	ORDER_INVALID(HttpStatus.BAD_REQUEST, "ORDER_400", "오더 정보가 올바르지 않습니다."),
 	ORDER_NOT_BROKER(HttpStatus.FORBIDDEN, "ORDER_403_ROLE", "주선사 계정만 오더를 관리할 수 있습니다."),
 	ORDER_CONFLICT(HttpStatus.CONFLICT, "ORDER_409_CONFLICT", "다른 담당자가 먼저 처리했습니다. 새로 고침해 주세요."),
+	ORDER_NOT_ASSIGNED(HttpStatus.CONFLICT, "ORDER_409_NOT_ASSIGNED", "배차가 확정된 오더가 아닙니다."),
+	ORDER_ALREADY_REPORTED(HttpStatus.CONFLICT, "ORDER_409_REPORTED", "이미 신고한 오더입니다."),
 	ORDER_NOT_OPEN(HttpStatus.CONFLICT, "ORDER_409_CLOSED", "모집이 끝난 오더입니다."),
 	DISPATCH_NOT_DRIVER(HttpStatus.FORBIDDEN, "DISPATCH_403_ROLE", "차주 계정만 배차를 요청할 수 있습니다."),
 	DISPATCH_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "DISPATCH_404", "배차 요청을 찾을 수 없습니다."),

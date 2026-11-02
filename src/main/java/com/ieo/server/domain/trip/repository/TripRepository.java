@@ -26,7 +26,11 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
 
 	boolean existsByOrderId(Long orderId);
 
-	Optional<Trip> findByOrderId(Long orderId);
+	/** 확정된 요청으로 생긴 운행 (그 차주의 가장 최근 것) */
+	Optional<Trip> findFirstByOrderIdAndDriverUserIdOrderByCreatedAtDesc(Long orderId, Long userId);
+
+	/** 오더의 끝나지 않은 운행. 주선사가 배차를 취소할 때 */
+	Optional<Trip> findFirstByOrderIdAndStatusIn(Long orderId, Collection<TripStatus> statuses);
 
 	/** 차주 이행 기록: 완료한 운행 수 */
 	long countByDriverUserIdAndStatus(Long userId, TripStatus status);

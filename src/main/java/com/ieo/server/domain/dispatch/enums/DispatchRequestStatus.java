@@ -12,6 +12,8 @@ public enum DispatchRequestStatus {
 	DECLINED,
 	/** 차주가 철회 */
 	WITHDRAWN,
+	/** 확정된 뒤 차주나 주선사가 취소 (DSP-030) */
+	CANCELED,
 	/** 10분 안에 확정되지 않음 */
 	EXPIRED
 }

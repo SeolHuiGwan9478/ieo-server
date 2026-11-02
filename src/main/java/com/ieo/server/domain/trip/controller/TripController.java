@@ -1,5 +1,6 @@
 package com.ieo.server.domain.trip.controller;
 
+import com.ieo.server.domain.trip.dto.CancelTripRequest;
 import com.ieo.server.domain.trip.dto.CreateTripRequest;
 import com.ieo.server.domain.trip.dto.TripResponse;
 import com.ieo.server.domain.trip.service.TripService;
@@ -67,8 +68,12 @@ public class TripController {
 		return tripService.complete(userId, tripId);
 	}
 
+	/** 취소. Ieo 배차 운행은 사유(reason)가 필요하고, 오더는 다시 모집된다 */
 	@PostMapping("/{tripId}/cancel")
-	public TripResponse cancel(@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @PathVariable Long tripId) {
-		return tripService.cancel(userId, tripId);
+	public TripResponse cancel(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long tripId,
+			@Valid @RequestBody(required = false) CancelTripRequest request) {
+		return tripService.cancel(userId, tripId, request);
 	}
 }

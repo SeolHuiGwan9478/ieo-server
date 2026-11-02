@@ -130,6 +130,8 @@ class DispatchRepositoryTest {
 		tripRepository.save(Trip.fromDispatch(request));
 		entityManager.flush();
 		assertThat(tripRepository.existsByOrderId(order.getId())).isTrue();
+		assertThat(tripRepository.findFirstByOrderIdAndDriverUserIdOrderByCreatedAtDesc(order.getId(), driver.getUserId()))
+				.isPresent();
 	}
 
 	@Test

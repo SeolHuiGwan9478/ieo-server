@@ -1,10 +1,13 @@
 package com.ieo.server.domain.dispatch.controller;
 
 import com.ieo.server.domain.dispatch.dto.CreateDispatchRequestRequest;
+import com.ieo.server.domain.dispatch.dto.CreateOrderReportRequest;
 import com.ieo.server.domain.dispatch.dto.DispatchRequestResponse;
+import com.ieo.server.domain.dispatch.dto.OrderReportResponse;
 import com.ieo.server.domain.dispatch.dto.OrderResponse;
 import com.ieo.server.domain.dispatch.service.DispatchService;
 import com.ieo.server.global.auth.AuthInterceptor;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -49,6 +52,16 @@ public class OrderController {
 			@PathVariable Long orderId,
 			@RequestBody(required = false) CreateDispatchRequestRequest body) {
 		return dispatchService.request(userId, orderId, body);
+	}
+
+	/** 오더 신고. 오더 하나에 한 번만 */
+	@PostMapping("/api/orders/{orderId}/reports")
+	@ResponseStatus(HttpStatus.CREATED)
+	public OrderReportResponse report(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long orderId,
+			@Valid @RequestBody CreateOrderReportRequest request) {
+		return dispatchService.report(userId, orderId, request);
 	}
 
 	/** 내 배차 요청 */
