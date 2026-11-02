@@ -50,6 +50,7 @@ public class WaitService {
 	private final WaitProofRepository proofRepository;
 	private final TripRepository tripRepository;
 	private final DriverRepository driverRepository;
+	private final SiteStatsCalculator siteStatsCalculator;
 	private final Clock clock;
 
 	public record Arrival(WaitRecordResponse record, boolean created) {
@@ -83,6 +84,7 @@ public class WaitService {
 	public WaitRecordResponse startWork(Long userId, Long tripId, StopType type, Instant at) {
 		WaitRecord record = findRecord(userId, tripId, type);
 		record.startWork(resolveTime(at));
+		siteStatsCalculator.recalculate(record.getTripStop().getSite());
 		return WaitRecordResponse.from(record);
 	}
 
@@ -99,6 +101,7 @@ public class WaitService {
 		} else {
 			trip.complete(departedAt);
 		}
+		siteStatsCalculator.recalculate(record.getTripStop().getSite());
 		return WaitRecordResponse.from(record);
 	}
 
@@ -112,6 +115,7 @@ public class WaitService {
 			}
 		}
 		record.edit(request.arrivedAt(), request.workStartedAt(), request.departedAt(), clock.instant());
+		siteStatsCalculator.recalculate(record.getTripStop().getSite());
 		return WaitRecordResponse.from(record);
 	}
 
@@ -152,7 +156,10 @@ public class WaitService {
 	public void departDropoffIfOpen(Trip trip, Instant now) {
 		recordRepository.findByTripStopId(trip.dropoff().getId())
 				.filter(record -> record.status() != WaitStatus.DONE)
-				.ifPresent(record -> record.depart(now));
+				.ifPresent(record -> {
+					record.depart(now);
+					siteStatsCalculator.recalculate(record.getTripStop().getSite());
+				});
 	}
 
 	/** 비우면 지금. 앱 시계가 앞서 있어도 1분까지는 받는다 */

@@ -11,12 +11,15 @@ import com.ieo.server.domain.site.dto.SiteAttributesResponse;
 import com.ieo.server.domain.site.dto.SiteCardResponse;
 import com.ieo.server.domain.site.dto.SiteNoteResponse;
 import com.ieo.server.domain.site.dto.SiteResponse;
+import com.ieo.server.domain.site.dto.SiteStatsResponse;
+import com.ieo.server.domain.site.entity.SiteStats;
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.site.entity.SiteAttribute;
 import com.ieo.server.domain.site.entity.SiteNote;
 import com.ieo.server.domain.site.repository.SiteAttributeRepository;
 import com.ieo.server.domain.site.repository.SiteNoteRepository;
 import com.ieo.server.domain.site.repository.SiteRepository;
+import com.ieo.server.domain.site.repository.SiteStatsRepository;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.user.repository.UserRepository;
 import com.ieo.server.domain.vehicle.entity.Vehicle;
@@ -33,7 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 상하차지 등록·조회 (SITE-001, 002, 006, 007)와 차주가 남기는 정보·메모 (SITE-004, 005).
+ * 상하차지 등록·조회 (SITE-001, 002, 006, 007, 010)와 차주가 남기는 정보·메모 (SITE-004, 005).
  * 정보와 메모는 차주만 남길 수 있다. 거리는 위도·경도 범위로 후보를 추린 뒤 Site.distanceMeters로 다시 거른다.
  */
 @Service
@@ -53,6 +56,7 @@ public class SiteService {
 	private final SiteRepository siteRepository;
 	private final SiteAttributeRepository attributeRepository;
 	private final SiteNoteRepository noteRepository;
+	private final SiteStatsRepository statsRepository;
 	private final UserRepository userRepository;
 	private final DriverRepository driverRepository;
 	private final VehicleRepository vehicleRepository;
@@ -114,7 +118,12 @@ public class SiteService {
 		List<SiteNoteResponse> notes = noteRepository.findForCard(siteId, Pageable.ofSize(CARD_NOTE_COUNT)).stream()
 				.map(note -> SiteNoteResponse.of(note, userId))
 				.toList();
-		return SiteCardResponse.of(site, attributes, HeightWarning.of(vehicleHeightM, attributes.heightLimitM()), notes);
+		SiteStatsResponse stats = statsRepository.findById(siteId)
+				.filter(SiteStats::hasEnoughSamples)
+				.map(SiteStatsResponse::from)
+				.orElse(null);
+		return SiteCardResponse.of(site, attributes, HeightWarning.of(vehicleHeightM, attributes.heightLimitM()),
+				stats, notes);
 	}
 
 	/** 높이 제한·지게차·주차 정보를 남긴다. 덮어쓰지 않고 쌓으며, 반영된 항목별 최신 값을 돌려준다 */
