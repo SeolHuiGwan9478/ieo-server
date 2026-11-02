@@ -44,6 +44,11 @@ public enum ErrorCode {
 	VEHICLE_NOT_DRIVER(HttpStatus.FORBIDDEN, "VEHICLE_403_ROLE", "차주 계정만 차량을 등록할 수 있습니다."),
 	VEHICLE_VIN_OTHER_OWNER(HttpStatus.CONFLICT, "VEHICLE_409_VIN", "이 차량은 다른 계정에 등록돼 있습니다. 내 차라면 고객센터로 문의해 주세요."),
 
+	// 운행
+	TRIP_NOT_FOUND(HttpStatus.NOT_FOUND, "TRIP_404", "운행을 찾을 수 없습니다."),
+	TRIP_INVALID_FARE(HttpStatus.BAD_REQUEST, "TRIP_400_FARE", "운임은 0원에서 1억 원 사이로 입력해 주세요."),
+	TRIP_INVALID_STATUS(HttpStatus.CONFLICT, "TRIP_409_STATUS", "지금 운행 상태에서는 할 수 없는 요청입니다."),
+
 	// 상하차지
 	SITE_NOT_FOUND(HttpStatus.NOT_FOUND, "SITE_404", "상하차지를 찾을 수 없습니다."),
 	SITE_NOT_DRIVER(HttpStatus.FORBIDDEN, "SITE_403_ROLE", "차주 계정만 상하차지 정보와 메모를 남길 수 있습니다."),
