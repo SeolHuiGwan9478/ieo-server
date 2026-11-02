@@ -42,7 +42,14 @@ public enum ErrorCode {
 	VEHICLE_INVALID_HEIGHT(HttpStatus.BAD_REQUEST, "VEHICLE_400_HEIGHT", "차량 높이는 1.5m에서 4.2m 사이로 입력해 주세요."),
 	VEHICLE_DUPLICATE_PLATE(HttpStatus.CONFLICT, "VEHICLE_409_PLATE", "이미 다른 계정에 등록된 차량 번호입니다. 고객센터로 문의해 주세요."),
 	VEHICLE_NOT_DRIVER(HttpStatus.FORBIDDEN, "VEHICLE_403_ROLE", "차주 계정만 차량을 등록할 수 있습니다."),
-	VEHICLE_VIN_OTHER_OWNER(HttpStatus.CONFLICT, "VEHICLE_409_VIN", "이 차량은 다른 계정에 등록돼 있습니다. 내 차라면 고객센터로 문의해 주세요.");
+	VEHICLE_VIN_OTHER_OWNER(HttpStatus.CONFLICT, "VEHICLE_409_VIN", "이 차량은 다른 계정에 등록돼 있습니다. 내 차라면 고객센터로 문의해 주세요."),
+
+	// 상하차지
+	SITE_NOT_FOUND(HttpStatus.NOT_FOUND, "SITE_404", "상하차지를 찾을 수 없습니다."),
+	SITE_INVALID_LOCATION(HttpStatus.BAD_REQUEST, "SITE_400_LOCATION", "위치 좌표가 올바르지 않습니다."),
+	SITE_INVALID_RADIUS(HttpStatus.BAD_REQUEST, "SITE_400_RADIUS", "도착 판정 반경은 50m에서 1,000m 사이로 정해 주세요."),
+	SITE_INVALID_ATTRIBUTE(HttpStatus.BAD_REQUEST, "SITE_400_ATTRIBUTE", "상하차지 정보 값이 올바르지 않습니다."),
+	SITE_INVALID_NOTE(HttpStatus.BAD_REQUEST, "SITE_400_NOTE", "메모는 1자에서 500자 사이로 남겨 주세요.");
 
 	private final HttpStatus status;
 	private final String code;
