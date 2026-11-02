@@ -15,14 +15,12 @@ public record TripStopResponse(
 		double lat,
 		double lng,
 		int geofenceRadiusM,
-		Instant plannedAt,
-		Instant arrivedAt,
-		Instant departedAt) {
+		Instant plannedAt) {
 
 	public static TripStopResponse from(TripStop stop) {
 		Site site = stop.getSite();
 		return new TripStopResponse(stop.getId(), stop.getType(), site.getId(), site.getName(), site.getAddress(),
 				site.getLat(), site.getLng(), site.getGeofenceRadiusM(),
-				stop.getPlannedAt(), stop.getArrivedAt(), stop.getDepartedAt());
+				stop.getPlannedAt());
 	}
 }

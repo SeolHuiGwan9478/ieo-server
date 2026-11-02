@@ -194,15 +194,14 @@ class TripControllerTest {
 		Trip trip = tripRepository.findById(id.longValue()).orElseThrow();
 		Instant now = Instant.parse("2026-11-02T00:00:00Z");
 		trip.start(now);
-		trip.arriveAtPickup(now);
-		trip.departPickup(now);
-		trip.arriveAtDropoff(now);
+		trip.arriveAtPickup();
+		trip.departPickup();
+		trip.arriveAtDropoff();
 
 		mockMvc.perform(post("/api/trips/" + id + "/complete").header("Authorization", bearer))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.status").value("COMPLETED"))
-				.andExpect(jsonPath("$.completedAt").exists())
-				.andExpect(jsonPath("$.dropoff.departedAt").exists());
+				.andExpect(jsonPath("$.completedAt").exists());
 	}
 
 	@Test

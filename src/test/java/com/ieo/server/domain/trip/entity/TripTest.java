@@ -51,21 +51,17 @@ class TripTest {
 	}
 
 	@Test
-	void 출발부터_완료까지_순서대로_가며_도착_출발_시각을_남긴다() {
+	void 출발부터_완료까지_순서대로_간다() {
 		Trip trip = newTrip();
 
 		trip.start(T0);
-		trip.arriveAtPickup(T0.plusSeconds(3600));
-		trip.departPickup(T0.plusSeconds(3 * 3600));
-		trip.arriveAtDropoff(T0.plusSeconds(6 * 3600));
+		trip.arriveAtPickup();
+		trip.departPickup();
+		trip.arriveAtDropoff();
 		trip.complete(T0.plusSeconds(7 * 3600));
 
 		assertThat(trip.getStatus()).isEqualTo(TripStatus.COMPLETED);
 		assertThat(trip.getStartedAt()).isEqualTo(T0);
-		assertThat(trip.pickup().getArrivedAt()).isEqualTo(T0.plusSeconds(3600));
-		assertThat(trip.pickup().getDepartedAt()).isEqualTo(T0.plusSeconds(3 * 3600));
-		assertThat(trip.dropoff().getArrivedAt()).isEqualTo(T0.plusSeconds(6 * 3600));
-		assertThat(trip.dropoff().getDepartedAt()).isEqualTo(T0.plusSeconds(7 * 3600));
 		assertThat(trip.getCompletedAt()).isEqualTo(T0.plusSeconds(7 * 3600));
 	}
 
@@ -73,7 +69,7 @@ class TripTest {
 	void 순서를_건너뛰면_거부한다() {
 		Trip trip = newTrip();
 
-		assertThatThrownBy(() -> trip.arriveAtDropoff(T0))
+		assertThatThrownBy(trip::arriveAtDropoff)
 				.extracting("errorCode").isEqualTo(ErrorCode.TRIP_INVALID_STATUS);
 		assertThat(trip.getStatus()).isEqualTo(TripStatus.SCHEDULED);
 	}
@@ -82,7 +78,7 @@ class TripTest {
 	void 완료_전에는_어디서든_취소할_수_있고_완료나_취소_뒤에는_못_한다() {
 		Trip moving = newTrip();
 		moving.start(T0);
-		moving.arriveAtPickup(T0);
+		moving.arriveAtPickup();
 		moving.cancel(T0.plusSeconds(60));
 		assertThat(moving.getStatus()).isEqualTo(TripStatus.CANCELLED);
 		assertThat(moving.getCanceledAt()).isEqualTo(T0.plusSeconds(60));
@@ -91,9 +87,9 @@ class TripTest {
 
 		Trip done = newTrip();
 		done.start(T0);
-		done.arriveAtPickup(T0);
-		done.departPickup(T0);
-		done.arriveAtDropoff(T0);
+		done.arriveAtPickup();
+		done.departPickup();
+		done.arriveAtDropoff();
 		done.complete(T0);
 		assertThatThrownBy(() -> done.cancel(T0))
 				.extracting("errorCode").isEqualTo(ErrorCode.TRIP_INVALID_STATUS);
@@ -114,14 +110,6 @@ class TripTest {
 				.extracting("errorCode").isEqualTo(ErrorCode.VEHICLE_NOT_FOUND);
 	}
 
-	@Test
-	void 상하차지를_다시_들어와도_처음_진입_시각을_지킨다() {
-		Trip trip = newTrip();
-		trip.pickup().arrive(T0);
-		trip.pickup().arrive(T0.plusSeconds(600));
-
-		assertThat(trip.pickup().getArrivedAt()).isEqualTo(T0);
-	}
 
 	private Trip newTrip() {
 		return Trip.create(driver, vehicle, null, " 한빛로지스 ", 450_000, PaymentType.RECEIPT, TripSource.MANUAL,

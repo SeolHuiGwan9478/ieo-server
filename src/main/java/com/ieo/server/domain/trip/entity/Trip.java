@@ -148,28 +148,24 @@ public class Trip extends BaseTimeEntity {
 		this.startedAt = now;
 	}
 
-	/** 상차지 진입 */
-	public void arriveAtPickup(Instant now) {
+	/** 상차지 진입. 진입·이탈 시각은 대기 기록이 가진다 */
+	public void arriveAtPickup() {
 		moveTo(TripStatus.AT_PICKUP);
-		pickup().arrive(now);
 	}
 
 	/** 상차를 마치고 상차지 이탈 → 운송 중 */
-	public void departPickup(Instant now) {
+	public void departPickup() {
 		moveTo(TripStatus.IN_TRANSIT);
-		pickup().depart(now);
 	}
 
 	/** 하차지 진입 */
-	public void arriveAtDropoff(Instant now) {
+	public void arriveAtDropoff() {
 		moveTo(TripStatus.AT_DROPOFF);
-		dropoff().arrive(now);
 	}
 
 	/** 하차 완료 (인수 서명 또는 하차지 이탈) */
 	public void complete(Instant now) {
 		moveTo(TripStatus.COMPLETED);
-		dropoff().depart(now);
 		this.completedAt = now;
 	}
 

@@ -24,8 +24,8 @@ import org.hibernate.type.SqlTypes;
 
 /**
  * 운행에서 들르는 상하차지 한 곳. 운행마다 상차 1곳, 하차 1곳 (경유 하차는 P3, TRIP-006).
- * 같은 Site에 여러 번 가면 운행마다 TripStop이 따로 생기고, 대기 기록은 여기에 붙는다.
- * 도착·출발 시각은 대기 기록(지오펜스 진입·이탈)이 채운다.
+ * 어디에 언제 가기로 했는지(계획)만 담는다. 실제로 언제 와서 언제 떠났는지는 대기 기록(WaitRecord)이 가진다.
+ * 같은 Site에 여러 번 가면 운행마다 TripStop이 따로 생긴다.
  */
 @Getter
 @Entity
@@ -51,14 +51,8 @@ public class TripStop extends BaseTimeEntity {
 	@JoinColumn(name = "site_id")
 	private Site site;
 
-	/** 상하차 예정 시각 (선택) */
+	/** 상하차 예정 시각 (선택). 대기비는 이 시각부터 센다 */
 	private Instant plannedAt;
-
-	/** 지오펜스 진입 시각 */
-	private Instant arrivedAt;
-
-	/** 지오펜스 이탈 시각 */
-	private Instant departedAt;
 
 	TripStop(Trip trip, StopType type, Site site, Instant plannedAt) {
 		this.trip = trip;
@@ -67,19 +61,7 @@ public class TripStop extends BaseTimeEntity {
 		this.plannedAt = plannedAt;
 	}
 
-	/** 처음 진입한 시각만 남긴다. 이탈했다가 다시 들어와도 바꾸지 않는다 */
-	public void arrive(Instant now) {
-		if (arrivedAt == null) {
-			this.arrivedAt = now;
-		}
-	}
-
-	/** 이탈. 진입 기록이 없으면 이탈 시각을 진입 시각으로도 쓴다 */
-	public void depart(Instant now) {
-		arrive(now);
-		this.departedAt = now;
-	}
-
+	/** 대기가 시작된 뒤에 바꾸면 대기비가 달라지므로, 서비스가 대기 기록이 없을 때만 부른다 */
 	public void changePlannedAt(Instant plannedAt) {
 		this.plannedAt = plannedAt;
 	}
