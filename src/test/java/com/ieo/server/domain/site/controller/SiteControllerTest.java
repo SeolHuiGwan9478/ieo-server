@@ -1,5 +1,6 @@
 package com.ieo.server.domain.site.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -190,6 +191,102 @@ class SiteControllerTest {
 				.andExpect(jsonPath("$.code").value("SITE_404"));
 		mockMvc.perform(get("/api/sites/999999"))
 				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void 정보를_남기면_항목별_최신_값을_돌려준다() throws Exception {
+		Site site = siteRepository.save(Site.create("칠곡 물류센터", "경북 칠곡군", LAT, LNG, null));
+
+		addAttribute(site, "HEIGHT_LIMIT", "3.8").andExpect(status().isCreated());
+		addAttribute(site, "FORKLIFT", "true").andExpect(status().isCreated());
+		addAttribute(site, "HEIGHT_LIMIT", "3.5")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.heightLimitM").value(3.5))
+				.andExpect(jsonPath("$.forklift").value(true))
+				.andExpect(jsonPath("$.parking").doesNotExist());
+	}
+
+	@Test
+	void 정보_값이_형식에_맞지_않으면_400() throws Exception {
+		Site site = siteRepository.save(Site.create("칠곡 물류센터", "경북 칠곡군", LAT, LNG, null));
+
+		addAttribute(site, "HEIGHT_LIMIT", "높음")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("SITE_400_ATTRIBUTE"));
+		addAttribute(site, "FORKLIFT", "있음")
+				.andExpect(jsonPath("$.code").value("SITE_400_ATTRIBUTE"));
+		addAttribute(site, "WIDTH", "3")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("COMMON_400"));
+	}
+
+	@Test
+	void 메모를_남기면_내_메모로_보인다() throws Exception {
+		Site site = siteRepository.save(Site.create("칠곡 물류센터", "경북 칠곡군", LAT, LNG, null));
+
+		addNote(bearer, site.getId(), "  후문으로 들어가세요  ")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.text").value("후문으로 들어가세요"))
+				.andExpect(jsonPath("$.mine").value(true))
+				.andExpect(jsonPath("$.helpfulCount").value(0));
+
+		String other = bearerOf(User.create("01090000602", UserRole.DRIVER), true);
+		mockMvc.perform(get("/api/sites/" + site.getId()).header("Authorization", other))
+				.andExpect(jsonPath("$.notes[0].text").value("후문으로 들어가세요"))
+				.andExpect(jsonPath("$.notes[0].mine").value(false));
+	}
+
+	@Test
+	void 빈_메모나_없는_상하차지나_차주가_아니면_거부한다() throws Exception {
+		Site site = siteRepository.save(Site.create("칠곡 물류센터", "경북 칠곡군", LAT, LNG, null));
+
+		addNote(bearer, site.getId(), "   ").andExpect(status().isBadRequest());
+		addNote(bearer, 999999L, "메모").andExpect(status().isNotFound());
+
+		String broker = bearerOf(User.create("01090000603", UserRole.BROKER), false);
+		addNote(broker, site.getId(), "메모")
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("SITE_403_ROLE"));
+	}
+
+	@Test
+	void 탈퇴해도_남긴_정보와_메모는_남고_작성자_연결만_끊긴다() throws Exception {
+		Site site = siteRepository.save(Site.create("칠곡 물류센터", "경북 칠곡군", LAT, LNG, driver));
+		addAttribute(site, "FORKLIFT", "true");
+		addNote(bearer, site.getId(), "지게차 기사 점심시간은 12시부터 1시");
+
+		mockMvc.perform(post("/api/users/me/withdraw").header("Authorization", bearer)
+						.contentType(MediaType.APPLICATION_JSON).content("{}"))
+				.andExpect(status().isNoContent());
+
+		Site saved = siteRepository.findById(site.getId()).orElseThrow();
+		assertThat(saved.getCreatedBy()).isNull();
+		assertThat(attributeRepository.findLatestBySiteId(site.getId()))
+				.singleElement().extracting(SiteAttribute::getReportedBy).isNull();
+		String other = bearerOf(User.create("01090000604", UserRole.DRIVER), true);
+		mockMvc.perform(get("/api/sites/" + site.getId()).header("Authorization", other))
+				.andExpect(jsonPath("$.attributes.forklift").value(true))
+				.andExpect(jsonPath("$.notes[0].text").value("지게차 기사 점심시간은 12시부터 1시"));
+	}
+
+	private String bearerOf(User newUser, boolean asDriver) {
+		User user = userRepository.save(newUser);
+		if (asDriver) {
+			driverRepository.save(Driver.of(user));
+		}
+		return "Bearer " + jwtProvider.issue(user.getId()).accessToken();
+	}
+
+	private ResultActions addAttribute(Site site, String key, String value) throws Exception {
+		return mockMvc.perform(post("/api/sites/" + site.getId() + "/attributes").header("Authorization", bearer)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"key\":\"%s\",\"value\":\"%s\"}".formatted(key, value)));
+	}
+
+	private ResultActions addNote(String bearer, Long siteId, String text) throws Exception {
+		return mockMvc.perform(post("/api/sites/" + siteId + "/notes").header("Authorization", bearer)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"text\":\"%s\"}".formatted(text)));
 	}
 
 	private ResultActions register(String name, double lat, double lng) throws Exception {

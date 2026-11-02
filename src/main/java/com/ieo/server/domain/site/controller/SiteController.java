@@ -1,8 +1,12 @@
 package com.ieo.server.domain.site.controller;
 
+import com.ieo.server.domain.site.dto.CreateSiteAttributeRequest;
+import com.ieo.server.domain.site.dto.CreateSiteNoteRequest;
 import com.ieo.server.domain.site.dto.CreateSiteRequest;
 import com.ieo.server.domain.site.dto.NearbySiteResponse;
+import com.ieo.server.domain.site.dto.SiteAttributesResponse;
 import com.ieo.server.domain.site.dto.SiteCardResponse;
+import com.ieo.server.domain.site.dto.SiteNoteResponse;
 import com.ieo.server.domain.site.dto.SiteResponse;
 import com.ieo.server.domain.site.service.SiteService;
 import com.ieo.server.global.auth.AuthInterceptor;
@@ -18,9 +22,10 @@ import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 상하차지 (SITE-001, 002, 006, 007) */
+/** 상하차지 (SITE-001, 002, 004, 005, 006, 007) */
 @RestController
 @RequestMapping("/api/sites")
 @RequiredArgsConstructor
@@ -51,5 +56,25 @@ public class SiteController {
 	@GetMapping("/{siteId}")
 	public SiteCardResponse getCard(@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @PathVariable Long siteId) {
 		return siteService.getCard(userId, siteId);
+	}
+
+	/** 높이 제한·지게차·주차 정보 남기기 (차주만). 항목별 최신 값을 돌려준다 */
+	@PostMapping("/{siteId}/attributes")
+	@ResponseStatus(HttpStatus.CREATED)
+	public SiteAttributesResponse addAttribute(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long siteId,
+			@Valid @RequestBody CreateSiteAttributeRequest request) {
+		return siteService.addAttribute(userId, siteId, request);
+	}
+
+	/** 메모 남기기 (차주만) */
+	@PostMapping("/{siteId}/notes")
+	@ResponseStatus(HttpStatus.CREATED)
+	public SiteNoteResponse addNote(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long siteId,
+			@Valid @RequestBody CreateSiteNoteRequest request) {
+		return siteService.addNote(userId, siteId, request);
 	}
 }

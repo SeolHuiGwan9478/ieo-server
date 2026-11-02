@@ -2,6 +2,8 @@ package com.ieo.server.domain.site.service;
 
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
+import com.ieo.server.domain.site.dto.CreateSiteAttributeRequest;
+import com.ieo.server.domain.site.dto.CreateSiteNoteRequest;
 import com.ieo.server.domain.site.dto.CreateSiteRequest;
 import com.ieo.server.domain.site.dto.HeightWarning;
 import com.ieo.server.domain.site.dto.NearbySiteResponse;
@@ -10,6 +12,8 @@ import com.ieo.server.domain.site.dto.SiteCardResponse;
 import com.ieo.server.domain.site.dto.SiteNoteResponse;
 import com.ieo.server.domain.site.dto.SiteResponse;
 import com.ieo.server.domain.site.entity.Site;
+import com.ieo.server.domain.site.entity.SiteAttribute;
+import com.ieo.server.domain.site.entity.SiteNote;
 import com.ieo.server.domain.site.repository.SiteAttributeRepository;
 import com.ieo.server.domain.site.repository.SiteNoteRepository;
 import com.ieo.server.domain.site.repository.SiteRepository;
@@ -29,8 +33,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 상하차지 등록·조회 (SITE-001, 002, 006, 007).
- * 거리는 위도·경도 범위로 후보를 추린 뒤 Site.distanceMeters로 다시 거른다.
+ * 상하차지 등록·조회 (SITE-001, 002, 006, 007)와 차주가 남기는 정보·메모 (SITE-004, 005).
+ * 정보와 메모는 차주만 남길 수 있다. 거리는 위도·경도 범위로 후보를 추린 뒤 Site.distanceMeters로 다시 거른다.
  */
 @Service
 @RequiredArgsConstructor
@@ -91,8 +95,7 @@ public class SiteService {
 	/** 정보 카드: 항목별 최신 값, 메모 5개, 내 기본 차량 높이 경고 */
 	public SiteCardResponse getCard(Long userId, Long siteId) {
 		requireActiveUser(userId);
-		Site site = siteRepository.findById(siteId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.SITE_NOT_FOUND));
+		Site site = findSite(siteId);
 
 		SiteAttributesResponse attributes = SiteAttributesResponse.from(attributeRepository.findLatestBySiteId(siteId));
 		BigDecimal vehicleHeightM = vehicleRepository.findByDriverUserIdAndDefaultVehicleTrue(userId)
@@ -102,6 +105,36 @@ public class SiteService {
 				.map(note -> SiteNoteResponse.of(note, userId))
 				.toList();
 		return SiteCardResponse.of(site, attributes, HeightWarning.of(vehicleHeightM, attributes.heightLimitM()), notes);
+	}
+
+	/** 높이 제한·지게차·주차 정보를 남긴다. 덮어쓰지 않고 쌓으며, 반영된 항목별 최신 값을 돌려준다 */
+	@Transactional
+	public SiteAttributesResponse addAttribute(Long userId, Long siteId, CreateSiteAttributeRequest request) {
+		Driver driver = requireDriver(userId);
+		Site site = findSite(siteId);
+		attributeRepository.saveAndFlush(SiteAttribute.create(site, request.key(), request.value(), driver));
+		return SiteAttributesResponse.from(attributeRepository.findLatestBySiteId(siteId));
+	}
+
+	/** 메모를 남긴다. 다른 차주에게는 작성자 없이 보인다 (SITE-008) */
+	@Transactional
+	public SiteNoteResponse addNote(Long userId, Long siteId, CreateSiteNoteRequest request) {
+		Driver driver = requireDriver(userId);
+		Site site = findSite(siteId);
+		SiteNote note = noteRepository.saveAndFlush(SiteNote.create(site, driver, request.text()));
+		return SiteNoteResponse.of(note, userId);
+	}
+
+	private Site findSite(Long siteId) {
+		return siteRepository.findById(siteId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.SITE_NOT_FOUND));
+	}
+
+	/** 차주 프로필이 없으면 주선사 담당자 등 차주가 아닌 계정이다 */
+	private Driver requireDriver(Long userId) {
+		requireActiveUser(userId);
+		return driverRepository.findById(userId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.SITE_NOT_DRIVER));
 	}
 
 	/** (lat, lng)에서 meters 안의 상하차지를 가까운 순으로 */

@@ -2,6 +2,9 @@ package com.ieo.server.domain.user.service;
 
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
+import com.ieo.server.domain.site.repository.SiteAttributeRepository;
+import com.ieo.server.domain.site.repository.SiteNoteRepository;
+import com.ieo.server.domain.site.repository.SiteRepository;
 import com.ieo.server.domain.user.dto.UpdateUserRequest;
 import com.ieo.server.domain.user.dto.UserResponse;
 import com.ieo.server.domain.user.dto.WithdrawRequest;
@@ -26,6 +29,9 @@ public class UserService {
 	private final DriverRepository driverRepository;
 	private final PhoneVerificationRepository phoneVerificationRepository;
 	private final PhoneTokenRepository phoneTokenRepository;
+	private final SiteRepository siteRepository;
+	private final SiteAttributeRepository siteAttributeRepository;
+	private final SiteNoteRepository siteNoteRepository;
 	private final Clock clock;
 
 	public UserResponse getUser(Long userId) {
@@ -45,7 +51,8 @@ public class UserService {
 	 * 이미 발급된 액세스 토큰은 만료(30분)까지 남지만 탈퇴한 계정은 없는 계정으로 보고, 리프레시는 막힌다.
 	 *
 	 * 남기는 것: 동의 이력 (동의 받았다는 증빙, 번호·이름 없이 계정 ID에만 묶임),
-	 *  주선사에게 이미 전달된 증빙 (주선사 쪽 보관 정책을 따른다)
+	 *  주선사에게 이미 전달된 증빙 (주선사 쪽 보관 정책을 따른다),
+	 *  상하차지·정보·메모 (다른 차주에게 쓸모 있는 현장 정보라 남기고, 작성자 연결만 끊는다)
 	 * TODO: 운행 도메인이 생기면 위치 기록(LocationPoint)도 여기서 지운다
 	 */
 	@Transactional
@@ -55,6 +62,9 @@ public class UserService {
 
 		user.withdraw(request == null ? null : request.reason(), clock.instant());
 		driverRepository.findById(userId).ifPresent(Driver::clearPersonalInfo);
+		siteRepository.detachCreator(userId);
+		siteAttributeRepository.detachReporter(userId);
+		siteNoteRepository.detachAuthor(userId);
 		if (phone != null) {
 			phoneVerificationRepository.deleteByPhone(phone);
 			phoneTokenRepository.deleteByPhone(phone);
