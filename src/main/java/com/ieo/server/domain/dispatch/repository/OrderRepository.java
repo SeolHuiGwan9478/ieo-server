@@ -1,6 +1,7 @@
 package com.ieo.server.domain.dispatch.repository;
 
 import com.ieo.server.domain.dispatch.entity.Order;
+import com.ieo.server.domain.dispatch.enums.OrderStatus;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.data.domain.Page;
@@ -13,6 +14,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
 	/** 주선사의 오더. 최근 등록한 순서 */
 	Page<Order> findAllByBrokerIdOrderByCreatedAtDesc(Long brokerId, Pageable pageable);
+
+	Page<Order> findAllByBrokerIdAndStatusOrderByCreatedAtDesc(Long brokerId, OrderStatus status, Pageable pageable);
 
 	/**
 	 * 차주가 볼 수 있는 모집 중 오더 (DSP-010). 지정 배차 오더는 그 차주에게만 보인다.

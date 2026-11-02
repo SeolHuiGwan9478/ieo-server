@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 톤수. 화물 앱들이 흔히 나누는 단위를 따른다.
+ * 톤수. 화물 앱들이 흔히 나누는 단위를 따른다. 작은 것부터 큰 순서로 둔다 (canCarry가 이 순서를 쓴다).
  * 오더(Order)도 같은 enum을 써서 차량과 바로 비교한다.
  */
 @Getter
@@ -23,4 +23,9 @@ public enum Tonnage {
 	TON_25("25톤");
 
 	private final String label;
+
+	/** 이 톤수 차량이 required 톤수 오더를 맡을 수 있는지. 같거나 크면 된다 */
+	public boolean canCarry(Tonnage required) {
+		return compareTo(required) >= 0;
+	}
 }

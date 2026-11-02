@@ -192,7 +192,10 @@ public class Order extends BaseTimeEntity {
 		return status == OrderStatus.OPEN && now.isBefore(pickupUntil);
 	}
 
-	/** 이 차주가 이 차량으로 요청할 수 있는지. 지정 배차면 그 차주만, 톤수·차종은 오더와 같아야 한다 */
+	/**
+	 * 이 차주가 이 차량으로 요청할 수 있는지. 지정 배차면 그 차주만.
+	 * 차종은 같아야 하고, 톤수는 오더 이상이면 된다 (큰 차로 작은 짐을 나를 수 있다)
+	 */
 	public void checkRequestable(Driver driver, Vehicle vehicle, Instant now) {
 		if (!isOpenAt(now)) {
 			throw new BusinessException(ErrorCode.ORDER_NOT_OPEN);
@@ -200,7 +203,7 @@ public class Order extends BaseTimeEntity {
 		if (targetDriver != null && !targetDriver.getUserId().equals(driver.getUserId())) {
 			throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
 		}
-		if (vehicle.getTonnage() != tonnage || vehicle.getBodyType() != bodyType) {
+		if (!vehicle.getTonnage().canCarry(tonnage) || vehicle.getBodyType() != bodyType) {
 			throw new BusinessException(ErrorCode.DISPATCH_VEHICLE_MISMATCH);
 		}
 	}

@@ -4,8 +4,11 @@ import com.ieo.server.domain.dispatch.entity.DispatchRequest;
 import com.ieo.server.domain.dispatch.enums.DispatchRequestStatus;
 import java.time.Instant;
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface DispatchRequestRepository extends JpaRepository<DispatchRequest, Long> {
 
@@ -19,4 +22,23 @@ public interface DispatchRequestRepository extends JpaRepository<DispatchRequest
 
 	/** 차주가 걸어 둔 대기 중 요청 수 (DSP-024). since = 지금 − 10분: 그 전 요청은 만료 */
 	long countByDriverUserIdAndStatusAndCreatedAtAfter(Long userId, DispatchRequestStatus status, Instant since);
+
+	/** 오더 목록에 내 요청 상태를 붙일 때 */
+	List<DispatchRequest> findAllByDriverUserIdAndOrderIdIn(Long userId, Collection<Long> orderIds);
+
+	/** 오더별 대기 중(만료 전) 요청 수. 주선사 오더 목록에 붙인다 */
+	@Query("""
+			select r.order.id as orderId, count(r) as count from DispatchRequest r
+			where r.order.id in :orderIds
+			  and r.status = com.ieo.server.domain.dispatch.enums.DispatchRequestStatus.PENDING
+			  and r.createdAt > :since
+			group by r.order.id
+			""")
+	List<OrderCount> countPendingByOrderIds(@Param("orderIds") Collection<Long> orderIds, @Param("since") Instant since);
+
+	interface OrderCount {
+		Long getOrderId();
+
+		long getCount();
+	}
 }

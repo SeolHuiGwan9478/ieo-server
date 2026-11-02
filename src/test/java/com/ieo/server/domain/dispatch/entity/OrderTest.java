@@ -78,12 +78,18 @@ class OrderTest {
 	}
 
 	@Test
-	void 톤수_차종이_맞고_모집_중이면_요청할_수_있다() {
+	void 차종이_같고_톤수가_오더_이상이며_모집_중이면_요청할_수_있다() {
 		Order order = draft().create();
 		order.checkRequestable(driver, wing5, NOW);
 
+		Vehicle wing11 = Vehicle.create(driver, "경기82사5678", Tonnage.TON_11, BodyType.WING, null);
+		order.checkRequestable(driver, wing11, NOW);
+
 		Vehicle cargo5 = Vehicle.create(driver, "123바4567", Tonnage.TON_5, BodyType.CARGO, null);
 		assertThatThrownBy(() -> order.checkRequestable(driver, cargo5, NOW))
+				.extracting("errorCode").isEqualTo(ErrorCode.DISPATCH_VEHICLE_MISMATCH);
+		Vehicle wing2 = Vehicle.create(driver, "123바0000", Tonnage.TON_2_5, BodyType.WING, null);
+		assertThatThrownBy(() -> order.checkRequestable(driver, wing2, NOW))
 				.extracting("errorCode").isEqualTo(ErrorCode.DISPATCH_VEHICLE_MISMATCH);
 		assertThatThrownBy(() -> order.checkRequestable(driver, wing5, PICKUP_FROM.plusSeconds(3 * 3600)))
 				.extracting("errorCode").isEqualTo(ErrorCode.ORDER_NOT_OPEN);

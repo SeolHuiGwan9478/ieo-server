@@ -51,8 +51,12 @@ public enum ErrorCode {
 	// 배차
 	ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER_404", "오더를 찾을 수 없습니다."),
 	ORDER_INVALID(HttpStatus.BAD_REQUEST, "ORDER_400", "오더 정보가 올바르지 않습니다."),
+	ORDER_NOT_BROKER(HttpStatus.FORBIDDEN, "ORDER_403_ROLE", "주선사 계정만 오더를 관리할 수 있습니다."),
+	ORDER_CONFLICT(HttpStatus.CONFLICT, "ORDER_409_CONFLICT", "다른 담당자가 먼저 처리했습니다. 새로 고침해 주세요."),
 	ORDER_NOT_OPEN(HttpStatus.CONFLICT, "ORDER_409_CLOSED", "모집이 끝난 오더입니다."),
-	DISPATCH_VEHICLE_MISMATCH(HttpStatus.BAD_REQUEST, "DISPATCH_400_VEHICLE", "오더의 톤수·차종과 차량이 맞지 않습니다."),
+	DISPATCH_NOT_DRIVER(HttpStatus.FORBIDDEN, "DISPATCH_403_ROLE", "차주 계정만 배차를 요청할 수 있습니다."),
+	DISPATCH_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "DISPATCH_404", "배차 요청을 찾을 수 없습니다."),
+	DISPATCH_VEHICLE_MISMATCH(HttpStatus.BAD_REQUEST, "DISPATCH_400_VEHICLE", "차종이 오더와 같고 톤수가 오더 이상인 차량만 요청할 수 있습니다."),
 	DISPATCH_REQUEST_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "DISPATCH_429_LIMIT", "대기 중인 배차 요청은 3건까지 걸어 둘 수 있습니다."),
 	DISPATCH_ALREADY_REQUESTED(HttpStatus.CONFLICT, "DISPATCH_409_DUPLICATE", "이미 배차를 요청한 오더입니다."),
 	DISPATCH_REQUEST_NOT_PENDING(HttpStatus.CONFLICT, "DISPATCH_409_STATUS", "이미 확정됐거나 만료·철회된 요청입니다."),

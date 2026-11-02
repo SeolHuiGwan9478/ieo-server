@@ -25,4 +25,9 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
 	boolean existsByVehicleId(Long vehicleId);
 
 	boolean existsByOrderId(Long orderId);
+
+	Optional<Trip> findByOrderId(Long orderId);
+
+	/** 차주 이행 기록: 완료한 운행 수 */
+	long countByDriverUserIdAndStatus(Long userId, TripStatus status);
 }
