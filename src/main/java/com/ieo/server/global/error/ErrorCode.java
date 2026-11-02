@@ -79,6 +79,10 @@ public enum ErrorCode {
 	WAIT_INVALID_TIME(HttpStatus.BAD_REQUEST, "WAIT_400_TIME", "시각은 진입, 작업 시작, 이탈 순서여야 합니다."),
 	WAIT_INVALID_STATUS(HttpStatus.CONFLICT, "WAIT_409_STATUS", "지금 대기 상태에서는 할 수 없는 요청입니다."),
 
+	// 장부
+	LEDGER_NOT_FOUND(HttpStatus.NOT_FOUND, "LEDGER_404", "장부 항목을 찾을 수 없습니다."),
+	LEDGER_INVALID(HttpStatus.BAD_REQUEST, "LEDGER_400", "장부 입력값이 올바르지 않습니다."),
+
 	// 상하차지
 	SITE_NOT_FOUND(HttpStatus.NOT_FOUND, "SITE_404", "상하차지를 찾을 수 없습니다."),
 	SITE_NOT_DRIVER(HttpStatus.FORBIDDEN, "SITE_403_ROLE", "차주 계정만 상하차지 정보와 메모를 남길 수 있습니다."),
