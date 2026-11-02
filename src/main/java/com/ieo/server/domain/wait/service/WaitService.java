@@ -2,6 +2,7 @@ package com.ieo.server.domain.wait.service;
 
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
+import com.ieo.server.domain.ledger.service.LedgerRecorder;
 import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.trip.entity.TripStop;
 import com.ieo.server.domain.trip.enums.StopType;
@@ -51,6 +52,7 @@ public class WaitService {
 	private final TripRepository tripRepository;
 	private final DriverRepository driverRepository;
 	private final SiteStatsCalculator siteStatsCalculator;
+	private final LedgerRecorder ledgerRecorder;
 	private final Clock clock;
 
 	public record Arrival(WaitRecordResponse record, boolean created) {
@@ -88,7 +90,7 @@ public class WaitService {
 		return WaitRecordResponse.from(record);
 	}
 
-	/** 이탈 (WAIT-005). 상차지면 운송 중으로, 하차지면 운행 완료로 바꾼다 */
+	/** 이탈 (WAIT-005). 상차지면 운송 중으로, 하차지면 운행 완료로 바꾸고 장부 한 줄을 만든다 */
 	public WaitRecordResponse depart(Long userId, Long tripId, StopType type, Instant at) {
 		Trip trip = findMine(userId, tripId);
 		WaitRecord record = recordRepository.findByTripStopId(stopOf(trip, type).getId())
@@ -100,6 +102,7 @@ public class WaitService {
 			trip.departPickup();
 		} else {
 			trip.complete(departedAt);
+			ledgerRecorder.recordTrip(trip);
 		}
 		siteStatsCalculator.recalculate(record.getTripStop().getSite());
 		return WaitRecordResponse.from(record);

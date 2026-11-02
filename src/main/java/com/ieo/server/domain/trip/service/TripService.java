@@ -8,6 +8,7 @@ import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.site.repository.SiteRepository;
 import com.ieo.server.domain.site.service.SiteService;
 import com.ieo.server.domain.dispatch.service.DispatchCanceller;
+import com.ieo.server.domain.ledger.service.LedgerRecorder;
 import com.ieo.server.domain.trip.dto.CancelTripRequest;
 import com.ieo.server.domain.trip.dto.CreateTripRequest;
 import com.ieo.server.domain.trip.dto.TripResponse;
@@ -51,6 +52,7 @@ public class TripService {
 	private final SiteService siteService;
 	private final WaitService waitService;
 	private final DispatchCanceller dispatchCanceller;
+	private final LedgerRecorder ledgerRecorder;
 	private final Clock clock;
 
 	/** 직접 등록. 예약 상태로 만든다 */
@@ -101,12 +103,16 @@ public class TripService {
 		return TripResponse.from(trip);
 	}
 
-	/** 하차 완료. 하차지에 도착한 운행만. 하차지 대기 기록이 남아 있으면 지금 시각으로 이탈 처리한다 */
+	/**
+	 * 하차 완료. 하차지에 도착한 운행만. 하차지 대기 기록이 남아 있으면 지금 시각으로 이탈 처리하고,
+	 * 장부 한 줄을 만든다 (LEDG-001)
+	 */
 	public TripResponse complete(Long userId, Long tripId) {
 		Trip trip = findMine(userId, tripId);
 		Instant now = clock.instant();
 		trip.complete(now);
 		waitService.departDropoffIfOpen(trip, now);
+		ledgerRecorder.recordTrip(trip);
 		return TripResponse.from(trip);
 	}
 

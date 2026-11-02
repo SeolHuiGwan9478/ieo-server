@@ -10,4 +10,7 @@ public interface ExtraIncomeRepository extends JpaRepository<ExtraIncome, Long> 
 	List<ExtraIncome> findAllByLedgerEntryIdIn(Collection<Long> ledgerEntryIds);
 
 	boolean existsByWaitRecordId(Long waitRecordId);
+
+	/** 아직 받지 못한 대기비 */
+	List<ExtraIncome> findAllByLedgerEntryDriverUserIdAndPaidAtIsNull(Long userId);
 }

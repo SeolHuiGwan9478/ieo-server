@@ -82,6 +82,9 @@ public enum ErrorCode {
 	// 장부
 	LEDGER_NOT_FOUND(HttpStatus.NOT_FOUND, "LEDGER_404", "장부 항목을 찾을 수 없습니다."),
 	LEDGER_INVALID(HttpStatus.BAD_REQUEST, "LEDGER_400", "장부 입력값이 올바르지 않습니다."),
+	LEDGER_NOT_DRIVER(HttpStatus.FORBIDDEN, "LEDGER_403_ROLE", "차주 계정만 장부를 쓸 수 있습니다."),
+	LEDGER_AUTO_ENTRY(HttpStatus.CONFLICT, "LEDGER_409_AUTO", "운행으로 자동 생긴 장부는 지울 수 없습니다. 운임이나 결제 방식을 고쳐 주세요."),
+	EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND, "EXPENSE_404", "경비를 찾을 수 없습니다."),
 
 	// 상하차지
 	SITE_NOT_FOUND(HttpStatus.NOT_FOUND, "SITE_404", "상하차지를 찾을 수 없습니다."),
