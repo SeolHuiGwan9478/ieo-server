@@ -1,6 +1,8 @@
 package com.ieo.server.domain.trip.entity;
 
 import com.ieo.server.domain.broker.entity.Broker;
+import com.ieo.server.domain.dispatch.entity.DispatchRequest;
+import com.ieo.server.domain.dispatch.entity.Order;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.trip.enums.PaymentType;
@@ -38,7 +40,7 @@ import org.hibernate.type.SqlTypes;
  * 운행 하나 (01 운행). 배차 1건을 등록부터 하차 완료까지 추적한다.
  * 대기·인수증·장부·배차 추천이 모두 운행을 기준으로 붙는다.
  * 상하차지는 TripStop으로 상차 1곳, 하차 1곳을 함께 만든다.
- * TODO: 11 배차를 만들면 orderId를 붙인다 (TRIP-004)
+ * 직접 등록(create)과 Ieo 배차 확정(fromDispatch, TRIP-004) 두 경로로 생긴다.
  */
 @Getter
 @Entity
@@ -59,6 +61,11 @@ public class Trip extends BaseTimeEntity {
 	@ManyToOne(fetch = FetchType.LAZY, optional = false)
 	@JoinColumn(name = "vehicle_id")
 	private Vehicle vehicle;
+
+	/** Ieo 배차로 생긴 운행이면 그 오더. 오더 하나에 운행 하나 */
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "order_id", unique = true)
+	private Order order;
 
 	/** Ieo에 있는 주선사. 대기비 정책을 찾을 때 쓴다 */
 	@ManyToOne(fetch = FetchType.LAZY)
@@ -131,6 +138,19 @@ public class Trip extends BaseTimeEntity {
 		Trip trip = new Trip(driver, vehicle, broker, name, fare, paymentType, source);
 		trip.stops.add(new TripStop(trip, StopType.PICKUP, pickupSite, pickupPlannedAt));
 		trip.stops.add(new TripStop(trip, StopType.DROPOFF, dropoffSite, dropoffPlannedAt));
+		return trip;
+	}
+
+	/**
+	 * 배차 확정으로 운행을 만든다 (TRIP-004). 오더 내용을 그대로 옮기고,
+	 * 상차 예정은 상차 가능 시작, 하차 예정은 하차 마감으로 둔다
+	 */
+	public static Trip fromDispatch(DispatchRequest request) {
+		Order order = request.getOrder();
+		Trip trip = create(request.getDriver(), request.getVehicle(), order.getBroker(), null,
+				order.getFare(), order.getPaymentType(), TripSource.IEO_DISPATCH,
+				order.getPickupSite(), order.getPickupFrom(), order.getDropoffSite(), order.getDropoffBy());
+		trip.order = order;
 		return trip;
 	}
 

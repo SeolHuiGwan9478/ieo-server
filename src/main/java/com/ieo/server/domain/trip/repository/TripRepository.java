@@ -23,4 +23,6 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
 
 	/** 운행 기록이 있는 차량은 삭제하면 기록이 깨진다 */
 	boolean existsByVehicleId(Long vehicleId);
+
+	boolean existsByOrderId(Long orderId);
 }

@@ -1,0 +1,17 @@
+package com.ieo.server.domain.dispatch.enums;
+
+/**
+ * 배차 요청 상태. EXPIRED는 저장하지 않고 시각으로 판단한다 (요청 후 10분, DSP-023)
+ */
+public enum DispatchRequestStatus {
+	/** 주선사 확정을 기다리는 중 */
+	PENDING,
+	/** 확정됨. 운행이 생긴다 */
+	CONFIRMED,
+	/** 다른 차주가 확정되어 마감 */
+	DECLINED,
+	/** 차주가 철회 */
+	WITHDRAWN,
+	/** 10분 안에 확정되지 않음 */
+	EXPIRED
+}
