@@ -1,6 +1,9 @@
 package com.ieo.server.domain.vehicle.controller;
 
 import com.ieo.server.domain.vehicle.dto.CreateVehicleRequest;
+import com.ieo.server.domain.vehicle.dto.FuelEconomyRequest;
+import com.ieo.server.domain.vehicle.dto.PleosResolveResponse;
+import com.ieo.server.domain.vehicle.dto.PleosVinRequest;
 import com.ieo.server.domain.vehicle.dto.UpdateVehicleRequest;
 import com.ieo.server.domain.vehicle.dto.VehicleResponse;
 import com.ieo.server.domain.vehicle.service.VehicleService;
@@ -14,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -49,6 +53,31 @@ public class VehicleController {
 			@PathVariable Long vehicleId,
 			@Valid @RequestBody UpdateVehicleRequest request) {
 		return vehicleService.update(userId, vehicleId, request);
+	}
+
+	/** 차량 앱: 로그인한 뒤 이 트럭이 내 차량 중 어느 것인지 찾는다 (VEH-004) */
+	@PostMapping("/pleos/resolve")
+	public PleosResolveResponse resolvePleos(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @Valid @RequestBody PleosVinRequest request) {
+		return vehicleService.resolvePleos(userId, request);
+	}
+
+	/** 차량 앱: 고른 차량에 이 트럭을 연결한다 */
+	@PostMapping("/{vehicleId}/pleos")
+	public VehicleResponse linkPleos(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long vehicleId,
+			@Valid @RequestBody PleosVinRequest request) {
+		return vehicleService.linkPleos(userId, vehicleId, request);
+	}
+
+	/** 차량 앱: Pleos 누적 연비(L/100km)를 올린다 (VEH-003) */
+	@PutMapping("/{vehicleId}/fuel-economy")
+	public VehicleResponse updateFuelEconomy(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long vehicleId,
+			@Valid @RequestBody FuelEconomyRequest request) {
+		return vehicleService.updateFuelEconomy(userId, vehicleId, request);
 	}
 
 	/** 기본 차량 바꾸기 */

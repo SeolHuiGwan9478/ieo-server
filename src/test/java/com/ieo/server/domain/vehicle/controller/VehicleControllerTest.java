@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -115,6 +116,20 @@ class VehicleControllerTest {
 	}
 
 	@Test
+	void Pleos_연비를_올리면_km_L로_저장하고_이상한_값은_무시한다() throws Exception {
+		Integer id = idOf(register(driverBearer, "경기82사1234", "TON_5", "CARGO", null));
+
+		putFuelEconomy(driverBearer, id, "26.3")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.measuredKmPerLiter").value(3.8));
+		putFuelEconomy(driverBearer, id, "0")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.measuredKmPerLiter").value(3.8));
+		putFuelEconomy(bearerOfNewDriver("01090000505"), id, "20")
+				.andExpect(status().isNotFound());
+	}
+
+	@Test
 	void 다른_차주가_쓰는_번호는_409() throws Exception {
 		register(bearerOfNewDriver("01090000502"), "경기82사1234", "TON_5", "CARGO", null);
 
@@ -173,6 +188,12 @@ class VehicleControllerTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"plateNumber\":\"%s\",\"tonnage\":\"%s\",\"bodyType\":\"%s\",\"heightM\":%s}"
 						.formatted(plate, tonnage, bodyType, heightJson)));
+	}
+
+	private ResultActions putFuelEconomy(String bearer, Integer vehicleId, String litersPer100Km) throws Exception {
+		return mockMvc.perform(put("/api/vehicles/" + vehicleId + "/fuel-economy").header("Authorization", bearer)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"litersPer100Km\":" + litersPer100Km + "}"));
 	}
 
 	private static Integer idOf(ResultActions result) throws Exception {

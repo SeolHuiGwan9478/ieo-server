@@ -12,6 +12,8 @@ import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.repository.UserConsentRepository;
 import com.ieo.server.domain.user.repository.UserRepository;
+import com.ieo.server.domain.vehicle.entity.Vehicle;
+import com.ieo.server.domain.vehicle.repository.VehicleRepository;
 import com.ieo.server.global.sms.SmsSender;
 import com.jayway.jsonpath.JsonPath;
 import java.util.regex.Matcher;
@@ -49,6 +51,9 @@ class AuthControllerTest {
 
 	@Autowired
 	private DriverRepository driverRepository;
+
+	@Autowired
+	private VehicleRepository vehicleRepository;
 
 	@MockitoBean
 	private SmsSender smsSender;
@@ -167,6 +172,48 @@ class AuthControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("COMMON_400"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("phone"));
+	}
+
+	@Test
+	void 차주는_가입하면서_차량을_등록하고_기본_차량이_된다() throws Exception {
+		String phoneToken = JsonPath.read(verifyPhone("01020000006"), "$.phoneToken");
+
+		post("/api/auth/signup", signUpBodyWithVehicle(phoneToken, "DRIVER", "경기 82사 1234"))
+				.andExpect(status().isCreated());
+
+		User user = userRepository.findByPhone("01020000006").orElseThrow();
+		assertThat(vehicleRepository.findByDriverUserIdAndDefaultVehicleTrue(user.getId()))
+				.get().extracting(Vehicle::getPlateNumber).isEqualTo("경기82사1234");
+	}
+
+	@Test
+	void 가입할_때_이미_쓰는_차량_번호면_409() throws Exception {
+		String first = JsonPath.read(verifyPhone("01020000007"), "$.phoneToken");
+		post("/api/auth/signup", signUpBodyWithVehicle(first, "DRIVER", "123바4567")).andExpect(status().isCreated());
+
+		String second = JsonPath.read(verifyPhone("01020000008"), "$.phoneToken");
+		post("/api/auth/signup", signUpBodyWithVehicle(second, "DRIVER", "123바4567"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("VEHICLE_409_PLATE"));
+	}
+
+	@Test
+	void 주선사는_가입할_때_차량을_보낼_수_없다() throws Exception {
+		String phoneToken = JsonPath.read(verifyPhone("01020000009"), "$.phoneToken");
+
+		post("/api/auth/signup", signUpBodyWithVehicle(phoneToken, "BROKER", "12가3456"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("COMMON_400"));
+	}
+
+	private static String signUpBodyWithVehicle(String phoneToken, String role, String plateNumber) {
+		return """
+				{"phoneToken":"%s","deviceId":"%s","role":"%s","name":"김도윤","consents":[
+				 {"type":"TERMS","version":"2026-10-01","agreed":true},
+				 {"type":"PRIVACY","version":"2026-10-01","agreed":true},
+				 {"type":"LOCATION","version":"2026-10-01","agreed":true}],
+				 "vehicle":{"plateNumber":"%s","tonnage":"TON_5","bodyType":"CARGO","heightM":3.6}}
+				""".formatted(phoneToken, DEVICE, role, plateNumber);
 	}
 
 	private String verifyPhone(String phone) throws Exception {

@@ -22,3 +22,5 @@ logging:
 ieo:
   jwt:
     secret: local-only-secret-change-me-0123456789
+  vin:
+    hash-secret: local-only-vin-secret-change-me

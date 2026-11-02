@@ -13,6 +13,7 @@ import com.ieo.server.domain.user.enums.ConsentType;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.repository.UserConsentRepository;
 import com.ieo.server.domain.user.repository.UserRepository;
+import com.ieo.server.domain.vehicle.service.VehicleService;
 import com.ieo.server.global.auth.JwtProvider;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
@@ -41,6 +42,7 @@ public class AuthService {
 	private final UserRepository userRepository;
 	private final UserConsentRepository userConsentRepository;
 	private final DriverRepository driverRepository;
+	private final VehicleService vehicleService;
 	private final JwtProvider jwtProvider;
 	private final Clock clock;
 
@@ -55,8 +57,11 @@ public class AuthService {
 
 	/** 주선사 담당자는 계정만 만들고, 주선사 소속은 주선사 등록·초대에서 붙인다. */
 	public TokenResponse signUp(SignUpRequest request) {
-		// 약관을 먼저 확인해서, 빠뜨린 약관 때문에 phoneToken을 날리지 않게 한다
+		// 입력을 먼저 확인해서, 고칠 수 있는 실수 때문에 phoneToken을 쓰지 않게 한다
 		validateConsents(request.role(), request.consents());
+		if (request.vehicle() != null && request.role() != UserRole.DRIVER) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT, "차주만 가입할 때 차량을 등록할 수 있습니다.");
+		}
 		String phone = phoneAuthService.consumePhoneToken(request.phoneToken(), request.deviceId());
 		if (userRepository.existsByPhone(phone)) {
 			throw new BusinessException(ErrorCode.AUTH_PHONE_ALREADY_REGISTERED);
@@ -78,6 +83,10 @@ public class AuthService {
 				.toList());
 		if (request.role() == UserRole.DRIVER) {
 			driverRepository.save(Driver.of(user));
+		}
+		// 번호가 겹치는 등으로 실패하면 가입 전체가 롤백되고 phoneToken도 되살아난다
+		if (request.vehicle() != null) {
+			vehicleService.register(user.getId(), request.vehicle());
 		}
 		return jwtProvider.issue(user.getId());
 	}
