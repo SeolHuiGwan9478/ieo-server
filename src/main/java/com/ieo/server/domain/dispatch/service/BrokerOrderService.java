@@ -199,6 +199,9 @@ public class BrokerOrderService {
 		if (member.getUser().getStatus() == UserStatus.WITHDRAWN) {
 			throw new BusinessException(ErrorCode.USER_NOT_FOUND);
 		}
+		if (!member.isActive()) {
+			throw new BusinessException(ErrorCode.BROKER_MEMBER_REMOVED);
+		}
 		return member;
 	}
 }

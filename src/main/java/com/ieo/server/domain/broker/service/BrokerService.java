@@ -34,9 +34,10 @@ public class BrokerService {
 
 	public MyBrokerResponse register(Long userId, CreateBrokerRequest request) {
 		User user = requireBrokerUser(userId);
-		if (memberRepository.existsById(userId)) {
-			throw new BusinessException(ErrorCode.BROKER_ALREADY_MEMBER);
-		}
+		memberRepository.findById(userId).ifPresent(member -> {
+			throw new BusinessException(
+					member.isActive() ? ErrorCode.BROKER_ALREADY_MEMBER : ErrorCode.BROKER_MEMBER_REMOVED);
+		});
 		Broker broker = Broker.create(request.name(), request.businessNumber(), request.licenseNumber(),
 				request.representativeName());
 		if (brokerRepository.existsByBusinessNumber(broker.getBusinessNumber())) {
@@ -52,13 +53,19 @@ public class BrokerService {
 		return MyBrokerResponse.from(owner);
 	}
 
-	/** 소속이 없으면 404. 콘솔은 이때 회사 등록 화면으로 보낸다 */
+	/**
+	 * 소속이 없으면 404. 콘솔은 이때 받은 초대 목록과 회사 등록 화면을 보여 준다.
+	 * 회사에서 나온 계정은 403 BROKER_403_REMOVED
+	 */
 	@Transactional(readOnly = true)
 	public MyBrokerResponse getMine(Long userId) {
 		requireBrokerUser(userId);
-		return memberRepository.findById(userId)
-				.map(MyBrokerResponse::from)
+		BrokerMember member = memberRepository.findById(userId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.BROKER_NO_MEMBERSHIP));
+		if (!member.isActive()) {
+			throw new BusinessException(ErrorCode.BROKER_MEMBER_REMOVED);
+		}
+		return MyBrokerResponse.from(member);
 	}
 
 	private User requireBrokerUser(Long userId) {

@@ -53,6 +53,14 @@ public enum ErrorCode {
 	BROKER_INVALID_LICENSE_NUMBER(HttpStatus.BAD_REQUEST, "BROKER_400_LICENSE", "운송주선사업 허가 번호를 입력해 주세요."),
 	BROKER_DUPLICATE_BUSINESS_NUMBER(HttpStatus.CONFLICT, "BROKER_409_BUSINESS_NUMBER", "이미 등록된 회사입니다. 회사 대표에게 초대를 요청해 주세요."),
 	BROKER_ALREADY_MEMBER(HttpStatus.CONFLICT, "BROKER_409_MEMBER", "이미 소속된 주선사가 있습니다."),
+	BROKER_MEMBER_REMOVED(HttpStatus.FORBIDDEN, "BROKER_403_REMOVED", "회사에서 나온 계정입니다. 다른 회사에 합류하려면 탈퇴 후 다시 가입해 주세요."),
+	BROKER_OWNER_ONLY(HttpStatus.FORBIDDEN, "BROKER_403_OWNER", "대표만 할 수 있습니다."),
+	BROKER_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "BROKER_MEMBER_404", "담당자를 찾을 수 없습니다."),
+	BROKER_LAST_OWNER(HttpStatus.CONFLICT, "BROKER_409_LAST_OWNER", "대표가 한 명뿐입니다. 다른 담당자를 대표로 지정한 뒤 다시 시도해 주세요."),
+	BROKER_INVITATION_NOT_FOUND(HttpStatus.NOT_FOUND, "BROKER_INVITATION_404", "초대를 찾을 수 없습니다."),
+	BROKER_INVITATION_DUPLICATE(HttpStatus.CONFLICT, "BROKER_INVITATION_409_DUPLICATE", "이미 초대한 번호입니다. 초대를 취소한 뒤 다시 보내 주세요."),
+	BROKER_INVITATION_ALREADY_MEMBER(HttpStatus.CONFLICT, "BROKER_INVITATION_409_MEMBER", "이미 우리 회사 담당자인 번호입니다."),
+	BROKER_INVITATION_CLOSED(HttpStatus.CONFLICT, "BROKER_INVITATION_409_CLOSED", "만료되었거나 이미 처리된 초대입니다."),
 
 	// 배차
 	ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER_404", "오더를 찾을 수 없습니다."),
