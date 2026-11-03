@@ -41,7 +41,7 @@ class OrderTest {
 
 	@BeforeEach
 	void setUp() {
-		Broker broker = Broker.create("한빛로지스", "1234567890", "제2026-001호", null);
+		Broker broker = Broker.create("한빛로지스", "1234567891", "제2026-001호", null);
 		ReflectionTestUtils.setField(broker, "id", 10L);
 		member = BrokerMember.of(User.create("01090001201", UserRole.BROKER), broker, BrokerMemberPosition.STAFF);
 		driver = driver(1L);

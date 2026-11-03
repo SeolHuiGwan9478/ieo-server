@@ -80,7 +80,7 @@ class WaitRepositoryTest {
 		Driver driver = driverRepository.save(Driver.of(user));
 		Vehicle vehicle = vehicleRepository.save(Vehicle.create(driver, "경기82사1234", Tonnage.TON_5, BodyType.CARGO, null));
 		Site site = siteRepository.save(Site.create("평택 포승 물류센터", "경기 평택시", 36.98, 126.84, null));
-		broker = brokerRepository.save(Broker.create("한빛로지스", "1234567890", "제2026-001호", null));
+		broker = brokerRepository.save(Broker.create("한빛로지스", "1234567891", "제2026-001호", null));
 		trip = tripRepository.save(Trip.create(driver, vehicle, broker, null, 450_000, PaymentType.RECEIPT,
 				TripSource.MANUAL, site, NOW, site, null));
 	}

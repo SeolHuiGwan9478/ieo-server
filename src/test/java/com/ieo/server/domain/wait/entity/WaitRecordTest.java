@@ -27,7 +27,7 @@ class WaitRecordTest {
 
 	/** 무료 2시간, 30분당 1만 원, 상한 5만 원, 올림 */
 	private final WaitPolicy policy = WaitPolicy.create(
-			Broker.create("한빛로지스", "1234567890", "제2026-001호", null), 120, 30, 10_000, 50_000, WaitRounding.UP);
+			Broker.create("한빛로지스", "1234567891", "제2026-001호", null), 120, 30, 10_000, 50_000, WaitRounding.UP);
 
 	private Driver driver;
 	private Vehicle vehicle;

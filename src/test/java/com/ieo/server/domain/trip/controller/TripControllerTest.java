@@ -107,7 +107,7 @@ class TripControllerTest {
 
 	@Test
 	void 새_주소가_100m_안의_기존_상하차지면_그것을_쓰고_Ieo_주선사는_상호를_보여준다() throws Exception {
-		Broker broker = brokerRepository.save(Broker.create("한빛로지스", "1234567890", "제2026-001호", null));
+		Broker broker = brokerRepository.save(Broker.create("한빛로지스", "1234567891", "제2026-001호", null));
 
 		register("""
 				{"pickup": {"site": {"name": "포승 센터 정문", "address": "경기 평택시", "lat": 36.9804, "lng": 126.84}},

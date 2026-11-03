@@ -1,6 +1,9 @@
 package com.ieo.server.domain.broker.entity;
 
 import com.ieo.server.global.entity.BaseTimeEntity;
+import com.ieo.server.global.error.BusinessException;
+import com.ieo.server.global.error.ErrorCode;
+import java.util.regex.Pattern;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -21,6 +24,8 @@ import lombok.NoArgsConstructor;
 public class Broker extends BaseTimeEntity {
 
 	private static final int DEFAULT_SETTLEMENT_DAYS = 30;
+	private static final Pattern BUSINESS_NUMBER = Pattern.compile("\\d{10}");
+	private static final int[] CHECK_WEIGHTS = {1, 3, 7, 1, 3, 7, 1, 3, 5};
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -54,8 +59,39 @@ public class Broker extends BaseTimeEntity {
 		this.settlementDays = DEFAULT_SETTLEMENT_DAYS;
 	}
 
+	/** 사업자등록번호는 하이픈을 지우고 검증 번호까지 확인한다. 허가 번호는 필수(BRK-001) */
 	public static Broker create(String name, String businessNumber, String licenseNumber, String representativeName) {
-		return new Broker(name, businessNumber, licenseNumber, representativeName);
+		return new Broker(name, normalizeBusinessNumber(businessNumber), requireLicenseNumber(licenseNumber),
+				representativeName);
+	}
+
+	/**
+	 * 띄어쓰기·하이픈을 지우고 숫자 10자리와 마지막 검증 번호를 확인한다 (국세청 계산식).
+	 * 실제로 있는 사업자인지는 확인하지 않는다.
+	 */
+	public static String normalizeBusinessNumber(String businessNumber) {
+		String digits = businessNumber == null ? "" : businessNumber.replaceAll("[\\s-]", "");
+		if (!BUSINESS_NUMBER.matcher(digits).matches() || !hasValidCheckDigit(digits)) {
+			throw new BusinessException(ErrorCode.BROKER_INVALID_BUSINESS_NUMBER);
+		}
+		return digits;
+	}
+
+	private static boolean hasValidCheckDigit(String digits) {
+		int sum = 0;
+		for (int i = 0; i < CHECK_WEIGHTS.length; i++) {
+			sum += (digits.charAt(i) - '0') * CHECK_WEIGHTS[i];
+		}
+		sum += (digits.charAt(8) - '0') * 5 / 10;
+		return (10 - sum % 10) % 10 == digits.charAt(9) - '0';
+	}
+
+	private static String requireLicenseNumber(String licenseNumber) {
+		String trimmed = licenseNumber == null ? "" : licenseNumber.strip();
+		if (trimmed.isEmpty()) {
+			throw new BusinessException(ErrorCode.BROKER_INVALID_LICENSE_NUMBER);
+		}
+		return trimmed;
 	}
 
 	public void changeSettlementDays(int settlementDays) {

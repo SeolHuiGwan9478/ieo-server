@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 class BrokerMemberTest {
 
-	private final Broker broker = Broker.create("○○물류", "1234567890", "제2026-001호", "홍길동");
+	private final Broker broker = Broker.create("○○물류", "1234567891", "제2026-001호", "홍길동");
 
 	@Test
 	void 주선사_계정으로_담당자_프로필을_만든다() {

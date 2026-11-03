@@ -86,7 +86,7 @@ class DispatchRepositoryTest {
 
 	@BeforeEach
 	void setUp() {
-		broker = brokerRepository.save(Broker.create("한빛로지스", "1234567890", "제2026-001호", null));
+		broker = brokerRepository.save(Broker.create("한빛로지스", "1234567891", "제2026-001호", null));
 		member = brokerMemberRepository.save(BrokerMember.of(
 				userRepository.save(User.create("01090001301", UserRole.BROKER)), broker, BrokerMemberPosition.OWNER));
 		driver = driverRepository.save(Driver.of(userRepository.save(User.create("01090001302", UserRole.DRIVER))));

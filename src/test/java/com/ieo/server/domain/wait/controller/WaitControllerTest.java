@@ -91,7 +91,7 @@ class WaitControllerTest {
 		Vehicle vehicle = vehicleRepository.save(Vehicle.create(driver, "경기82사1234", Tonnage.TON_5, BodyType.CARGO, null));
 		bearer = "Bearer " + jwtProvider.issue(user.getId()).accessToken();
 
-		broker = brokerRepository.save(Broker.create("한빛로지스", "1234567890", "제2026-001호", null));
+		broker = brokerRepository.save(Broker.create("한빛로지스", "1234567891", "제2026-001호", null));
 		User owner = userRepository.save(User.create("01090001002", UserRole.BROKER));
 		brokerMemberRepository.save(BrokerMember.of(owner, broker, BrokerMemberPosition.OWNER));
 		ownerBearer = "Bearer " + jwtProvider.issue(owner.getId()).accessToken();

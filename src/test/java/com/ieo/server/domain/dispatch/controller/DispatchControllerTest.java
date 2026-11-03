@@ -81,7 +81,7 @@ class DispatchControllerTest {
 	@BeforeEach
 	void setUp() {
 		mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-		Broker hanbit = brokerRepository.save(Broker.create("한빛로지스", "1234567890", "제2026-001호", null));
+		Broker hanbit = brokerRepository.save(Broker.create("한빛로지스", "1234567891", "제2026-001호", null));
 		broker = brokerBearer(hanbit, BrokerMemberPosition.STAFF);
 		driverId = newDriver(Tonnage.TON_11, BodyType.WING);
 		driver = bearer(driverId);
@@ -230,7 +230,7 @@ class DispatchControllerTest {
 		mockMvc.perform(get("/api/dispatch-requests").header("Authorization", driver))
 				.andExpect(jsonPath("$[0].status").value("DECLINED"));
 
-		Broker rival = brokerRepository.save(Broker.create("경쟁물류", "9876543210", "제2026-002호", null));
+		Broker rival = brokerRepository.save(Broker.create("경쟁물류", "9876543215", "제2026-002호", null));
 		String rivalBearer = brokerBearer(rival, BrokerMemberPosition.OWNER);
 		mockMvc.perform(get("/api/broker/orders/" + orderId).header("Authorization", rivalBearer))
 				.andExpect(status().isNotFound())

@@ -13,5 +13,7 @@ ieo:
     secret: test-only-secret-0123456789-abcdefghij
   vin:
     hash-secret: test-only-vin-secret
+  cors:
+    allowed-origins: http://localhost:5173
   storage:
     local-dir: build/test-files

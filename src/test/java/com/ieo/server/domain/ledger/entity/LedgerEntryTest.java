@@ -30,7 +30,7 @@ class LedgerEntryTest {
 	private Vehicle vehicle;
 	private final Site pyeongtaek = Site.create("평택 포승 물류센터", "경기 평택시", 36.98, 126.84, null);
 	private final Site daegu = Site.create("대구 성서 공단", "대구 달서구", 35.84, 128.49, null);
-	private final Broker broker = Broker.create("한빛로지스", "1234567890", "제2026-001호", null);
+	private final Broker broker = Broker.create("한빛로지스", "1234567891", "제2026-001호", null);
 
 	@BeforeEach
 	void setUp() {

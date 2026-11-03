@@ -96,7 +96,7 @@ class LedgerControllerTest {
 		driver = driverRepository.save(Driver.of(user));
 		vehicle = vehicleRepository.save(Vehicle.create(driver, "경기82사1234", Tonnage.TON_5, BodyType.CARGO, null));
 		bearer = "Bearer " + jwtProvider.issue(user.getId()).accessToken();
-		broker = brokerRepository.save(Broker.create("한빛로지스", "1234567890", "제2026-001호", null));
+		broker = brokerRepository.save(Broker.create("한빛로지스", "1234567891", "제2026-001호", null));
 		policyRepository.save(WaitPolicy.create(broker, 120, 30, 10_000, 50_000, WaitRounding.UP));
 		pyeongtaek = siteRepository.save(Site.create("평택 포승 물류센터", "경기 평택시", 36.98, 126.84, null));
 		daegu = siteRepository.save(Site.create("대구 성서 공단", "대구 달서구", 35.84, 128.49, null));

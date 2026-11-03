@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 class WaitPolicyTest {
 
-	private final Broker broker = Broker.create("한빛로지스", "1234567890", "제2026-001호", null);
+	private final Broker broker = Broker.create("한빛로지스", "1234567891", "제2026-001호", null);
 
 	@Test
 	void 요구사항_예시대로_계산한다() {
