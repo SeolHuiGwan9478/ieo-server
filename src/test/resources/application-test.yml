@@ -13,3 +13,5 @@ ieo:
     secret: test-only-secret-0123456789-abcdefghij
   vin:
     hash-secret: test-only-vin-secret
+  storage:
+    local-dir: build/test-files

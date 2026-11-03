@@ -36,3 +36,6 @@ out/
 ### VS Code ###
 .vscode/
 data/
+
+### 로컬 파일 저장소 (서명 이미지·사진) ###
+/data/

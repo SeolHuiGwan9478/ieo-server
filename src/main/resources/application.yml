@@ -4,6 +4,11 @@ spring:
     name: ieo-server
   profiles:
     default: local
+  # 인수증 사진 업로드 (한 장 5MB, 요청 하나 12MB)
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 12MB
   jpa:
     open-in-view: false
     properties:
@@ -25,3 +30,6 @@ ieo:
   # 차량 VIN 해시용 비밀 키. 환경변수로 주입 (local·test는 각 파일에 개발용 값)
   vin:
     hash-secret: ${VIN_HASH_SECRET}
+  # 서명 이미지·사진 저장 폴더 (로컬 디스크). 운영에서는 클라우드 저장소로 바꾼다
+  storage:
+    local-dir: ${IEO_STORAGE_DIR:./data/files}

@@ -79,6 +79,13 @@ public enum ErrorCode {
 	WAIT_INVALID_TIME(HttpStatus.BAD_REQUEST, "WAIT_400_TIME", "시각은 진입, 작업 시작, 이탈 순서여야 합니다."),
 	WAIT_INVALID_STATUS(HttpStatus.CONFLICT, "WAIT_409_STATUS", "지금 대기 상태에서는 할 수 없는 요청입니다."),
 
+	// 인수증
+	DELIVERY_PROOF_NOT_FOUND(HttpStatus.NOT_FOUND, "DELIVERY_404", "인수증을 찾을 수 없거나 링크가 만료되었습니다."),
+	DELIVERY_ALREADY_SIGNED(HttpStatus.CONFLICT, "DELIVERY_409_SIGNED", "이미 서명한 인수증입니다."),
+	DELIVERY_TRIP_CANCELLED(HttpStatus.CONFLICT, "DELIVERY_409_CANCELLED", "취소된 운행은 인수증을 받을 수 없습니다."),
+	DELIVERY_INVALID_FILE(HttpStatus.BAD_REQUEST, "DELIVERY_400_FILE", "서명은 PNG, 사진은 JPG·PNG 5MB 이하로 올려 주세요."),
+	DELIVERY_PHOTO_LIMIT(HttpStatus.BAD_REQUEST, "DELIVERY_400_PHOTO_LIMIT", "사진은 5장까지 올릴 수 있습니다."),
+
 	// 장부
 	LEDGER_NOT_FOUND(HttpStatus.NOT_FOUND, "LEDGER_404", "장부 항목을 찾을 수 없습니다."),
 	LEDGER_INVALID(HttpStatus.BAD_REQUEST, "LEDGER_400", "장부 입력값이 올바르지 않습니다."),

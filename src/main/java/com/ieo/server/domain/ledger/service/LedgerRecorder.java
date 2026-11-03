@@ -9,6 +9,7 @@ import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.wait.entity.WaitRecord;
 import com.ieo.server.domain.wait.repository.WaitRecordRepository;
 import com.ieo.server.global.util.KoreanDate;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +40,13 @@ public class LedgerRecorder {
 				extraIncomeRepository.save(ExtraIncome.waitFee(entry, record, amount));
 			}
 		}
+	}
+
+	/** 인수증이 서명되면 인수증 결제의 지급 예정일을 서명일 기준으로 다시 잡는다 (POD-008) */
+	@Transactional
+	public void onDeliveryProofSigned(Trip trip, LocalDate signedOn) {
+		entryRepository.findByTripId(trip.getId())
+				.ifPresent(entry -> entry.rebaseOnDeliveryProof(signedOn, settlementDays(trip)));
 	}
 
 	/** 정산 일수: 오더의 지급 예정일 → 주선사 정산 주기 → 30일 */

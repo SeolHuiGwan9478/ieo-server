@@ -9,6 +9,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @Slf4j
 @RestControllerAdvice
@@ -28,10 +30,17 @@ public class GlobalExceptionHandler {
 		return ResponseEntity.badRequest().body(ErrorResponse.of(ErrorCode.INVALID_INPUT, fieldErrors));
 	}
 
-	/** 쿼리 파라미터가 없거나 숫자 자리에 글자가 온 경우 */
-	@ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+	/** 쿼리 파라미터·업로드 파일이 없거나 숫자 자리에 글자가 온 경우 */
+	@ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class,
+			MissingServletRequestPartException.class})
 	public ResponseEntity<ErrorResponse> handleBadParameter(Exception e) {
 		return ResponseEntity.badRequest().body(ErrorResponse.of(ErrorCode.INVALID_INPUT));
+	}
+
+	/** 업로드 파일이 너무 큼 (spring.servlet.multipart 설정) */
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	public ResponseEntity<ErrorResponse> handleTooLarge(MaxUploadSizeExceededException e) {
+		return ResponseEntity.badRequest().body(ErrorResponse.of(ErrorCode.DELIVERY_INVALID_FILE));
 	}
 
 	@ExceptionHandler(HttpMessageNotReadableException.class)

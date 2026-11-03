@@ -109,11 +109,17 @@ public class TripService {
 	 */
 	public TripResponse complete(Long userId, Long tripId) {
 		Trip trip = findMine(userId, tripId);
-		Instant now = clock.instant();
+		completeTrip(trip, clock.instant());
+		return TripResponse.from(trip);
+	}
+
+	/**
+	 * 운행 완료 처리: 하차지 대기 기록 마감, 장부 기록. 완료 버튼과 인수증 서명(POD-008)이 같이 쓴다
+	 */
+	public void completeTrip(Trip trip, Instant now) {
 		trip.complete(now);
 		waitService.departDropoffIfOpen(trip, now);
 		ledgerRecorder.recordTrip(trip);
-		return TripResponse.from(trip);
 	}
 
 	/**

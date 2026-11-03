@@ -132,7 +132,7 @@ public class LedgerEntry extends BaseTimeEntity {
 
 	/**
 	 * 지급 예정일 (LEDG-020): 선불·착불은 운행일, 인수증은 운행일 + 정산 일수.
-	 * TODO: 04 인수증을 만들면 인수증은 전달일 기준으로 바꾼다
+	 * 전자인수증이 서명되면 rebaseOnDeliveryProof로 서명일 기준으로 다시 잡는다
 	 */
 	public static LocalDate expectedPaymentDate(PaymentType paymentType, LocalDate workDate, int settlementDays) {
 		return paymentType == PaymentType.RECEIPT ? workDate.plusDays(settlementDays) : workDate;
@@ -147,6 +147,13 @@ public class LedgerEntry extends BaseTimeEntity {
 		this.fare = fare;
 		this.paymentType = paymentType;
 		this.expectedPaymentDate = expectedPaymentDate;
+	}
+
+	/** 인수증 결제는 인수증 전달일부터 정산 일수를 센다 (LEDG-020, POD-008) */
+	public void rebaseOnDeliveryProof(LocalDate deliveredOn, int settlementDays) {
+		if (paymentType == PaymentType.RECEIPT && paidAt == null) {
+			this.expectedPaymentDate = deliveredOn.plusDays(settlementDays);
+		}
 	}
 
 	public void changeDistance(Integer distanceKm) {
