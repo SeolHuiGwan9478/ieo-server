@@ -1,6 +1,8 @@
 package com.ieo.server.domain.dispatch.service;
 
 import com.ieo.server.domain.broker.entity.BrokerMember;
+import com.ieo.server.domain.broker.enums.DriverLinkStatus;
+import com.ieo.server.domain.broker.repository.BrokerDriverLinkRepository;
 import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
 import com.ieo.server.domain.dispatch.dto.ApplicantResponse;
 import com.ieo.server.domain.dispatch.dto.CancelOrderRequest;
@@ -58,13 +60,12 @@ public class BrokerOrderService {
 	private final DispatchConfirmer confirmer;
 	private final DispatchCanceller canceller;
 	private final CancellationRepository cancellationRepository;
+	private final BrokerDriverLinkRepository linkRepository;
 	private final Clock clock;
 
 	public OrderResponse register(Long userId, CreateOrderRequest request) {
 		BrokerMember member = requireMember(userId);
-		Driver target = request.targetDriverId() == null ? null
-				: driverRepository.findById(request.targetDriverId())
-						.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_INVALID, "지정한 차주를 찾을 수 없습니다."));
+		Driver target = request.targetDriverId() == null ? null : requireLinkedDriver(member, request.targetDriverId());
 
 		Order order = Order.draft()
 				.createdBy(member)
@@ -88,6 +89,19 @@ public class BrokerOrderService {
 				.targetDriver(target)
 				.create();
 		return OrderResponse.of(orderRepository.save(order), clock.instant(), null, null, 0L);
+	}
+
+	/**
+	 * 지정 배차는 우리 회사 단골 차주에게만 (BRK-002). 없는 차주와 단골 아닌 차주를 구분하지 않는다.
+	 * 이미 등록된 지정 오더는 해제해도 그대로 둔다
+	 */
+	private Driver requireLinkedDriver(BrokerMember member, Long driverUserId) {
+		if (!linkRepository.existsByBrokerIdAndDriverUserIdAndStatus(
+				member.getBroker().getId(), driverUserId, DriverLinkStatus.LINKED)) {
+			throw new BusinessException(ErrorCode.ORDER_TARGET_NOT_LINKED);
+		}
+		return driverRepository.findById(driverUserId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_TARGET_NOT_LINKED));
 	}
 
 	/** 우리 회사 오더. 최근 등록한 순서, page는 0부터. 오더마다 대기 중 요청 수를 붙인다 */

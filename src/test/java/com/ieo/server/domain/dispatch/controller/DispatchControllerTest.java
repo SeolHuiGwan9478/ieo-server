@@ -6,8 +6,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ieo.server.domain.broker.entity.Broker;
+import com.ieo.server.domain.broker.entity.BrokerDriverLink;
 import com.ieo.server.domain.broker.entity.BrokerMember;
 import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
+import com.ieo.server.domain.broker.repository.BrokerDriverLinkRepository;
 import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
 import com.ieo.server.domain.broker.repository.BrokerRepository;
 import com.ieo.server.domain.driver.entity.Driver;
@@ -68,10 +70,14 @@ class DispatchControllerTest {
 	private BrokerMemberRepository memberRepository;
 
 	@Autowired
+	private BrokerDriverLinkRepository linkRepository;
+
+	@Autowired
 	private JwtProvider jwtProvider;
 
 	private MockMvc mockMvc;
 	private String broker;
+	private BrokerMember hanbitMember;
 	private String driver;
 	private Long driverId;
 	private Site pyeongtaek;
@@ -83,6 +89,7 @@ class DispatchControllerTest {
 		mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
 		Broker hanbit = brokerRepository.save(Broker.create("한빛로지스", "1234567891", "제2026-001호", null));
 		broker = brokerBearer(hanbit, BrokerMemberPosition.STAFF);
+		hanbitMember = memberRepository.findAllByBrokerIdAndRemovedAtIsNullOrderByCreatedAtAsc(hanbit.getId()).get(0);
 		driverId = newDriver(Tonnage.TON_11, BodyType.WING);
 		driver = bearer(driverId);
 		pyeongtaek = siteRepository.save(Site.create("평택 포승 물류센터", "경기 평택시 포승읍", LAT, LNG, null));
@@ -117,7 +124,7 @@ class DispatchControllerTest {
 		Integer fits = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));   // 11톤 윙으로 가능
 		registerOrder(orderJson("TON_25", "WING", "SELECT", null));                        // 톤수 부족
 		registerOrder(orderJson("TON_5", "CARGO", "SELECT", null));                        // 차종 다름
-		registerOrder(orderJson("TON_5", "WING", "SELECT", newDriver(Tonnage.TON_5, BodyType.WING))); // 남에게 지정
+		registerOrder(orderJson("TON_5", "WING", "SELECT", linkedDriver(Tonnage.TON_5, BodyType.WING))); // 남에게 지정
 
 		mockMvc.perform(get("/api/orders").header("Authorization", driver)
 						.param("lat", String.valueOf(LAT + 0.1)).param("lng", String.valueOf(LNG)))
@@ -214,7 +221,7 @@ class DispatchControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("DISPATCH_400_VEHICLE"));
 
-		Integer targeted = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", newDriver(Tonnage.TON_5, BodyType.WING))));
+		Integer targeted = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", linkedDriver(Tonnage.TON_5, BodyType.WING))));
 		request(driver, targeted).andExpect(status().isNotFound());
 		mockMvc.perform(get("/api/orders/" + targeted).header("Authorization", driver))
 				.andExpect(status().isNotFound());
@@ -322,6 +329,36 @@ class DispatchControllerTest {
 	}
 
 	@Test
+	void 단골이_아닌_차주에게는_지정_배차할_수_없고_마켓_공개는_누구나_요청한다() throws Exception {
+		Long stranger = newDriver(Tonnage.TON_5, BodyType.WING);
+		registerOrder(orderJson("TON_5", "WING", "SELECT", stranger))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("ORDER_400_TARGET"));
+		registerOrder(orderJson("TON_5", "WING", "SELECT", 999999L))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("ORDER_400_TARGET"));
+
+		Integer open = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
+		request(bearer(stranger), open).andExpect(status().isCreated());
+
+		Long regular = linkedDriver(Tonnage.TON_5, BodyType.WING);
+		Integer targeted = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", regular)));
+		request(bearer(regular), targeted).andExpect(status().isCreated());
+	}
+
+	@Test
+	void 단골을_해제하면_새_지정은_막히고_이미_올린_지정_오더는_그대로다() throws Exception {
+		Long regular = linkedDriver(Tonnage.TON_5, BodyType.WING);
+		Integer targeted = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", regular)));
+		linkRepository.findAll().forEach(link -> link.unlink(Instant.now()));
+
+		registerOrder(orderJson("TON_5", "WING", "SELECT", regular))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("ORDER_400_TARGET"));
+		request(bearer(regular), targeted).andExpect(status().isCreated());
+	}
+
+	@Test
 	void 지급일을_비우면_회사_정산_주기로_채우고_넣으면_그_값을_쓴다() throws Exception {
 		brokerRepository.findByBusinessNumber("1234567891").orElseThrow().changeSettlementDays(45);
 		String withoutDays = orderJson("TON_5", "WING", "SELECT", null).replace("\"expectedPaymentDays\": 15,", "");
@@ -367,6 +404,16 @@ class DispatchControllerTest {
 		vehicle.markDefault();
 		vehicleRepository.save(vehicle);
 		return user.getId();
+	}
+
+	/** 우리 회사 단골로 연결된 차주. 지정 배차는 단골에게만 할 수 있다 (BRK-002) */
+	private Long linkedDriver(Tonnage tonnage, BodyType bodyType) {
+		Long driverUserId = newDriver(tonnage, bodyType);
+		Driver created = driverRepository.findById(driverUserId).orElseThrow();
+		BrokerDriverLink link = BrokerDriverLink.request(hanbitMember, created.getUser().getPhone());
+		link.accept(created, Instant.now());
+		linkRepository.save(link);
+		return driverUserId;
 	}
 
 	private String brokerBearer(Broker company, BrokerMemberPosition position) {

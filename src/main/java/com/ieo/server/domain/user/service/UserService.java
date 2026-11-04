@@ -1,5 +1,6 @@
 package com.ieo.server.domain.user.service;
 
+import com.ieo.server.domain.broker.repository.BrokerDriverLinkRepository;
 import com.ieo.server.domain.broker.repository.BrokerInvitationRepository;
 import com.ieo.server.domain.broker.service.BrokerMemberService;
 import com.ieo.server.domain.driver.entity.Driver;
@@ -36,6 +37,7 @@ public class UserService {
 	private final SiteNoteRepository siteNoteRepository;
 	private final BrokerMemberService brokerMemberService;
 	private final BrokerInvitationRepository brokerInvitationRepository;
+	private final BrokerDriverLinkRepository brokerDriverLinkRepository;
 	private final Clock clock;
 
 	public UserResponse getUser(Long userId) {
@@ -76,6 +78,8 @@ public class UserService {
 			phoneVerificationRepository.deleteByPhone(phone);
 			phoneTokenRepository.deleteByPhone(phone);
 			brokerInvitationRepository.deleteByPhone(phone);
+			// 단골 연결 요청·연결도 지운다. 확정된 배차·운행은 오더와 운행에 남는다
+			brokerDriverLinkRepository.deleteByPhone(phone);
 		}
 	}
 

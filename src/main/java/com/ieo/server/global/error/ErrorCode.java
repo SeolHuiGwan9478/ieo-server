@@ -62,10 +62,16 @@ public enum ErrorCode {
 	BROKER_INVITATION_DUPLICATE(HttpStatus.CONFLICT, "BROKER_INVITATION_409_DUPLICATE", "이미 초대한 번호입니다. 초대를 취소한 뒤 다시 보내 주세요."),
 	BROKER_INVITATION_ALREADY_MEMBER(HttpStatus.CONFLICT, "BROKER_INVITATION_409_MEMBER", "이미 우리 회사 담당자인 번호입니다."),
 	BROKER_INVITATION_CLOSED(HttpStatus.CONFLICT, "BROKER_INVITATION_409_CLOSED", "만료되었거나 이미 처리된 초대입니다."),
+	DRIVER_LINK_NOT_FOUND(HttpStatus.NOT_FOUND, "DRIVER_LINK_404", "단골 연결을 찾을 수 없습니다."),
+	DRIVER_LINK_NOT_DRIVER(HttpStatus.FORBIDDEN, "DRIVER_LINK_403_ROLE", "차주 계정만 단골 연결을 수락할 수 있습니다."),
+	DRIVER_LINK_DUPLICATE(HttpStatus.CONFLICT, "DRIVER_LINK_409_DUPLICATE", "이미 연결을 요청한 번호입니다. 요청을 취소한 뒤 다시 보내 주세요."),
+	DRIVER_LINK_ALREADY_LINKED(HttpStatus.CONFLICT, "DRIVER_LINK_409_LINKED", "이미 단골로 연결된 차주입니다."),
+	DRIVER_LINK_CLOSED(HttpStatus.CONFLICT, "DRIVER_LINK_409_CLOSED", "만료되었거나 이미 처리된 요청입니다."),
 
 	// 배차
 	ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER_404", "오더를 찾을 수 없습니다."),
 	ORDER_INVALID(HttpStatus.BAD_REQUEST, "ORDER_400", "오더 정보가 올바르지 않습니다."),
+	ORDER_TARGET_NOT_LINKED(HttpStatus.BAD_REQUEST, "ORDER_400_TARGET", "단골로 연결된 차주에게만 지정 배차할 수 있습니다. 오더 마켓에 공개로 올리거나 먼저 단골로 연결해 주세요."),
 	ORDER_NOT_BROKER(HttpStatus.FORBIDDEN, "ORDER_403_ROLE", "주선사 계정만 오더를 관리할 수 있습니다."),
 	ORDER_CONFLICT(HttpStatus.CONFLICT, "ORDER_409_CONFLICT", "다른 담당자가 먼저 처리했습니다. 새로 고침해 주세요."),
 	ORDER_NOT_ASSIGNED(HttpStatus.CONFLICT, "ORDER_409_NOT_ASSIGNED", "배차가 확정된 오더가 아닙니다."),
