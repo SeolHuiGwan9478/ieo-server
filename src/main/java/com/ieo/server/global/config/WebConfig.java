@@ -7,11 +7,15 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 @RequiredArgsConstructor
 public class WebConfig implements WebMvcConfigurer {
+
+	/** 수하인 페이지 주소의 앞부분. 뒤에 인수증 토큰이 붙는다 */
+	public static final String RECEIPT_PAGE = "/r";
 
 	private final AuthInterceptor authInterceptor;
 	private final CorsProperties corsProperties;
@@ -22,6 +26,12 @@ public class WebConfig implements WebMvcConfigurer {
 		registry.addInterceptor(authInterceptor)
 				.addPathPatterns("/api/**")
 				.excludePathPatterns("/api/auth/**", "/api/public/**");
+	}
+
+	/** 수하인 전자인수증 페이지 (POD-004). 차량 화면 QR에 이 주소가 들어간다. 데이터는 /api/public에서 받는다 */
+	@Override
+	public void addViewControllers(ViewControllerRegistry registry) {
+		registry.addViewController(RECEIPT_PAGE + "/*").setViewName("forward:/receipt.html");
 	}
 
 	/** 토큰은 쿠키가 아니라 Authorization 헤더로 오가므로 자격 증명(쿠키)은 허용하지 않는다. */

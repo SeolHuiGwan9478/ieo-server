@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -91,6 +92,13 @@ class DeliveryProofControllerTest {
 	}
 
 	@Test
+	void 수하인_서명_페이지는_로그인_없이_열린다() throws Exception {
+		mockMvc.perform(get("/r/아무토큰"))
+				.andExpect(status().isOk())
+				.andExpect(forwardedUrl("/receipt.html"));
+	}
+
+	@Test
 	void 수하인이_링크로_서명하면_운행이_끝나고_지급_예정일이_서명일부터_잡힌다() throws Exception {
 		Trip trip = tripAtDropoff();
 
@@ -99,6 +107,8 @@ class DeliveryProofControllerTest {
 				.andExpect(jsonPath("$.status").value("PENDING"))
 				.andExpect(jsonPath("$.path").exists()));
 		issue(trip, null).andExpect(status().isOk()).andExpect(jsonPath("$.token").value(token));
+		// QR에는 수하인 서명 페이지 주소가 들어간다
+		issue(trip, null).andExpect(jsonPath("$.path").value("/r/" + token));
 
 		mockMvc.perform(get("/api/public/delivery-proofs/" + token))
 				.andExpect(status().isOk())
