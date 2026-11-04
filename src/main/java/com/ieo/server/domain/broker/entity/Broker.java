@@ -24,6 +24,7 @@ import lombok.NoArgsConstructor;
 public class Broker extends BaseTimeEntity {
 
 	private static final int DEFAULT_SETTLEMENT_DAYS = 30;
+	private static final int MAX_SETTLEMENT_DAYS = 365;
 	private static final Pattern BUSINESS_NUMBER = Pattern.compile("\\d{10}");
 	private static final int[] CHECK_WEIGHTS = {1, 3, 7, 1, 3, 7, 1, 3, 5};
 
@@ -51,18 +52,26 @@ public class Broker extends BaseTimeEntity {
 	@Column(nullable = false)
 	private int settlementDays;
 
-	private Broker(String name, String businessNumber, String licenseNumber, String representativeName) {
+	private Broker(String name, String businessNumber, String licenseNumber, String representativeName,
+			int settlementDays) {
 		this.name = name;
 		this.businessNumber = businessNumber;
 		this.licenseNumber = licenseNumber;
 		this.representativeName = representativeName;
-		this.settlementDays = DEFAULT_SETTLEMENT_DAYS;
+		this.settlementDays = settlementDays;
 	}
 
-	/** 사업자등록번호는 하이픈을 지우고 검증 번호까지 확인한다. 허가 번호는 필수(BRK-001) */
+	/** 사업자등록번호는 하이픈을 지우고 검증 번호까지 확인한다. 허가 번호는 필수(BRK-001). 정산 주기는 30일 */
 	public static Broker create(String name, String businessNumber, String licenseNumber, String representativeName) {
+		return create(name, businessNumber, licenseNumber, representativeName, null);
+	}
+
+	/** 정산 주기를 비우면 30일 */
+	public static Broker create(String name, String businessNumber, String licenseNumber, String representativeName,
+			Integer settlementDays) {
 		return new Broker(name, normalizeBusinessNumber(businessNumber), requireLicenseNumber(licenseNumber),
-				representativeName);
+				representativeName,
+				settlementDays == null ? DEFAULT_SETTLEMENT_DAYS : validateSettlementDays(settlementDays));
 	}
 
 	/**
@@ -94,10 +103,38 @@ public class Broker extends BaseTimeEntity {
 		return trimmed;
 	}
 
-	public void changeSettlementDays(int settlementDays) {
-		if (settlementDays < 0) {
-			throw new IllegalArgumentException("정산 주기는 0일 이상이어야 합니다: " + settlementDays);
+	/** 상호. 비울 수 없다 */
+	public void rename(String name) {
+		String trimmed = name == null ? "" : name.strip();
+		if (trimmed.isEmpty()) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT, "상호를 입력해 주세요.");
 		}
-		this.settlementDays = settlementDays;
+		this.name = trimmed;
+	}
+
+	/** 허가 번호. 비울 수 없다 (BRK-001) */
+	public void changeLicenseNumber(String licenseNumber) {
+		this.licenseNumber = requireLicenseNumber(licenseNumber);
+	}
+
+	/** 대표자 이름. 빈 값이면 지운다 */
+	public void changeRepresentativeName(String representativeName) {
+		String trimmed = representativeName == null ? "" : representativeName.strip();
+		this.representativeName = trimmed.isEmpty() ? null : trimmed;
+	}
+
+	/**
+	 * 정산 주기 (BRK-003). 0~365일 (오더 지급일 범위와 같다).
+	 * 이미 지급 예정일이 계산된 장부는 바꾸지 않는다. 아직 인수증 서명 전인 운행은 서명할 때의 값을 쓴다.
+	 */
+	public void changeSettlementDays(int settlementDays) {
+		this.settlementDays = validateSettlementDays(settlementDays);
+	}
+
+	private static int validateSettlementDays(int settlementDays) {
+		if (settlementDays < 0 || settlementDays > MAX_SETTLEMENT_DAYS) {
+			throw new BusinessException(ErrorCode.BROKER_INVALID_SETTLEMENT_DAYS);
+		}
+		return settlementDays;
 	}
 }

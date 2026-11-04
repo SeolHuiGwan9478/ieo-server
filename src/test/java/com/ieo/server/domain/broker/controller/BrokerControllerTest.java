@@ -2,12 +2,16 @@ package com.ieo.server.domain.broker.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ieo.server.domain.broker.dto.CreateBrokerRequest;
+import com.ieo.server.domain.broker.entity.BrokerMember;
+import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
+import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
 import com.ieo.server.domain.broker.service.BrokerService;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
@@ -44,6 +48,9 @@ class BrokerControllerTest {
 	private BrokerService brokerService;
 
 	@Autowired
+	private BrokerMemberRepository memberRepository;
+
+	@Autowired
 	private JwtProvider jwtProvider;
 
 	private MockMvc mockMvc;
@@ -69,6 +76,57 @@ class BrokerControllerTest {
 		mockMvc.perform(get("/api/brokers/me").header(HttpHeaders.AUTHORIZATION, bearer))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.name").value("한빛로지스"));
+	}
+
+	@Test
+	void 등록할_때_정산_주기를_넣을_수_있다() throws Exception {
+		postBroker("{\"name\":\"한빛로지스\",\"businessNumber\":\"1234567891\",\"licenseNumber\":\"제2026-001호\","
+				+ "\"settlementDays\":45}")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.settlementDays").value(45));
+	}
+
+	@Test
+	void 대표는_보낸_항목만_바꾸고_사업자등록번호는_바꿀_수_없다() throws Exception {
+		brokerService.register(user.getId(), new CreateBrokerRequest("한빛로지스", "1234567891", "제2026-001호", "김대표"));
+
+		patchBroker(bearer, "{\"settlementDays\":15,\"name\":\"한빛물류\",\"businessNumber\":\"9876543215\"}")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.settlementDays").value(15))
+				.andExpect(jsonPath("$.name").value("한빛물류"))
+				.andExpect(jsonPath("$.licenseNumber").value("제2026-001호"))
+				.andExpect(jsonPath("$.representativeName").value("김대표"))
+				.andExpect(jsonPath("$.businessNumber").value("1234567891"));
+
+		patchBroker(bearer, "{\"representativeName\":\"\"}")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.representativeName").doesNotExist());
+	}
+
+	@Test
+	void 정산_주기가_범위를_벗어나거나_상호를_비우면_400() throws Exception {
+		brokerService.register(user.getId(), new CreateBrokerRequest("한빛로지스", "1234567891", "제2026-001호", null));
+
+		patchBroker(bearer, "{\"settlementDays\":366}")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("BROKER_400_SETTLEMENT_DAYS"));
+		patchBroker(bearer, "{\"name\":\" \"}")
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(get("/api/brokers/me").header(HttpHeaders.AUTHORIZATION, bearer))
+				.andExpect(jsonPath("$.settlementDays").value(30))
+				.andExpect(jsonPath("$.name").value("한빛로지스"));
+	}
+
+	@Test
+	void 담당자는_회사_정보를_바꿀_수_없다() throws Exception {
+		brokerService.register(user.getId(), new CreateBrokerRequest("한빛로지스", "1234567891", "제2026-001호", null));
+		User staff = userRepository.save(User.create("01090003009", UserRole.BROKER));
+		memberRepository.save(BrokerMember.of(staff, memberRepository.findById(user.getId()).orElseThrow().getBroker(),
+				BrokerMemberPosition.STAFF));
+
+		patchBroker("Bearer " + jwtProvider.issue(staff.getId()).accessToken(), "{\"settlementDays\":15}")
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("BROKER_403_OWNER"));
 	}
 
 	@Test
@@ -152,6 +210,13 @@ class BrokerControllerTest {
 	private ResultActions postBroker(String body) throws Exception {
 		return mockMvc.perform(post("/api/brokers")
 				.header(HttpHeaders.AUTHORIZATION, bearer)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(body));
+	}
+
+	private ResultActions patchBroker(String authorization, String body) throws Exception {
+		return mockMvc.perform(patch("/api/brokers/me")
+				.header(HttpHeaders.AUTHORIZATION, authorization)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body));
 	}

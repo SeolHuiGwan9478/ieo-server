@@ -41,4 +41,29 @@ class BrokerTest {
 		assertThatThrownBy(() -> Broker.create("○○물류", "1234567891", null, null))
 				.extracting("errorCode").isEqualTo(ErrorCode.BROKER_INVALID_LICENSE_NUMBER);
 	}
+
+	@Test
+	void 정산_주기는_등록할_때_넣을_수_있고_비우면_30일() {
+		assertThat(Broker.create("○○물류", "1234567891", "제2026-001호", null, 45).getSettlementDays()).isEqualTo(45);
+		assertThat(Broker.create("○○물류", "1234567891", "제2026-001호", null, null).getSettlementDays()).isEqualTo(30);
+		assertThatThrownBy(() -> Broker.create("○○물류", "1234567891", "제2026-001호", null, 400))
+				.extracting("errorCode").isEqualTo(ErrorCode.BROKER_INVALID_SETTLEMENT_DAYS);
+	}
+
+	@Test
+	void 회사_정보를_바꾼다() {
+		Broker broker = Broker.create("○○물류", "1234567891", "제2026-001호", "홍길동");
+
+		broker.rename(" 한빛로지스 ");
+		broker.changeLicenseNumber("제2026-009호");
+		broker.changeRepresentativeName("  ");
+
+		assertThat(broker.getName()).isEqualTo("한빛로지스");
+		assertThat(broker.getLicenseNumber()).isEqualTo("제2026-009호");
+		assertThat(broker.getRepresentativeName()).isNull();
+		assertThatThrownBy(() -> broker.rename(" "))
+				.extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+		assertThatThrownBy(() -> broker.changeLicenseNumber(""))
+				.extracting("errorCode").isEqualTo(ErrorCode.BROKER_INVALID_LICENSE_NUMBER);
+	}
 }

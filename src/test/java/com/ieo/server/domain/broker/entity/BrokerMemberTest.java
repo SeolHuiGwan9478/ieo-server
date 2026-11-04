@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
+import com.ieo.server.global.error.ErrorCode;
 import org.junit.jupiter.api.Test;
 
 class BrokerMemberTest {
@@ -37,6 +38,9 @@ class BrokerMemberTest {
 		broker.changeSettlementDays(45);
 		assertThat(broker.getSettlementDays()).isEqualTo(45);
 
-		assertThatThrownBy(() -> broker.changeSettlementDays(-1)).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> broker.changeSettlementDays(-1))
+				.extracting("errorCode").isEqualTo(ErrorCode.BROKER_INVALID_SETTLEMENT_DAYS);
+		assertThatThrownBy(() -> broker.changeSettlementDays(366))
+				.extracting("errorCode").isEqualTo(ErrorCode.BROKER_INVALID_SETTLEMENT_DAYS);
 	}
 }

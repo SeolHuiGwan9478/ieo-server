@@ -2,6 +2,7 @@ package com.ieo.server.domain.broker.service;
 
 import com.ieo.server.domain.broker.dto.CreateBrokerRequest;
 import com.ieo.server.domain.broker.dto.MyBrokerResponse;
+import com.ieo.server.domain.broker.dto.UpdateBrokerRequest;
 import com.ieo.server.domain.broker.entity.Broker;
 import com.ieo.server.domain.broker.entity.BrokerMember;
 import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
@@ -19,7 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 주선사 회사 등록과 내 회사 조회 (BRK-001).
+ * 주선사 회사 등록·조회·수정 (BRK-001, BRK-003).
  * 회사를 등록한 계정이 대표(OWNER)가 된다. 이미 등록된 사업자등록번호면 새 회사를 만들지 않고,
  * 그 회사의 대표에게 초대를 받아 합류한다 (초대는 담당자 관리에서 만든다).
  */
@@ -39,7 +40,7 @@ public class BrokerService {
 					member.isActive() ? ErrorCode.BROKER_ALREADY_MEMBER : ErrorCode.BROKER_MEMBER_REMOVED);
 		});
 		Broker broker = Broker.create(request.name(), request.businessNumber(), request.licenseNumber(),
-				request.representativeName());
+				request.representativeName(), request.settlementDays());
 		if (brokerRepository.existsByBusinessNumber(broker.getBusinessNumber())) {
 			throw new BusinessException(ErrorCode.BROKER_DUPLICATE_BUSINESS_NUMBER);
 		}
@@ -59,13 +60,42 @@ public class BrokerService {
 	 */
 	@Transactional(readOnly = true)
 	public MyBrokerResponse getMine(Long userId) {
+		return MyBrokerResponse.from(requireActiveMember(userId));
+	}
+
+	/**
+	 * 회사 정보·정산 주기 수정 (BRK-001, BRK-003). 대표만. 보낸 항목만 바꾼다.
+	 * 정산 주기를 바꿔도 이미 지급 예정일이 계산된 장부는 그대로 둔다.
+	 */
+	public MyBrokerResponse update(Long userId, UpdateBrokerRequest request) {
+		BrokerMember member = requireActiveMember(userId);
+		if (!member.isOwner()) {
+			throw new BusinessException(ErrorCode.BROKER_OWNER_ONLY);
+		}
+		Broker broker = member.getBroker();
+		if (request.name() != null) {
+			broker.rename(request.name());
+		}
+		if (request.licenseNumber() != null) {
+			broker.changeLicenseNumber(request.licenseNumber());
+		}
+		if (request.representativeName() != null) {
+			broker.changeRepresentativeName(request.representativeName());
+		}
+		if (request.settlementDays() != null) {
+			broker.changeSettlementDays(request.settlementDays());
+		}
+		return MyBrokerResponse.from(member);
+	}
+
+	private BrokerMember requireActiveMember(Long userId) {
 		requireBrokerUser(userId);
 		BrokerMember member = memberRepository.findById(userId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.BROKER_NO_MEMBERSHIP));
 		if (!member.isActive()) {
 			throw new BusinessException(ErrorCode.BROKER_MEMBER_REMOVED);
 		}
-		return MyBrokerResponse.from(member);
+		return member;
 	}
 
 	private User requireBrokerUser(Long userId) {

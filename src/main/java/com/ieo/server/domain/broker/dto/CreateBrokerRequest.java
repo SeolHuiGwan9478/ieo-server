@@ -5,11 +5,17 @@ import jakarta.validation.constraints.Size;
 
 /**
  * 주선사 회사 등록 (BRK-001). 사업자등록번호는 하이픈이 있어도 된다. 형식과 검증 번호는 Broker가 확인한다.
- * 대표자 이름은 비워도 된다.
+ * 대표자 이름은 비워도 된다. 정산 주기(BRK-003)를 비우면 30일이고, 범위(0~365일)는 Broker가 확인한다.
  */
 public record CreateBrokerRequest(
 		@NotBlank @Size(max = 50) String name,
 		@NotBlank @Size(max = 20) String businessNumber,
 		@NotBlank @Size(max = 30) String licenseNumber,
-		@Size(max = 30) String representativeName) {
+		@Size(max = 30) String representativeName,
+		Integer settlementDays) {
+
+	/** 정산 주기를 비운 등록 (30일) */
+	public CreateBrokerRequest(String name, String businessNumber, String licenseNumber, String representativeName) {
+		this(name, businessNumber, licenseNumber, representativeName, null);
+	}
 }

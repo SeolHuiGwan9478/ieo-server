@@ -321,6 +321,19 @@ class DispatchControllerTest {
 				.contentType(MediaType.APPLICATION_JSON).content(json));
 	}
 
+	@Test
+	void 지급일을_비우면_회사_정산_주기로_채우고_넣으면_그_값을_쓴다() throws Exception {
+		brokerRepository.findByBusinessNumber("1234567891").orElseThrow().changeSettlementDays(45);
+		String withoutDays = orderJson("TON_5", "WING", "SELECT", null).replace("\"expectedPaymentDays\": 15,", "");
+
+		registerOrder(withoutDays)
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.expectedPaymentDays").value(45));
+		registerOrder(orderJson("TON_5", "WING", "SELECT", null))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.expectedPaymentDays").value(15));
+	}
+
 	private String orderJson(String tonnage, String bodyType, String confirmMode, Long targetDriverId) {
 		return orderJson(tonnage, bodyType, confirmMode, targetDriverId, Instant.now().plus(Duration.ofDays(1)));
 	}

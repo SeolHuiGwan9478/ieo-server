@@ -12,7 +12,8 @@ import java.time.Instant;
 
 /**
  * 오더 등록 (DSP-001). 필수 항목 검사·값 범위는 Order가 한다 (DSP-002).
- * confirmMode를 비우면 SELECT, targetDriverId가 있으면 그 차주에게만 보인다
+ * confirmMode를 비우면 SELECT, targetDriverId가 있으면 그 차주에게만 보인다.
+ * expectedPaymentDays(인수증 후 지급까지 일수)를 비우면 회사 정산 주기로 채운다 (BRK-003)
  */
 public record CreateOrderRequest(
 		@NotNull @Valid OrderSiteRequest pickup,

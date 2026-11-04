@@ -80,7 +80,9 @@ public class BrokerOrderService {
 				.loadingMethod(request.loadingMethod())
 				.fare(request.fare())
 				.paymentType(request.paymentType())
-				.expectedPaymentDays(request.expectedPaymentDays())
+				// 비우면 회사 정산 주기 (BRK-003). 오더마다 다르게 하려면 직접 넣는다
+				.expectedPaymentDays(request.expectedPaymentDays() != null
+						? request.expectedPaymentDays() : member.getBroker().getSettlementDays())
 				.consignmentType(request.consignmentType())
 				.confirmMode(request.confirmMode())
 				.targetDriver(target)

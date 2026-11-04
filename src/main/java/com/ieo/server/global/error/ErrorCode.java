@@ -50,6 +50,7 @@ public enum ErrorCode {
 	BROKER_NO_MEMBERSHIP(HttpStatus.NOT_FOUND, "BROKER_404_MEMBER", "소속된 주선사가 없습니다. 회사를 등록하거나 대표에게 초대를 요청해 주세요."),
 	BROKER_NOT_BROKER(HttpStatus.FORBIDDEN, "BROKER_403_ROLE", "주선사 계정만 쓸 수 있습니다."),
 	BROKER_INVALID_BUSINESS_NUMBER(HttpStatus.BAD_REQUEST, "BROKER_400_BUSINESS_NUMBER", "사업자등록번호가 올바르지 않습니다. 숫자 10자리를 확인해 주세요."),
+	BROKER_INVALID_SETTLEMENT_DAYS(HttpStatus.BAD_REQUEST, "BROKER_400_SETTLEMENT_DAYS", "정산 주기는 0일에서 365일 사이로 입력해 주세요."),
 	BROKER_INVALID_LICENSE_NUMBER(HttpStatus.BAD_REQUEST, "BROKER_400_LICENSE", "운송주선사업 허가 번호를 입력해 주세요."),
 	BROKER_DUPLICATE_BUSINESS_NUMBER(HttpStatus.CONFLICT, "BROKER_409_BUSINESS_NUMBER", "이미 등록된 회사입니다. 회사 대표에게 초대를 요청해 주세요."),
 	BROKER_ALREADY_MEMBER(HttpStatus.CONFLICT, "BROKER_409_MEMBER", "이미 소속된 주선사가 있습니다."),
