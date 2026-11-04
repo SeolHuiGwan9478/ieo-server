@@ -5,7 +5,7 @@
   python3 scripts/seed-local.py <서버 로그 파일>
 
 - 차주(010-1234-5678, 5톤 카고)와 주선사(010-9876-5432, 회사·대기비 정책)를 만든다. 이미 있으면 로그인한다
-- 주선사 오더가 하나도 없으면 오늘·내일 상차로 4건 올린다
+- 모집 중인 주선사 오더가 없으면(전에 올린 오더는 상차 시간이 지나면 마감된다) 오늘·내일 상차로 4건 올린다
 - 차주에게 예약된 운행이 없으면 오더 하나를 요청하고 주선사가 확정한다
 - 지급일 지난 장부가 없으면 직접 추가한 지난 운행 2줄을 넣는다. 하나는 지급일이 지나 미수금 경고에 나온다
 
@@ -168,9 +168,10 @@ def main():
         order(daejeon, gimpo, tomorrow, 13, 15, 19, "기계 부품", 0),
     ]
     existing = call("GET", "/api/broker/orders?page=0&size=50", token=broker)["items"]
-    if existing:
-        ids = [o["id"] for o in existing]
-        print("오더가 이미 있어 등록은 건너뜀:", len(ids), "건")
+    open_orders = [o for o in existing if o["open"]]
+    if open_orders:
+        ids = [o["id"] for o in open_orders]
+        print("모집 중인 오더가 있어 등록은 건너뜀:", len(ids), "건")
     else:
         ids = [call("POST", "/api/broker/orders", body, token=broker)["id"] for body in orders]
         print("오더 등록", len(ids), "건:", ids)
