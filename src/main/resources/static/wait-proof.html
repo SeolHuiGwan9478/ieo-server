@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>대기 증빙 · 이에오</title>
+<!--
+  주선사가 보는 대기 증빙 페이지 (WAIT-020). 차주가 보낸 링크로 열린다: /w/{token}
+  로그인 없이 상하차지 진입·작업 시작·이탈 시각과 대기비를 보여 준다. 데이터는 /api/public/wait-proofs/{token}.
+  아직 대기 중이면 1분마다 새로 받는다.
+-->
+<style>
+:root {
+  --orange: #FF6C37; --orange-text: #C2410C; --orange-pale: #FFF3EE;
+  --canvas: #F2F4F6; --white: #FFFFFF; --strong: #191F28; --mid: #4E5968; --sub: #8B95A1;
+  --line: #E5E8EB; --done: #16A34A; --done-pale: #DCFCE7; --wait: #A16207; --wait-pale: #FEF9C3;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--canvas); color: var(--strong);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
+  font-size: 16px; line-height: 1.5; -webkit-text-size-adjust: 100%;
+}
+main { max-width: 560px; margin: 0 auto; padding: 20px 16px 40px; }
+header { display: flex; align-items: center; gap: 8px; padding: 4px 4px 16px; }
+.logo { font-weight: 800; font-size: 22px; letter-spacing: -0.5px; color: var(--orange); }
+header span { color: var(--sub); font-size: 14px; }
+section { background: var(--white); border-radius: 20px; padding: 20px; margin-bottom: 12px; }
+h1 { font-size: 24px; line-height: 1.35; font-weight: 800; letter-spacing: -0.4px; }
+h2 { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
+.lead { color: var(--mid); margin-top: 4px; }
+.tag { display: inline-block; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; margin-bottom: 10px; }
+.tag.wait { background: var(--wait-pale); color: var(--wait); }
+.tag.work { background: var(--orange-pale); color: var(--orange-text); }
+.tag.done { background: var(--done-pale); color: var(--done); }
+.big { display: flex; gap: 12px; margin-top: 16px; }
+.big div { flex: 1; background: var(--canvas); border-radius: 14px; padding: 14px; }
+.big dt { color: var(--sub); font-size: 14px; }
+.big dd { font-size: 24px; font-weight: 800; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; }
+.big dd.money { color: var(--orange-text); }
+.row { display: flex; gap: 12px; padding: 7px 0; }
+.row dt { width: 96px; flex-shrink: 0; color: var(--sub); }
+.row dd { font-weight: 500; font-variant-numeric: tabular-nums; word-break: keep-all; }
+.timeline { list-style: none; position: relative; padding-left: 22px; }
+.timeline::before { content: ""; position: absolute; left: 6px; top: 8px; bottom: 8px; width: 2px; background: var(--line); }
+.timeline li { position: relative; padding: 6px 0; display: flex; justify-content: space-between; gap: 12px; }
+.timeline li::before {
+  content: ""; position: absolute; left: -22px; top: 13px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--white); border: 2px solid var(--sub);
+}
+.timeline li.on::before { border-color: var(--orange); background: var(--orange); }
+.timeline .label { color: var(--mid); }
+.timeline .time { font-weight: 600; font-variant-numeric: tabular-nums; }
+.timeline li.off .time { color: var(--sub); font-weight: 400; }
+.note { color: var(--sub); font-size: 14px; margin-top: 10px; }
+.edited { background: var(--canvas); border-radius: 12px; padding: 12px 14px; margin-top: 12px; color: var(--mid); font-size: 14px; }
+.center { text-align: center; padding: 48px 20px; }
+.muted { color: var(--sub); font-size: 14px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header><span class="logo">ieo.</span><span>대기 증빙</span></header>
+
+  <div id="loading" class="center muted">불러오는 중…</div>
+
+  <section id="failed" class="center" hidden>
+    <h1>대기 증빙을 열 수 없어요</h1>
+    <p class="lead" id="failed-reason">링크가 만료되었거나 잘못된 주소예요. 기사님께 링크를 다시 받아 주세요.</p>
+  </section>
+
+  <div id="content" hidden>
+    <section>
+      <span id="status-tag" class="tag wait">대기 중</span>
+      <h1 id="site-name"></h1>
+      <p class="lead" id="site-address"></p>
+      <dl class="big">
+        <div><dt id="wait-label">대기 시간</dt><dd id="wait-minutes">-</dd></div>
+        <div><dt id="fee-label">청구 대기비</dt><dd id="fee" class="money">-</dd></div>
+      </dl>
+      <p class="note" id="fee-note"></p>
+    </section>
+
+    <section>
+      <h2>시각</h2>
+      <ol class="timeline">
+        <li id="t-planned"><span class="label">예정 시각</span><span class="time"></span></li>
+        <li id="t-arrived"><span class="label">진입</span><span class="time"></span></li>
+        <li id="t-work"><span class="label" id="t-work-label">작업 시작</span><span class="time"></span></li>
+        <li id="t-departed"><span class="label">이탈</span><span class="time"></span></li>
+      </ol>
+      <p class="note" id="planned-note" hidden>예정 시각이 없어 진입 시각부터 대기비를 계산했어요.</p>
+      <div class="edited" id="edited" hidden></div>
+    </section>
+
+    <section>
+      <h2>운행</h2>
+      <dl>
+        <div class="row"><dt>차량</dt><dd id="plate"></dd></div>
+        <div class="row"><dt>운송사</dt><dd id="broker"></dd></div>
+        <div class="row"><dt>대기비 기준</dt><dd id="policy"></dd></div>
+        <div class="row"><dt>작업 시간</dt><dd id="work-minutes"></dd></div>
+      </dl>
+      <p class="note" id="issued"></p>
+    </section>
+  </div>
+</main>
+
+<script>
+(() => {
+  const REFRESH_MILLIS = 60_000;
+  const token = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
+  const api = '/api/public/wait-proofs/' + encodeURIComponent(token);
+  const $ = (id) => document.getElementById(id);
+
+  const dayTime = new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const won = (n) => n.toLocaleString('ko-KR') + '원';
+
+  function minutesText(minutes) {
+    if (minutes == null) return '-';
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (h === 0) return m + '분';
+    return m === 0 ? h + '시간' : `${h}시간 ${m}분`;
+  }
+
+  function minutesBetween(from, to) {
+    return Math.max(0, Math.floor((new Date(to) - new Date(from)) / 60000));
+  }
+
+  // 서버 WaitPolicy와 같은 계산. 아직 작업 전일 때 "지금까지" 금액을 보여 주는 데만 쓴다
+  function estimate(policy, chargeableMinutes) {
+    const over = chargeableMinutes - policy.freeMinutes;
+    if (over <= 0) return 0;
+    const units = policy.rounding === 'DOWN' ? Math.floor(over / policy.unitMinutes) : Math.ceil(over / policy.unitMinutes);
+    return Math.min(units * policy.unitAmount, policy.maxAmount);
+  }
+
+  function setTime(id, at) {
+    const li = $(id);
+    li.className = at ? 'on' : 'off';
+    li.querySelector('.time').textContent = at ? dayTime.format(new Date(at)) : '아직';
+  }
+
+  function render(proof) {
+    const r = proof.record;
+    const pickup = r.stopType === 'PICKUP';
+    const work = pickup ? '상차' : '하차';
+    $('loading').hidden = true;
+    $('content').hidden = false;
+
+    const tag = $('status-tag');
+    if (r.status === 'WAITING') { tag.className = 'tag wait'; tag.textContent = `${work}지 대기 중`; }
+    else if (r.status === 'WORKING') { tag.className = 'tag work'; tag.textContent = `${work} 중`; }
+    else { tag.className = 'tag done'; tag.textContent = `${work} 끝`; }
+
+    $('site-name').textContent = r.siteName;
+    $('site-address').textContent = proof.siteAddress || '';
+    $('t-work-label').textContent = `${work} 시작`;
+    setTime('t-planned', r.plannedAt);
+    if (!r.plannedAt) $('t-planned').hidden = true;
+    setTime('t-arrived', r.arrivedAt);
+    setTime('t-work', r.workStartedAt);
+    setTime('t-departed', r.departedAt);
+    $('planned-note').hidden = !r.plannedAtMissing;
+
+    // 작업 전이면 대기가 아직 이어지고 있어 지금 시각까지로 센다
+    const live = r.status === 'WAITING';
+    const waitMinutes = live ? minutesBetween(r.arrivedAt, Date.now()) : r.waitMinutes;
+    $('wait-label').textContent = live ? '지금까지 대기' : '대기 시간';
+    $('wait-minutes').textContent = minutesText(waitMinutes);
+
+    const policy = r.policy;
+    if (!policy) {
+      $('fee-label').textContent = '대기비';
+      $('fee').textContent = '-';
+      $('fee-note').textContent = '대기비 기준이 정해지지 않아 시간만 기록했어요.';
+      $('policy').textContent = '없음';
+    } else {
+      const amount = live ? estimate(policy, minutesBetween(r.chargeableFrom, Date.now())) : r.chargeableAmount;
+      $('fee-label').textContent = live ? '지금까지 대기비' : '청구 대기비';
+      $('fee').textContent = amount == null ? '-' : won(amount);
+      $('fee-note').textContent = live ? '작업을 시작하면 금액이 정해져요.' : '';
+      $('policy').textContent =
+        `무료 ${minutesText(policy.freeMinutes)}, ${policy.unitMinutes}분마다 ${won(policy.unitAmount)} (최대 ${won(policy.maxAmount)})`;
+    }
+
+    $('plate').textContent = proof.plateNumber;
+    $('broker').textContent = proof.brokerName || '-';
+    $('work-minutes').textContent = minutesText(r.workMinutes);
+    $('issued').textContent = `증빙 발급 ${dayTime.format(new Date(proof.issuedAt))}`;
+
+    // 고친 기록은 숨기지 않고 처음 값을 같이 보여 준다
+    const edited = $('edited');
+    edited.hidden = !r.edited;
+    if (r.edited && r.original) {
+      const o = r.original;
+      const parts = [
+        o.arrivedAt && `진입 ${dayTime.format(new Date(o.arrivedAt))}`,
+        o.workStartedAt && `${work} 시작 ${dayTime.format(new Date(o.workStartedAt))}`,
+        o.departedAt && `이탈 ${dayTime.format(new Date(o.departedAt))}`,
+      ].filter(Boolean);
+      edited.textContent = `기사님이 ${r.editedAt ? dayTime.format(new Date(r.editedAt)) : ''}에 시각을 고쳤어요. 처음 기록: ${parts.join(', ')}`;
+    }
+
+    if (r.status !== 'DONE') setTimeout(load, REFRESH_MILLIS);
+  }
+
+  function fail(message) {
+    $('loading').hidden = true;
+    $('content').hidden = true;
+    $('failed').hidden = false;
+    if (message) $('failed-reason').textContent = message;
+  }
+
+  async function load() {
+    try {
+      const res = await fetch(api);
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body && body.message ? body.message : null);
+      render(body);
+    } catch (err) {
+      fail(err.message);
+    }
+  }
+
+  if (!token) fail(); else load();
+})();
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -199,16 +200,23 @@ class WaitControllerTest {
 	}
 
 	@Test
-	void 증빙_링크는_이탈한_기록만_만들고_로그인_없이_열린다() throws Exception {
+	void 증빙_링크는_대기_중에도_만들고_이탈하면_같은_링크에_최종_기록이_보인다() throws Exception {
 		event("PICKUP", "arrive", PLANNED);
-		proof().andExpect(status().isConflict());
+		String path = JsonPath.read(proof().andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.path");
+		String token = path.substring(path.lastIndexOf('/') + 1);
+		mockMvc.perform(get("/api/public/wait-proofs/" + token))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.record.status").value("WAITING"));
 
 		event("PICKUP", "work-start", PLANNED.plusSeconds(3 * 3600));
 		event("PICKUP", "depart", PLANNED.plusSeconds(4 * 3600));
-		String path = JsonPath.read(proof().andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.path");
 		proof().andExpect(jsonPath("$.path").value(path));
 
+		// 주선사가 여는 페이지와, 페이지가 데이터를 받는 공개 API
 		mockMvc.perform(get(path))
+				.andExpect(status().isOk())
+				.andExpect(forwardedUrl("/wait-proof.html"));
+		mockMvc.perform(get("/api/public/wait-proofs/" + token))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.plateNumber").value("경기82사1234"))
 				.andExpect(jsonPath("$.brokerName").value("한빛로지스"))

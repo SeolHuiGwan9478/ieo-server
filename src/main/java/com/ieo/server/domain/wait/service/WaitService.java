@@ -137,10 +137,8 @@ public class WaitService {
 	 * TODO: 주선사에게 보내기(sentAt)는 09 알림을 만든 뒤 붙인다 (WAIT-022)
 	 */
 	public WaitProofLinkResponse createProof(Long userId, Long tripId, StopType type) {
+		// 대기 중에도 만든다. 주선사는 링크에서 지금까지의 대기 시간을 보고, 이탈하면 같은 링크에 최종 기록이 남는다
 		WaitRecord record = findRecord(userId, tripId, type);
-		if (record.status() != WaitStatus.DONE) {
-			throw new BusinessException(ErrorCode.WAIT_INVALID_STATUS, "이탈까지 기록된 대기만 증빙을 만들 수 있습니다.");
-		}
 		WaitProof proof = proofRepository.findByWaitRecordId(record.getId())
 				.orElseGet(() -> proofRepository.save(WaitProof.create(record, clock.instant().plus(PROOF_TTL))));
 		return WaitProofLinkResponse.from(proof);
