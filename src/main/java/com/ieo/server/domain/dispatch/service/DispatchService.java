@@ -82,7 +82,7 @@ public class DispatchService {
 		List<Vehicle> vehicles = vehicleRepository.findAllByDriverUserIdOrderByCreatedAtAsc(userId);
 
 		List<Order> orders = orderRepository.findOpenFor(userId, now, Pageable.ofSize(CANDIDATE_LIMIT)).stream()
-				.filter(order -> vehicles.stream().anyMatch(vehicle -> fits(order, vehicle)))
+				.filter(order -> vehicles.stream().anyMatch(order::fits))
 				.filter(order -> lat == null || order.getPickupSite().isWithin(lat, lng, radius))
 				.limit(limit)
 				.toList();
@@ -201,10 +201,6 @@ public class DispatchService {
 		List<Long> orderIds = orders.stream().map(Order::getId).toList();
 		return requestRepository.findAllByDriverUserIdAndOrderIdIn(userId, orderIds).stream()
 				.collect(Collectors.toMap(request -> request.getOrder().getId(), Function.identity()));
-	}
-
-	private static boolean fits(Order order, Vehicle vehicle) {
-		return vehicle.getBodyType() == order.getBodyType() && vehicle.getTonnage().canCarry(order.getTonnage());
 	}
 
 	/** 남에게 지정된 오더는 있는지도 알려 주지 않도록 404 */

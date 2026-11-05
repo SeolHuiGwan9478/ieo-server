@@ -10,21 +10,26 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.Point;
+import org.locationtech.jts.geom.PrecisionModel;
 
 /**
  * 상하차지 (SITE-001). 오더에 담기지 않는 현장 정보(높이 제한, 지게차, 메모)가 이 장소에 쌓인다.
  * 같은 곳이 두 번 생기지 않도록, 100m 안에 기존 상하차지가 있으면 서비스가 그것을 쓴다 (SITE-002).
+ * 좌표는 PostGIS geography(Point, 4326) 한 칸에 둔다. 반경 찾기는 DB가 지구 타원체 거리로 한다 (SiteRepository).
+ * GIST 인덱스는 scripts/sites-geography.sql 로 만든다.
  */
 @Getter
 @Entity
-@Table(name = "sites", indexes = @Index(name = "idx_sites_lat_lng", columnList = "lat, lng"))
+@Table(name = "sites")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Site extends BaseTimeEntity {
 
@@ -32,6 +37,7 @@ public class Site extends BaseTimeEntity {
 	private static final int MIN_GEOFENCE_RADIUS_M = 50;
 	private static final int MAX_GEOFENCE_RADIUS_M = 1000;
 	private static final double EARTH_RADIUS_M = 6_371_000;
+	private static final GeometryFactory WGS84 = new GeometryFactory(new PrecisionModel(), 4326);
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,11 +50,9 @@ public class Site extends BaseTimeEntity {
 	@Column(nullable = false, length = 200)
 	private String address;
 
-	@Column(nullable = false)
-	private double lat;
-
-	@Column(nullable = false)
-	private double lng;
+	/** 위치. x가 경도, y가 위도 */
+	@Column(nullable = false, columnDefinition = "geography(Point,4326)")
+	private Point location;
 
 	/** 이 반경에 들어오면 도착, 나가면 이탈로 본다 */
 	@Column(nullable = false)
@@ -62,8 +66,7 @@ public class Site extends BaseTimeEntity {
 	private Site(String name, String address, double lat, double lng, int geofenceRadiusM, Driver createdBy) {
 		this.name = name;
 		this.address = address;
-		this.lat = lat;
-		this.lng = lng;
+		this.location = WGS84.createPoint(new Coordinate(lng, lat));
 		this.geofenceRadiusM = geofenceRadiusM;
 		this.createdBy = createdBy;
 	}
@@ -80,12 +83,20 @@ public class Site extends BaseTimeEntity {
 		return new Site(requireText(name), requireText(address), lat, lng, geofenceRadiusM, createdBy);
 	}
 
-	/** 이 상하차지에서 (lat, lng)까지의 직선 거리(m). 하버사인 공식 */
+	public double getLat() {
+		return location.getY();
+	}
+
+	public double getLng() {
+		return location.getX();
+	}
+
+	/** 이 상하차지에서 (lat, lng)까지의 직선 거리(m). 화면에 보여 줄 거리용 하버사인 공식. 찾기는 DB가 한다 */
 	public double distanceMeters(double lat, double lng) {
-		double dLat = Math.toRadians(lat - this.lat);
-		double dLng = Math.toRadians(lng - this.lng);
+		double dLat = Math.toRadians(lat - getLat());
+		double dLng = Math.toRadians(lng - getLng());
 		double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-				+ Math.cos(Math.toRadians(this.lat)) * Math.cos(Math.toRadians(lat))
+				+ Math.cos(Math.toRadians(getLat())) * Math.cos(Math.toRadians(lat))
 				* Math.sin(dLng / 2) * Math.sin(dLng / 2);
 		return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
 	}

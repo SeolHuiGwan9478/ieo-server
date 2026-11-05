@@ -10,16 +10,17 @@ import org.springframework.data.repository.query.Param;
 public interface SiteRepository extends JpaRepository<Site, Long> {
 
 	/**
-	 * 위도·경도 범위 안의 상하차지. 정확한 거리는 서비스가 Site.distanceMeters로 다시 거른다
-	 * (SITE-002 같은 곳 찾기, SITE-006 근처 찾기)
+	 * (lat, lng)에서 meters 안의 상하차지를 가까운 순으로 (SITE-002 같은 곳 찾기, SITE-006 근처 찾기).
+	 * geography라서 거리는 지구 타원체 위의 미터다
 	 */
-	@Query("""
-			select s from Site s
-			where s.lat between :minLat and :maxLat
-			  and s.lng between :minLng and :maxLng
+	@Query(nativeQuery = true, value = """
+			select * from sites s
+			where ST_DWithin(s.location, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, :meters)
+			order by ST_Distance(s.location, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography)
+			limit :limit
 			""")
-	List<Site> findInBox(@Param("minLat") double minLat, @Param("maxLat") double maxLat,
-			@Param("minLng") double minLng, @Param("maxLng") double maxLng);
+	List<Site> findWithin(@Param("lat") double lat, @Param("lng") double lng,
+			@Param("meters") double meters, @Param("limit") int limit);
 
 	/** 탈퇴한 차주와의 연결을 끊는다 */
 	@Modifying(clearAutomatically = true, flushAutomatically = true)

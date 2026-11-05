@@ -51,12 +51,23 @@ class SiteRepositoryTest {
 	}
 
 	@Test
-	void 위도_경도_범위_안의_상하차지만_찾는다() {
+	void 반경_안의_상하차지를_가까운_순으로_찾는다() {
+		siteRepository.save(Site.create("칠곡 2창고", "경북 칠곡군", 35.9600, 128.5280, driver));
 		siteRepository.save(Site.create("대구 성서 공단", "대구 달서구", 35.8400, 128.4900, driver));
 
-		assertThat(siteRepository.findInBox(35.95, 35.96, 128.52, 128.53))
+		// 칠곡 물류센터에서 약 111m 북쪽, 대구 성서는 약 13km
+		assertThat(siteRepository.findWithin(35.9551, 128.5280, 1_000, 10))
 				.extracting(Site::getName)
-				.containsExactly("칠곡 물류센터");
+				.containsExactly("칠곡 물류센터", "칠곡 2창고");
+		assertThat(siteRepository.findWithin(35.9551, 128.5280, 20_000, 10)).hasSize(3);
+	}
+
+	@Test
+	void 좌표를_저장하고_다시_읽는다() {
+		Site found = siteRepository.findById(chilgok.getId()).orElseThrow();
+
+		assertThat(found.getLat()).isEqualTo(35.9550);
+		assertThat(found.getLng()).isEqualTo(128.5280);
 	}
 
 	@Test

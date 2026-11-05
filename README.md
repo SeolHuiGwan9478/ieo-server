@@ -56,6 +56,7 @@ The default `local` profile connects to `jdbc:postgresql://localhost:5432/ieo` a
 | Profile | Database | Notes |
 |---|---|---|
 | `local` (default) | Local PostgreSQL + PostGIS (`ieo`) | For development |
+| `test` | Local PostgreSQL + PostGIS (`ieo_test`) | Used by `./gradlew test`. Tables are recreated on every run |
 | `dev` | PostgreSQL | Needs `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` |
 | `prod` | PostgreSQL | Needs `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` |
 
@@ -69,7 +70,20 @@ The default `local` profile connects to `jdbc:postgresql://localhost:5432/ieo` a
 ./gradlew test
 ```
 
-Tests run on an in-memory H2 database, so they need no PostgreSQL.
+Tests run on a local PostgreSQL database `ieo_test` with PostGIS. Create it once:
+
+```bash
+createdb ieo_test
+psql -d ieo_test -c 'CREATE EXTENSION IF NOT EXISTS postgis'
+```
+
+If your `ieo` database was created before sites moved to PostGIS `geography`, run this once before starting the new server:
+
+```bash
+psql -d ieo -f scripts/sites-geography.sql
+```
+
+Override the test connection with `TEST_DB_URL`, `TEST_DB_USERNAME`, `TEST_DB_PASSWORD`. Never point it at the `ieo` or a deployed database: tests drop and recreate tables.
 
 ## API
 
@@ -113,4 +127,4 @@ Requirements for every domain are in the [ieo-app docs](https://github.com/SeolH
 
 ## Tech stack
 
-Java 21 · Spring Boot 4.1 · Spring Data JPA (Hibernate 7) · H2 · PostgreSQL · Gradle
+Java 21 · Spring Boot 4.1 · Spring Data JPA (Hibernate 7) · PostgreSQL + PostGIS · Gradle

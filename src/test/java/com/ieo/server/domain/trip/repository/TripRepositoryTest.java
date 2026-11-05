@@ -116,7 +116,7 @@ class TripRepositoryTest {
 					.setParameter(1, trip.getId())
 					.setParameter(2, pickup.getId())
 					.executeUpdate();
-		}).hasRootCauseInstanceOf(org.h2.jdbc.JdbcSQLIntegrityConstraintViolationException.class);
+		}).isInstanceOf(org.hibernate.exception.ConstraintViolationException.class);
 	}
 
 	private Trip newTrip() {

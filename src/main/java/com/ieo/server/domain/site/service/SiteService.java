@@ -27,7 +27,6 @@ import com.ieo.server.domain.vehicle.repository.VehicleRepository;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.math.BigDecimal;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 상하차지 등록·조회 (SITE-001, 002, 006, 007, 010)와 차주가 남기는 정보·메모 (SITE-004, 005).
- * 정보와 메모는 차주만 남길 수 있다. 거리는 위도·경도 범위로 후보를 추린 뒤 Site.distanceMeters로 다시 거른다.
+ * 정보와 메모는 차주만 남길 수 있다. 반경 찾기는 DB(PostGIS)가 하고, 화면에 보일 거리는 Site.distanceMeters로 붙인다.
  */
 @Service
 @RequiredArgsConstructor
@@ -51,7 +50,6 @@ public class SiteService {
 	static final int MAX_NEARBY_RADIUS_M = 10_000;
 	static final int MAX_NEARBY_RESULTS = 50;
 	static final int CARD_NOTE_COUNT = 5;
-	private static final double METERS_PER_DEGREE_LAT = 111_320;
 
 	private final SiteRepository siteRepository;
 	private final SiteAttributeRepository attributeRepository;
@@ -158,12 +156,7 @@ public class SiteService {
 
 	/** (lat, lng)에서 meters 안의 상하차지를 가까운 순으로 */
 	private List<Site> findWithin(double lat, double lng, double meters) {
-		double dLat = meters / METERS_PER_DEGREE_LAT;
-		double dLng = meters / (METERS_PER_DEGREE_LAT * Math.max(Math.cos(Math.toRadians(lat)), 0.01));
-		return siteRepository.findInBox(lat - dLat, lat + dLat, lng - dLng, lng + dLng).stream()
-				.filter(site -> site.isWithin(lat, lng, meters))
-				.sorted(Comparator.comparingDouble(site -> site.distanceMeters(lat, lng)))
-				.toList();
+		return siteRepository.findWithin(lat, lng, meters, MAX_NEARBY_RESULTS);
 	}
 
 	/** 탈퇴한 계정의 남은 토큰은 없는 계정으로 본다 */

@@ -27,6 +27,7 @@ import com.ieo.server.global.auth.JwtProvider;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,7 +89,8 @@ class TripLocationControllerTest {
 	@BeforeEach
 	void setUp() {
 		mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-		now = clock.instant();
+		// DB는 마이크로초까지 저장한다. Windows 시계(100ns)에서도 같은 값을 비교하도록 자른다
+		now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 		User user = userRepository.save(User.create("01090000901", UserRole.DRIVER));
 		Driver driver = driverRepository.save(Driver.of(user));
 		Vehicle vehicle = vehicleRepository.save(

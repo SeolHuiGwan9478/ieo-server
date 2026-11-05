@@ -30,6 +30,24 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 			""")
 	List<Order> findOpenFor(@Param("driverId") Long driverId, @Param("now") Instant now, Pageable pageable);
 
+	/**
+	 * 상차지가 (lat, lng)에서 meters 안인 모집 중 오더, 가까운 순 (REC-003).
+	 * 지정 배차 오더는 그 차주에게만. geography라서 거리는 지구 타원체 위의 미터다
+	 */
+	@Query(nativeQuery = true, value = """
+			select o.* from orders o
+			join sites s on s.id = o.pickup_site_id
+			where o.status = 'OPEN'
+			  and o.pickup_until > :now
+			  and (o.target_driver_id is null or o.target_driver_id = :driverId)
+			  and ST_DWithin(s.location, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, :meters)
+			order by ST_Distance(s.location, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography)
+			limit :limit
+			""")
+	List<Order> findOpenNear(@Param("driverId") Long driverId, @Param("now") Instant now,
+			@Param("lat") double lat, @Param("lng") double lng, @Param("meters") double meters,
+			@Param("limit") int limit);
+
 	/** 리포트: 기간 안에 등록한 오더 수 (BRK-042) */
 	long countByBrokerIdAndCreatedAtBetween(Long brokerId, Instant from, Instant to);
 }

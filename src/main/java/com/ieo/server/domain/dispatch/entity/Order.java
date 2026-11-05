@@ -216,9 +216,14 @@ public class Order extends BaseTimeEntity {
 		if (targetDriver != null && !targetDriver.getUserId().equals(driver.getUserId())) {
 			throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
 		}
-		if (!vehicle.getTonnage().canCarry(tonnage) || vehicle.getBodyType() != bodyType) {
+		if (!fits(vehicle)) {
 			throw new BusinessException(ErrorCode.DISPATCH_VEHICLE_MISMATCH);
 		}
+	}
+
+	/** 이 차량에 실을 수 있는지. 차종이 같고 톤수가 오더 이상 */
+	public boolean fits(Vehicle vehicle) {
+		return vehicle.getTonnage().canCarry(tonnage) && vehicle.getBodyType() == bodyType;
 	}
 
 	/** 배차 확정 → 배차 완료 */
