@@ -177,13 +177,19 @@ public class RecommendationService {
 				: vehicle.getTonnage().getDefaultKmPerLiter();
 	}
 
-	/** 지금 운행의 오더, 이 운행에서 이미 안내한 오더, 이미 배차 요청한 오더는 뺀다 */
+	/**
+	 * 지금 운행의 오더, 이미 배차 요청한 오더는 뺀다.
+	 * 운송 중에는 음성으로 한 건씩 안내하므로 이미 안내한 오더를 빼고,
+	 * 하차지에 서 있을 때는 카드로 5건을 보여 주므로 거절한 오더만 뺀다 (REC-020, 021)
+	 */
 	private Set<Long> skippedOrderIds(Long userId, Trip trip) {
 		Set<Long> skip = new HashSet<>();
 		if (trip.getOrder() != null) {
 			skip.add(trip.getOrder().getId());
 		}
-		recommendationRepository.findAllByTripId(trip.getId())
+		boolean stopped = trip.getStatus() == TripStatus.AT_DROPOFF;
+		recommendationRepository.findAllByTripId(trip.getId()).stream()
+				.filter(recommendation -> !stopped || recommendation.getAnswer() == RecommendationAnswer.REJECTED)
 				.forEach(recommendation -> skip.add(recommendation.getOrder().getId()));
 		requestRepository.findAllByDriverUserIdOrderByCreatedAtDesc(userId)
 				.forEach(request -> skip.add(request.getOrder().getId()));

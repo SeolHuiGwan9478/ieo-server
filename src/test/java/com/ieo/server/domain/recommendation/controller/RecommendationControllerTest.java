@@ -170,6 +170,22 @@ class RecommendationControllerTest {
 	}
 
 	@Test
+	void 하차지에_도착하면_안내한_오더도_다시_보여_주고_거절한_것만_뺀다() throws Exception {
+		Integer heard = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		Integer rejected = order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		Integer other = order(bukgu, 270_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+
+		answer(heard, null);
+		answer(rejected, "REJECTED");
+		recommend().andExpect(jsonPath("$.items.length()").value(1));
+
+		trip.arriveAtDropoff();
+		recommend().andExpect(jsonPath("$.items.length()").value(2))
+				.andExpect(jsonPath("$.items[0].order.id").value(heard))
+				.andExpect(jsonPath("$.items[1].order.id").value(other));
+	}
+
+	@Test
 	void 한_운행에서_3번_거절하면_더_추천하지_않는다() throws Exception {
 		List<Integer> orders = List.of(
 				order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2))),
@@ -232,7 +248,7 @@ class RecommendationControllerTest {
 	private ResultActions answer(Integer orderId, String answer) throws Exception {
 		return mockMvc.perform(put("/api/trips/" + trip.getId() + "/recommendations/" + orderId)
 				.header("Authorization", driver)
-				.contentType(MediaType.APPLICATION_JSON).content("{\"answer\": \"" + answer + "\"}"));
+				.contentType(MediaType.APPLICATION_JSON).content("{\"answer\": " + (answer == null ? "null" : "\"" + answer + "\"") + "}"));
 	}
 
 	private ResultActions preference(String json) throws Exception {
