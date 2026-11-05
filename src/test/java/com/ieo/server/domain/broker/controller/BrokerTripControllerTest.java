@@ -18,10 +18,12 @@ import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.site.repository.SiteRepository;
+import com.ieo.server.domain.trip.dto.TripLocationRequest;
 import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.trip.enums.PaymentType;
 import com.ieo.server.domain.trip.enums.TripSource;
 import com.ieo.server.domain.trip.repository.TripRepository;
+import com.ieo.server.domain.trip.service.TripLocationService;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.repository.UserRepository;
@@ -35,7 +37,9 @@ import com.ieo.server.domain.wait.repository.WaitProofRepository;
 import com.ieo.server.domain.wait.repository.WaitRecordRepository;
 import com.ieo.server.global.auth.JwtProvider;
 import com.jayway.jsonpath.JsonPath;
+import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -97,6 +101,12 @@ class BrokerTripControllerTest {
 	@Autowired
 	private JwtProvider jwtProvider;
 
+	@Autowired
+	private TripLocationService locationService;
+
+	@Autowired
+	private Clock clock;
+
 	private MockMvc mockMvc;
 	private User owner;
 	private Broker hanbit;
@@ -154,18 +164,39 @@ class BrokerTripControllerTest {
 		Trip regularTrip = trip(regular, hanbit, TripSource.IEO_DISPATCH);
 		Trip strangerTrip = trip(stranger, hanbit, TripSource.IEO_DISPATCH);
 
+		// 아직 위치가 안 왔으면 모두 비어 있다
 		perform(get("/api/brokers/me/trips/{id}", regularTrip.getId()), owner)
 				.andExpect(jsonPath("$.linkedDriver").value(true))
 				.andExpect(jsonPath("$.locationVisible").value(true))
 				.andExpect(jsonPath("$.driverPhone").value("01090007001"))
-				// 차량 앱이 아직 위치·ETA를 보내지 않는다
 				.andExpect(jsonPath("$.location").doesNotExist())
 				.andExpect(jsonPath("$.etaAt").doesNotExist());
+
+		// 차량 앱이 보낸 마지막 위치: 상차지로 가는 길, 남은 200km·2시간 30분 (처음 거리 250km → 20%)
+		Instant recordedAt = clock.instant().minusSeconds(60);
+		regularTrip.start(recordedAt.minusSeconds(600));
+		strangerTrip.start(recordedAt.minusSeconds(600));
+		sendLocation(regularTrip, recordedAt.minusSeconds(300), 250_000, 11_000);
+		sendLocation(regularTrip, recordedAt, 200_000, 9_000);
+		sendLocation(strangerTrip, recordedAt, 200_000, 9_000);
+
+		perform(get("/api/brokers/me/trips/{id}", regularTrip.getId()), owner)
+				.andExpect(jsonPath("$.location.lat").value(36.5))
+				.andExpect(jsonPath("$.location.lng").value(127.0))
+				.andExpect(jsonPath("$.location.recordedAt").value(recordedAt.toString()))
+				.andExpect(jsonPath("$.etaAt").value(recordedAt.plusSeconds(9_000).toString()))
+				.andExpect(jsonPath("$.progressPercent").value(20));
+		// 단골이 아니면 위치는 숨기고 ETA·진행률만
 		perform(get("/api/brokers/me/trips/{id}", strangerTrip.getId()), owner)
 				.andExpect(jsonPath("$.linkedDriver").value(false))
 				.andExpect(jsonPath("$.locationVisible").value(false))
-				.andExpect(jsonPath("$.driverPhone").doesNotExist());
+				.andExpect(jsonPath("$.driverPhone").doesNotExist())
+				.andExpect(jsonPath("$.location").doesNotExist())
+				.andExpect(jsonPath("$.etaAt").value(recordedAt.plusSeconds(9_000).toString()));
+		perform(get("/api/brokers/me/trips"), owner)
+				.andExpect(jsonPath("$.items[?(@.id == " + regularTrip.getId() + ")].location.lat").value(Matchers.contains(36.5)));
 	}
+
 
 	@Test
 	void 도착_시각은_바로_보이고_대기비는_증빙을_만든_뒤에_보인다() throws Exception {
@@ -224,6 +255,12 @@ class BrokerTripControllerTest {
 		perform(get("/api/brokers/me/trips"), user("01090007103", UserRole.DRIVER, "차주"))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.code").value("BROKER_404_MEMBER"));
+	}
+
+	/** 차량 앱이 위치를 보내는 것과 같은 길 (원작자의 TripLocationService) */
+	private void sendLocation(Trip trip, Instant recordedAt, int remainMeters, int remainSeconds) {
+		locationService.record(trip, new TripLocationRequest(List.of(
+				new TripLocationRequest.Point(recordedAt, 36.5, 127.0, remainMeters, remainSeconds))));
 	}
 
 	private void finish(Trip trip) {

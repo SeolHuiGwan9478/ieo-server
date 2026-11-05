@@ -2,6 +2,9 @@
 # 처음 한 번: createdb ieo && psql -d ieo -c 'CREATE EXTENSION IF NOT EXISTS postgis'
 # 접속 정보가 다르면 DB_URL, DB_USERNAME, DB_PASSWORD 환경변수로 바꾼다 (기본: 내 맥 계정, 비밀번호 없음)
 spring:
+  # 프로젝트 루트의 .env(.env.example 복사)에 적은 DB_URL 등을 읽는다. 파일이 없으면 환경변수나 기본값
+  config:
+    import: optional:file:.env[.properties]
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/ieo}
     username: ${DB_USERNAME:${USER}}

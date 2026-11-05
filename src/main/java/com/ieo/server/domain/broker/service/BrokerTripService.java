@@ -14,8 +14,10 @@ import com.ieo.server.domain.delivery.enums.ProofPhotoType;
 import com.ieo.server.domain.delivery.repository.DeliveryProofRepository;
 import com.ieo.server.domain.delivery.repository.ProofPhotoRepository;
 import com.ieo.server.domain.trip.entity.Trip;
+import com.ieo.server.domain.trip.entity.TripPosition;
 import com.ieo.server.domain.trip.entity.TripStop;
 import com.ieo.server.domain.trip.enums.TripSource;
+import com.ieo.server.domain.trip.repository.TripPositionRepository;
 import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.wait.entity.WaitProof;
@@ -53,6 +55,7 @@ public class BrokerTripService {
 	private final BrokerMemberRepository memberRepository;
 	private final BrokerDriverLinkRepository linkRepository;
 	private final TripRepository tripRepository;
+	private final TripPositionRepository positionRepository;
 	private final WaitRecordRepository waitRecordRepository;
 	private final WaitProofRepository waitProofRepository;
 	private final DeliveryProofRepository deliveryProofRepository;
@@ -80,7 +83,7 @@ public class BrokerTripService {
 		return toResponses(brokerId, List.of(trip)).getFirst();
 	}
 
-	/** 대기 기록·증빙·인수증을 운행 수와 관계없이 몇 번의 조회로 모은다 */
+	/** 위치·대기 기록·증빙·인수증을 운행 수와 관계없이 몇 번의 조회로 모은다 */
 	private List<BrokerTripResponse> toResponses(Long brokerId, List<Trip> trips) {
 		if (trips.isEmpty()) {
 			return List.of();
@@ -92,6 +95,8 @@ public class BrokerTripService {
 				.map(driver -> driver.getUserId())
 				.collect(Collectors.toSet());
 
+		Map<Long, TripPosition> positionByTrip = positionRepository.findAllById(tripIds).stream()
+				.collect(Collectors.toMap(TripPosition::getTripId, Function.identity()));
 		List<WaitRecord> records = waitRecordRepository.findAllByTripStopTripIdIn(tripIds);
 		Map<Long, WaitRecord> recordByStop = records.stream()
 				.collect(Collectors.toMap(record -> record.getTripStop().getId(), Function.identity()));
@@ -110,6 +115,7 @@ public class BrokerTripService {
 					DeliveryProof receipt = receiptByTrip.get(trip.getId());
 					return BrokerTripResponse.of(trip,
 							linkedDriverIds.contains(trip.getDriver().getUserId()),
+								positionByTrip.get(trip.getId()),
 							stop(trip.pickup(), recordByStop, proofByRecord),
 							stop(trip.dropoff(), recordByStop, proofByRecord),
 							receipt,

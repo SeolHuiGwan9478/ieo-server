@@ -3,6 +3,7 @@ package com.ieo.server.domain.broker.dto;
 import com.ieo.server.domain.delivery.entity.DeliveryProof;
 import com.ieo.server.domain.delivery.enums.DeliveryProofStatus;
 import com.ieo.server.domain.trip.entity.Trip;
+import com.ieo.server.domain.trip.entity.TripPosition;
 import com.ieo.server.domain.trip.enums.PaymentType;
 import com.ieo.server.domain.trip.enums.TripStatus;
 import com.ieo.server.domain.user.entity.User;
@@ -14,10 +15,10 @@ import java.time.Instant;
 /**
  * 주선사 콘솔의 운행 한 건 (BRK-020, 021). 우리 회사 오더로 배차된 운행만 온다.
  *
- * 위치 규칙 (BRK-002): 단골 차주(linkedDriver)일 때만 locationVisible이고, 그때만 위치를 채운다.
+ * 위치 규칙 (BRK-002): 단골 차주(linkedDriver)일 때만 locationVisible이고, 그때만 location을 채운다.
  * 차주 번호도 단골일 때만 준다 (단골 목록에서 이미 보이는 번호).
- * 지금은 차량 앱이 위치를 보내지 않고 ETA도 계산하지 않아서 location·etaAt은 항상 null이다
- * (원작자와 형식을 정한 뒤 채운다. 06 문서 6장).
+ * etaAt·progressPercent는 위치가 아니라서 모두에게 준다.
+ * 셋 다 운행 중 마지막 위치(TripPosition, 운행마다 한 줄)에서 읽고, 위치가 아직 안 왔거나 상하차지에 머무는 중이면 null이다.
  * receipt는 수하인이 서명했거나 차주가 종이 인수증 사진을 올린 뒤에만 있다
  */
 public record BrokerTripResponse(
@@ -35,6 +36,7 @@ public record BrokerTripResponse(
 		boolean locationVisible,
 		Location location,
 		Instant etaAt,
+		Integer progressPercent,
 		int fare,
 		PaymentType paymentType,
 		String paymentTypeLabel,
@@ -46,8 +48,12 @@ public record BrokerTripResponse(
 		Instant canceledAt,
 		Instant createdAt) {
 
-	/** 차량의 마지막 위치. 아직 받지 않는다 */
+	/** 차량의 마지막 위치와 차에서 잰 시각 */
 	public record Location(double lat, double lng, Instant recordedAt) {
+
+		static Location of(TripPosition position) {
+			return new Location(position.getLat(), position.getLng(), position.getRecordedAt());
+		}
 	}
 
 	/** 전자인수증. path(/r/토큰)를 콘솔 주소 뒤에 붙이면 인수증 페이지다. 링크는 운행 완료 7일 뒤 만료 */
@@ -70,7 +76,8 @@ public record BrokerTripResponse(
 		}
 	}
 
-	public static BrokerTripResponse of(Trip trip, boolean linkedDriver,
+	/** position은 아직 위치가 없으면 null */
+	public static BrokerTripResponse of(Trip trip, boolean linkedDriver, TripPosition position,
 			BrokerTripStopResponse pickup, BrokerTripStopResponse dropoff,
 			DeliveryProof deliveryProof, boolean hasPaperPhoto) {
 		User user = trip.getDriver().getUser();
@@ -88,8 +95,9 @@ public record BrokerTripResponse(
 				vehicle.getTonnage(),
 				vehicle.getTonnage().getLabel(),
 				linkedDriver,
-				null,
-				null,
+				linkedDriver && position != null ? Location.of(position) : null,
+				position == null ? null : position.eta().orElse(null),
+				position == null ? null : position.progressPercent().orElse(null),
 				trip.getFare(),
 				trip.getPaymentType(),
 				trip.getPaymentType().getLabel(),

@@ -1,5 +1,6 @@
 package com.ieo.server.domain.dispatch.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -16,6 +17,7 @@ import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.site.repository.SiteRepository;
+import com.ieo.server.domain.trip.repository.TripPositionRepository;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.repository.UserRepository;
@@ -74,6 +76,9 @@ class DispatchControllerTest {
 
 	@Autowired
 	private JwtProvider jwtProvider;
+
+	@Autowired
+	private TripPositionRepository positionRepository;
 
 	private MockMvc mockMvc;
 	private String broker;
@@ -293,16 +298,27 @@ class DispatchControllerTest {
 
 		Integer requestId = idOf(request(driver, orderId));
 		mockMvc.perform(post("/api/broker/orders/" + orderId + "/requests/" + requestId + "/confirm").header("Authorization", broker));
+		String requests = mockMvc.perform(get("/api/dispatch-requests").header("Authorization", driver))
+				.andReturn().getResponse().getContentAsString();
+		Integer tripId = JsonPath.read(requests, "$[0].tripId");
+		// 출발해서 위치를 보낸 뒤 주선사가 취소하면 위치도 지워진다 (TRIP-011)
+		mockMvc.perform(post("/api/trips/" + tripId + "/start").header("Authorization", driver));
+		mockMvc.perform(post("/api/trips/" + tripId + "/locations").header("Authorization", driver)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"points\":[{\"recordedAt\":\"" + Instant.now().minusSeconds(60)
+								+ "\",\"lat\":36.5,\"lng\":127.0,\"remainMeters\":200000,\"remainSeconds\":9000}]}"))
+				.andExpect(status().isNoContent());
+		assertThat(positionRepository.findById(tripId.longValue())).isPresent();
+
 		cancelByBroker(orderId, "{\"reason\":\"SHIPPER_CANCELED\",\"reopen\":false}")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.status").value("CLOSED"));
 
-		String requests = mockMvc.perform(get("/api/dispatch-requests").header("Authorization", driver))
-				.andExpect(jsonPath("$[0].status").value("CANCELED"))
-				.andReturn().getResponse().getContentAsString();
-		Integer tripId = JsonPath.read(requests, "$[0].tripId");
+		mockMvc.perform(get("/api/dispatch-requests").header("Authorization", driver))
+				.andExpect(jsonPath("$[0].status").value("CANCELED"));
 		mockMvc.perform(get("/api/trips/" + tripId).header("Authorization", driver))
 				.andExpect(jsonPath("$.status").value("CANCELLED"));
+		assertThat(positionRepository.findById(tripId.longValue())).isEmpty();
 	}
 
 	@Test

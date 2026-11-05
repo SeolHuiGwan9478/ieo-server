@@ -42,3 +42,6 @@ data/
 
 # macOS
 .DS_Store
+
+# 로컬 환경변수 (.env.example은 커밋)
+.env

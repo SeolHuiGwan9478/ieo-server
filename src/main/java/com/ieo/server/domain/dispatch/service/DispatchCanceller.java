@@ -7,6 +7,7 @@ import com.ieo.server.domain.dispatch.repository.CancellationRepository;
 import com.ieo.server.domain.dispatch.repository.DispatchRequestRepository;
 import com.ieo.server.domain.dispatch.repository.OrderRepository;
 import com.ieo.server.domain.trip.entity.Trip;
+import com.ieo.server.domain.trip.service.TripLocationService;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
@@ -27,6 +28,7 @@ public class DispatchCanceller {
 	private final DispatchRequestRepository requestRepository;
 	private final CancellationRepository cancellationRepository;
 	private final OrderRepository orderRepository;
+	private final TripLocationService locationService;
 
 	/** reopen이면 오더를 다시 모집하고, 아니면 내린다. 차주가 취소하면 늘 다시 모집한다 */
 	public Cancellation cancel(Trip trip, User canceledBy, CancelReason reason, String memo, boolean reopen, Instant now) {
@@ -43,6 +45,8 @@ public class DispatchCanceller {
 			order.closeAfterCancel();
 		}
 		Cancellation cancellation = cancellationRepository.save(Cancellation.of(trip, canceledBy, reason, memo));
+		// 끝난 운행의 위치는 지운다. 차주 취소는 TripService도 지우지만 주선사 취소는 여기만 지난다
+		locationService.clear(trip);
 		try {
 			orderRepository.flush();
 		} catch (ObjectOptimisticLockingFailureException e) {
