@@ -94,11 +94,17 @@ public class DispatchRequest extends BaseTimeEntity {
 		this.status = DispatchRequestStatus.CONFIRMED;
 	}
 
-	/** 다른 차주가 확정되어 마감. 이미 끝난 요청은 그대로 둔다 */
-	public void decline() {
-		if (status == DispatchRequestStatus.PENDING) {
-			this.status = DispatchRequestStatus.DECLINED;
+	/**
+	 * 다른 차주가 확정되었거나 오더를 내려 마감. 이미 끝난 요청은 그대로 둔다.
+	 * 아직 기다리던 요청(만료 전)이었으면 true: 차주에게 마감을 알린다
+	 */
+	public boolean decline(Instant now) {
+		if (status != DispatchRequestStatus.PENDING) {
+			return false;
 		}
+		boolean waiting = statusAt(now) == DispatchRequestStatus.PENDING;
+		this.status = DispatchRequestStatus.DECLINED;
+		return waiting;
 	}
 
 	/** 차주가 철회 */

@@ -23,6 +23,10 @@ public interface DispatchRequestRepository extends JpaRepository<DispatchRequest
 	/** 차주가 걸어 둔 대기 중 요청 수 (DSP-024). since = 지금 − 10분: 그 전 요청은 만료 */
 	long countByDriverUserIdAndStatusAndCreatedAtAfter(Long userId, DispatchRequestStatus status, Instant since);
 
+	/** 만료됐는데 상태가 아직 PENDING인 내 요청 (until = 지금 − 10분). 놓친 만료 알림을 채울 때 */
+	List<DispatchRequest> findAllByDriverUserIdAndStatusAndCreatedAtLessThanEqual(
+			Long userId, DispatchRequestStatus status, Instant until);
+
 	/** 오더 목록에 내 요청 상태를 붙일 때 */
 	List<DispatchRequest> findAllByDriverUserIdAndOrderIdIn(Long userId, Collection<Long> orderIds);
 

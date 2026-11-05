@@ -178,8 +178,9 @@ public class BrokerOrderService {
 	public OrderResponse close(Long userId, Long orderId) {
 		Order order = findMine(requireMember(userId), orderId);
 		order.close();
-		requestRepository.findAllByOrderIdOrderByCreatedAtAsc(orderId).forEach(DispatchRequest::decline);
-		return OrderResponse.of(order, clock.instant(), null, null, 0L);
+		Instant now = clock.instant();
+		confirmer.declineWaiting(orderId, null, now);
+		return OrderResponse.of(order, now, null, null, 0L);
 	}
 
 	private Map<Long, Long> pendingCounts(List<Order> orders, Instant now) {

@@ -11,6 +11,7 @@ import com.ieo.server.domain.dispatch.entity.DispatchRequest;
 import com.ieo.server.domain.dispatch.entity.Order;
 import com.ieo.server.domain.dispatch.entity.OrderReport;
 import com.ieo.server.domain.dispatch.enums.ConfirmMode;
+import com.ieo.server.domain.dispatch.event.DispatchRequested;
 import com.ieo.server.domain.dispatch.enums.DispatchRequestStatus;
 import com.ieo.server.domain.dispatch.repository.DispatchRequestRepository;
 import com.ieo.server.domain.dispatch.repository.OrderReportRepository;
@@ -32,6 +33,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -62,6 +64,7 @@ public class DispatchService {
 	private final OrderReportRepository reportRepository;
 	private final BrokerMetricsService metricsService;
 	private final Clock clock;
+	private final ApplicationEventPublisher events;
 
 	/** 모집 중 오더. 상차가 빠른 순서. 좌표를 주면 상차지까지 직선거리로 거르고 distanceM을 붙인다 */
 	@Transactional(readOnly = true)
@@ -137,6 +140,8 @@ public class DispatchService {
 		Long tripId = null;
 		if (order.getConfirmMode() == ConfirmMode.FIRST) {
 			tripId = confirmer.confirm(order, request, now).getId();
+		} else {
+			events.publishEvent(new DispatchRequested(request.getId(), request.expiresAt()));
 		}
 		return DispatchRequestResponse.of(request, now, tripId);
 	}

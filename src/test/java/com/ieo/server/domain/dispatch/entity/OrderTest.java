@@ -132,7 +132,7 @@ class OrderTest {
 
 		request.confirm(NOW.plusSeconds(5 * 60));
 		assertThat(request.getStatus()).isEqualTo(DispatchRequestStatus.CONFIRMED);
-		request.decline();
+		assertThat(request.decline(NOW.plusSeconds(6 * 60))).isFalse();
 		assertThat(request.getStatus()).isEqualTo(DispatchRequestStatus.CONFIRMED);
 	}
 
