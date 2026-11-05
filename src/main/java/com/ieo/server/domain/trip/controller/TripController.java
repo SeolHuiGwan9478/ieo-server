@@ -63,7 +63,7 @@ public class TripController {
 		return tripService.start(userId, tripId);
 	}
 
-	/** 위치 보내기 (TRIP-013). 주행 중 30초, 정차 중 2분마다. 끊겼던 동안의 위치는 묶어서 한 번에 */
+	/** 위치 보내기 (TRIP-013). 주행 중 30초, 정차 중 5분마다. 끊겼던 동안의 위치는 묶어서 한 번에 */
 	@PostMapping("/{tripId}/locations")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void recordLocations(
