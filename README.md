@@ -16,7 +16,7 @@ accounts, loads and dispatch, trips, waiting records and the ledger.
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-6DB33F?logo=springboot&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
-![H2](https://img.shields.io/badge/H2-local-FF6C37)
+![PostGIS](https://img.shields.io/badge/PostGIS-3.7-FF6C37)
 
 [In-car app & docs (ieo-app)](https://github.com/SeolHuiGwan9478/ieo-app)
 
@@ -32,24 +32,30 @@ Current state: the account model is in place (users, driver and broker profiles,
 
 ## Getting started
 
-**Requirements:** JDK 21.
+**Requirements:** JDK 21, PostgreSQL with PostGIS (macOS: `brew install postgresql@18 postgis`).
+
+Create the local database once:
+
+```bash
+createdb ieo
+psql -d ieo -c 'CREATE EXTENSION IF NOT EXISTS postgis'
+```
 
 ```bash
 ./gradlew bootRun
 ```
 
-The default `local` profile uses an H2 file database under `data/`, so data survives restarts.
+The default `local` profile connects to `jdbc:postgresql://localhost:5432/ieo` as your OS user with no password. Override with `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`.
 
 | | URL |
 |---|---|
 | Health check | http://localhost:8080/actuator/health |
-| H2 console | http://localhost:8080/h2-console |
 
 ### Profiles
 
 | Profile | Database | Notes |
 |---|---|---|
-| `local` (default) | H2 file DB | For development |
+| `local` (default) | Local PostgreSQL + PostGIS (`ieo`) | For development |
 | `dev` | PostgreSQL | Needs `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` |
 | `prod` | PostgreSQL | Needs `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` |
 
@@ -62,6 +68,8 @@ The default `local` profile uses an H2 file database under `data/`, so data surv
 ```bash
 ./gradlew test
 ```
+
+Tests run on an in-memory H2 database, so they need no PostgreSQL.
 
 ## API
 

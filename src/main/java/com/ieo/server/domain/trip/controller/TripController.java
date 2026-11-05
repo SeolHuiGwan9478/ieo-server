@@ -2,6 +2,7 @@ package com.ieo.server.domain.trip.controller;
 
 import com.ieo.server.domain.trip.dto.CancelTripRequest;
 import com.ieo.server.domain.trip.dto.CreateTripRequest;
+import com.ieo.server.domain.trip.dto.TripLocationRequest;
 import com.ieo.server.domain.trip.dto.TripResponse;
 import com.ieo.server.domain.trip.service.TripService;
 import com.ieo.server.global.auth.AuthInterceptor;
@@ -60,6 +61,16 @@ public class TripController {
 	@PostMapping("/{tripId}/start")
 	public TripResponse start(@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @PathVariable Long tripId) {
 		return tripService.start(userId, tripId);
+	}
+
+	/** 위치 보내기 (TRIP-013). 주행 중 30초, 정차 중 2분마다. 끊겼던 동안의 위치는 묶어서 한 번에 */
+	@PostMapping("/{tripId}/locations")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void recordLocations(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long tripId,
+			@Valid @RequestBody TripLocationRequest request) {
+		tripService.recordLocations(userId, tripId, request);
 	}
 
 	/** 하차 완료 */

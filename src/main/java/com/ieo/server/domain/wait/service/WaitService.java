@@ -7,6 +7,7 @@ import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.trip.entity.TripStop;
 import com.ieo.server.domain.trip.enums.StopType;
 import com.ieo.server.domain.trip.repository.TripRepository;
+import com.ieo.server.domain.trip.service.TripLocationService;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.wait.dto.EditWaitRequest;
 import com.ieo.server.domain.wait.dto.WaitProofLinkResponse;
@@ -53,6 +54,7 @@ public class WaitService {
 	private final DriverRepository driverRepository;
 	private final SiteStatsCalculator siteStatsCalculator;
 	private final LedgerRecorder ledgerRecorder;
+	private final TripLocationService locationService;
 	private final Clock clock;
 
 	public record Arrival(WaitRecordResponse record, boolean created) {
@@ -103,6 +105,7 @@ public class WaitService {
 		} else {
 			trip.complete(departedAt);
 			ledgerRecorder.recordTrip(trip);
+			locationService.clear(trip);
 		}
 		siteStatsCalculator.recalculate(record.getTripStop().getSite());
 		return WaitRecordResponse.from(record);
