@@ -1,5 +1,6 @@
 package com.ieo.server.domain.ledger.service;
 
+import com.ieo.server.domain.broker.service.BrokerMetricsCalculator;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.ledger.dto.CreateLedgerEntryRequest;
@@ -48,6 +49,7 @@ public class LedgerService {
 	private final ExpenseRepository expenseRepository;
 	private final WaitRecordRepository waitRecordRepository;
 	private final DriverRepository driverRepository;
+	private final BrokerMetricsCalculator metricsCalculator;
 	private final Clock clock;
 
 	/** 기간 장부. 비우면 이번 달. 최근 날짜 먼저 */
@@ -73,6 +75,7 @@ public class LedgerService {
 	public LedgerEntryResponse update(Long userId, Long entryId, UpdateLedgerEntryRequest request) {
 		LedgerEntry entry = findMine(userId, entryId);
 		entry.edit(request.fare(), request.paymentType(), request.expectedPaymentDate());
+		metricsCalculator.recalculate(entry.getTrip());
 		return toResponse(entry);
 	}
 
@@ -103,6 +106,7 @@ public class LedgerService {
 		} else {
 			entry.unmarkPaid();
 		}
+		metricsCalculator.recalculate(entry.getTrip());
 		return toResponse(entry);
 	}
 
@@ -117,6 +121,7 @@ public class LedgerService {
 		} else {
 			income.unmarkPaid();
 		}
+		metricsCalculator.recalculate(income.getLedgerEntry().getTrip());
 		return ExtraIncomeResponse.from(income);
 	}
 

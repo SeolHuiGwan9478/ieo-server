@@ -1,5 +1,7 @@
 package com.ieo.server.domain.dispatch.service;
 
+import com.ieo.server.domain.broker.dto.BrokerMetricsResponse;
+import com.ieo.server.domain.broker.service.BrokerMetricsService;
 import com.ieo.server.domain.dispatch.dto.CreateDispatchRequestRequest;
 import com.ieo.server.domain.dispatch.dto.CreateOrderReportRequest;
 import com.ieo.server.domain.dispatch.dto.DispatchRequestResponse;
@@ -58,6 +60,7 @@ public class DispatchService {
 	private final TripRepository tripRepository;
 	private final DispatchConfirmer confirmer;
 	private final OrderReportRepository reportRepository;
+	private final BrokerMetricsService metricsService;
 	private final Clock clock;
 
 	/** 모집 중 오더. 상차가 빠른 순서. 좌표를 주면 상차지까지 직선거리로 거르고 distanceM을 붙인다 */
@@ -84,10 +87,12 @@ public class DispatchService {
 				.limit(limit)
 				.toList();
 		Map<Long, DispatchRequest> mine = myRequestsByOrder(userId, orders);
+		Map<Long, BrokerMetricsResponse> metrics = metricsService.getAll(
+				orders.stream().map(order -> order.getBroker().getId()).toList());
 		return orders.stream()
 				.map(order -> OrderResponse.of(order, now,
 						lat == null ? null : Math.round(order.getPickupSite().distanceMeters(lat, lng)),
-						toResponse(mine.get(order.getId()), now), null))
+						toResponse(mine.get(order.getId()), now), null, metrics.get(order.getBroker().getId())))
 				.toList();
 	}
 
@@ -98,7 +103,8 @@ public class DispatchService {
 		Order order = findVisible(userId, orderId);
 		Instant now = clock.instant();
 		DispatchRequest mine = requestRepository.findByOrderIdAndDriverUserId(orderId, userId).orElse(null);
-		return OrderResponse.of(order, now, null, toResponse(mine, now), null);
+		return OrderResponse.of(order, now, null, toResponse(mine, now), null,
+				metricsService.getAll(List.of(order.getBroker().getId())).get(order.getBroker().getId()));
 	}
 
 	/**

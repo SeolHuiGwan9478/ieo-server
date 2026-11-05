@@ -1,8 +1,10 @@
 package com.ieo.server.domain.broker.controller;
 
+import com.ieo.server.domain.broker.dto.BrokerMetricsResponse;
 import com.ieo.server.domain.broker.dto.CreateBrokerRequest;
 import com.ieo.server.domain.broker.dto.MyBrokerResponse;
 import com.ieo.server.domain.broker.dto.UpdateBrokerRequest;
+import com.ieo.server.domain.broker.service.BrokerMetricsService;
 import com.ieo.server.domain.broker.service.BrokerService;
 import com.ieo.server.global.auth.AuthInterceptor;
 import jakarta.validation.Valid;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class BrokerController {
 
 	private final BrokerService brokerService;
+	private final BrokerMetricsService metricsService;
 
 	/** 회사 등록. 등록한 계정이 대표가 된다. 이미 등록된 사업자등록번호면 409 BROKER_409_BUSINESS_NUMBER */
 	@PostMapping
@@ -47,5 +50,11 @@ public class BrokerController {
 	public MyBrokerResponse update(
 			@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @Valid @RequestBody UpdateBrokerRequest request) {
 		return brokerService.update(userId, request);
+	}
+
+	/** 우리 회사 신뢰 지표 (BRK-030~032). 차주 오더 카드에 보이는 것과 같다. 담당자 누구나 */
+	@GetMapping("/me/metrics")
+	public BrokerMetricsResponse getMyMetrics(@RequestAttribute(AuthInterceptor.USER_ID) Long userId) {
+		return metricsService.getMine(userId);
 	}
 }

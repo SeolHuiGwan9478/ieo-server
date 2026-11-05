@@ -141,7 +141,12 @@ class DispatchControllerTest {
 				.andExpect(jsonPath("$.length()").value(1))
 				.andExpect(jsonPath("$[0].id").value(fits))
 				.andExpect(jsonPath("$[0].distanceM").value(11119))
-				.andExpect(jsonPath("$[0].myRequest").doesNotExist());
+				.andExpect(jsonPath("$[0].myRequest").doesNotExist())
+				// 끝난 운행이 없는 새 회사라 신뢰 지표는 아직 공개 전 (BRK-032)
+				.andExpect(jsonPath("$[0].brokerMetrics.published").value(false))
+				.andExpect(jsonPath("$[0].brokerMetrics.sampleCount").value(0))
+				.andExpect(jsonPath("$[0].brokerMetrics.minSampleCount").value(20))
+				.andExpect(jsonPath("$[0].brokerMetrics.avgPaymentDays").doesNotExist());
 
 		mockMvc.perform(get("/api/orders").header("Authorization", driver)
 						.param("lat", "35.1").param("lng", "129.0").param("radiusM", "50000"))

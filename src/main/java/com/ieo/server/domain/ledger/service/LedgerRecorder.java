@@ -1,5 +1,6 @@
 package com.ieo.server.domain.ledger.service;
 
+import com.ieo.server.domain.broker.service.BrokerMetricsCalculator;
 import com.ieo.server.domain.dispatch.entity.Order;
 import com.ieo.server.domain.ledger.entity.ExtraIncome;
 import com.ieo.server.domain.ledger.entity.LedgerEntry;
@@ -26,6 +27,7 @@ public class LedgerRecorder {
 	private final LedgerEntryRepository entryRepository;
 	private final ExtraIncomeRepository extraIncomeRepository;
 	private final WaitRecordRepository waitRecordRepository;
+	private final BrokerMetricsCalculator metricsCalculator;
 
 	@Transactional
 	public void recordTrip(Trip trip) {
@@ -40,6 +42,7 @@ public class LedgerRecorder {
 				extraIncomeRepository.save(ExtraIncome.waitFee(entry, record, amount));
 			}
 		}
+		metricsCalculator.recalculate(trip);
 	}
 
 	/** 인수증이 서명되면 인수증 결제의 지급 예정일을 서명일 기준으로 다시 잡는다 (POD-008) */
@@ -47,6 +50,7 @@ public class LedgerRecorder {
 	public void onDeliveryProofSigned(Trip trip, LocalDate signedOn) {
 		entryRepository.findByTripId(trip.getId())
 				.ifPresent(entry -> entry.rebaseOnDeliveryProof(signedOn, settlementDays(trip)));
+		metricsCalculator.recalculate(trip);
 	}
 
 	/** 정산 일수: 오더의 지급 예정일 → 주선사 정산 주기 → 30일 */

@@ -1,5 +1,6 @@
 package com.ieo.server.domain.dispatch.dto;
 
+import com.ieo.server.domain.broker.dto.BrokerMetricsResponse;
 import com.ieo.server.domain.dispatch.entity.Order;
 import com.ieo.server.domain.dispatch.enums.CargoCategory;
 import com.ieo.server.domain.dispatch.enums.ConfirmMode;
@@ -13,7 +14,8 @@ import java.time.Instant;
 
 /**
  * 오더. 화면 표기(label)를 같이 준다. open은 지금 요청할 수 있는지(OPEN이고 상차 시간이 남음).
- * 보는 쪽에 따라 채워지는 값: 차주 목록은 distanceM·myRequest, 주선사 목록은 pendingRequestCount
+ * 보는 쪽에 따라 채워지는 값: 차주 목록은 distanceM·myRequest, 주선사 목록은 pendingRequestCount.
+ * brokerMetrics(주선사 신뢰 지표, BRK-031·DSP-011)는 차주가 볼 때만 채운다
  */
 public record OrderResponse(
 		Long id,
@@ -21,6 +23,7 @@ public record OrderResponse(
 		boolean open,
 		Long brokerId,
 		String brokerName,
+		BrokerMetricsResponse brokerMetrics,
 		OrderSiteResponse pickup,
 		OrderSiteResponse dropoff,
 		Instant pickupFrom,
@@ -54,12 +57,18 @@ public record OrderResponse(
 
 	public static OrderResponse of(Order order, Instant now, Long distanceM, DispatchRequestResponse myRequest,
 			Long pendingRequestCount) {
+		return of(order, now, distanceM, myRequest, pendingRequestCount, null);
+	}
+
+	public static OrderResponse of(Order order, Instant now, Long distanceM, DispatchRequestResponse myRequest,
+			Long pendingRequestCount, BrokerMetricsResponse brokerMetrics) {
 		return new OrderResponse(
 				order.getId(),
 				order.getStatus(),
 				order.isOpenAt(now),
 				order.getBroker().getId(),
 				order.getBroker().getName(),
+				brokerMetrics,
 				OrderSiteResponse.from(order.getPickupSite()),
 				OrderSiteResponse.from(order.getDropoffSite()),
 				order.getPickupFrom(),

@@ -1,5 +1,6 @@
 package com.ieo.server.domain.wait.service;
 
+import com.ieo.server.domain.broker.service.BrokerMetricsCalculator;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.ledger.service.LedgerRecorder;
@@ -53,6 +54,7 @@ public class WaitService {
 	private final TripRepository tripRepository;
 	private final DriverRepository driverRepository;
 	private final SiteStatsCalculator siteStatsCalculator;
+	private final BrokerMetricsCalculator metricsCalculator;
 	private final LedgerRecorder ledgerRecorder;
 	private final TripLocationService locationService;
 	private final Clock clock;
@@ -89,6 +91,7 @@ public class WaitService {
 		WaitRecord record = findRecord(userId, tripId, type);
 		record.startWork(resolveTime(at));
 		siteStatsCalculator.recalculate(record.getTripStop().getSite());
+		metricsCalculator.recalculate(record.getTripStop().getTrip());
 		return WaitRecordResponse.from(record);
 	}
 
@@ -122,6 +125,7 @@ public class WaitService {
 		}
 		record.edit(request.arrivedAt(), request.workStartedAt(), request.departedAt(), clock.instant());
 		siteStatsCalculator.recalculate(record.getTripStop().getSite());
+		metricsCalculator.recalculate(record.getTripStop().getTrip());
 		return WaitRecordResponse.from(record);
 	}
 

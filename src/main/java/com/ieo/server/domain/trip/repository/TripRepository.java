@@ -3,6 +3,7 @@ package com.ieo.server.domain.trip.repository;
 import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.trip.enums.TripSource;
 import com.ieo.server.domain.trip.enums.TripStatus;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -42,4 +43,8 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
 	@EntityGraph(attributePaths = {"driver.user", "vehicle", "order"})
 	Page<Trip> findAllByBrokerIdAndSourceAndStatusInOrderByCreatedAtDesc(
 			Long brokerId, TripSource source, Collection<TripStatus> statuses, Pageable pageable);
+
+	/** 주선사 신뢰 지표 표본: 기간 안에 끝난 운행 수 (BRK-032) */
+	long countByBrokerIdAndSourceAndStatusAndCompletedAtGreaterThanEqual(
+			Long brokerId, TripSource source, TripStatus status, Instant since);
 }

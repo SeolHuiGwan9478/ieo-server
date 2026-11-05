@@ -1,5 +1,6 @@
 package com.ieo.server.domain.wait.repository;
 
+import com.ieo.server.domain.trip.enums.TripSource;
 import com.ieo.server.domain.wait.entity.WaitRecord;
 import java.time.Instant;
 import java.util.Collection;
@@ -31,4 +32,12 @@ public interface WaitRecordRepository extends JpaRepository<WaitRecord, Long> {
 	/** since 이후 기록이 있는 상하차지 */
 	@Query("select distinct r.tripStop.site.id from WaitRecord r where r.arrivedAt >= :since")
 	List<Long> findSiteIdsArrivedSince(@Param("since") Instant since);
+
+	/** 주선사 신뢰 지표: 이 회사 오더로 배차된 운행에서 since 이후 진입한 기록 (BRK-030) */
+	@Query("""
+			select r from WaitRecord r
+			where r.tripStop.trip.broker.id = :brokerId and r.tripStop.trip.source = :source and r.arrivedAt >= :since
+			""")
+	List<WaitRecord> findAllForBrokerMetrics(@Param("brokerId") Long brokerId,
+			@Param("source") TripSource source, @Param("since") Instant since);
 }
