@@ -6,6 +6,7 @@ import com.ieo.server.domain.broker.dto.UpdateBrokerRequest;
 import com.ieo.server.domain.broker.entity.Broker;
 import com.ieo.server.domain.broker.entity.BrokerMember;
 import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
+import com.ieo.server.domain.broker.enums.BrokerPlan;
 import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
 import com.ieo.server.domain.broker.repository.BrokerRepository;
 import com.ieo.server.domain.user.entity.User;
@@ -32,6 +33,7 @@ public class BrokerService {
 	private final BrokerRepository brokerRepository;
 	private final BrokerMemberRepository memberRepository;
 	private final UserRepository userRepository;
+	private final BrokerPlanService planService;
 
 	public MyBrokerResponse register(Long userId, CreateBrokerRequest request) {
 		User user = requireBrokerUser(userId);
@@ -51,7 +53,7 @@ public class BrokerService {
 			throw new BusinessException(ErrorCode.BROKER_DUPLICATE_BUSINESS_NUMBER);
 		}
 		BrokerMember owner = memberRepository.save(BrokerMember.of(user, broker, BrokerMemberPosition.OWNER));
-		return MyBrokerResponse.from(owner);
+		return toResponse(owner);
 	}
 
 	/**
@@ -60,7 +62,7 @@ public class BrokerService {
 	 */
 	@Transactional(readOnly = true)
 	public MyBrokerResponse getMine(Long userId) {
-		return MyBrokerResponse.from(requireActiveMember(userId));
+		return toResponse(requireActiveMember(userId));
 	}
 
 	/**
@@ -85,7 +87,21 @@ public class BrokerService {
 		if (request.settlementDays() != null) {
 			broker.changeSettlementDays(request.settlementDays());
 		}
-		return MyBrokerResponse.from(member);
+		return toResponse(member);
+	}
+
+	/** 플랜 바꾸기 (대표만). 결제가 없어 바로 적용된다 (BILL-007) */
+	public MyBrokerResponse changePlan(Long userId, BrokerPlan plan) {
+		BrokerMember member = requireActiveMember(userId);
+		if (!member.isOwner()) {
+			throw new BusinessException(ErrorCode.BROKER_OWNER_ONLY);
+		}
+		planService.change(member.getBroker(), plan);
+		return toResponse(member);
+	}
+
+	private MyBrokerResponse toResponse(BrokerMember member) {
+		return MyBrokerResponse.from(member, planService.getPlan(member.getBroker().getId()));
 	}
 
 	private BrokerMember requireActiveMember(Long userId) {

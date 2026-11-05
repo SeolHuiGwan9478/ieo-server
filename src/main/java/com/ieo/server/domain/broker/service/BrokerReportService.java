@@ -6,6 +6,7 @@ import com.ieo.server.domain.broker.dto.report.ReportPeriod;
 import com.ieo.server.domain.broker.dto.report.RouteReportResponse;
 import com.ieo.server.domain.broker.dto.report.SiteReportResponse;
 import com.ieo.server.domain.broker.entity.BrokerMember;
+import com.ieo.server.domain.broker.enums.BrokerFeature;
 import com.ieo.server.domain.broker.enums.DriverLinkStatus;
 import com.ieo.server.domain.broker.repository.BrokerDriverLinkRepository;
 import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
@@ -45,7 +46,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 주선사 운행 데이터 리포트 (BRK-040~044). 담당자 누구나. 요금제(PRO 이상) 검사는 2-8에서 붙인다.
+ * 주선사 운행 데이터 리포트 (BRK-040~044). 담당자 누구나, 단 플랜이 PRO 이상이어야 한다 (BASIC은 403 PLAN_403_UPGRADE).
  *
  * 캐시 없이 조회할 때 계산한다. 리포트는 가끔 열고 기간이 매번 달라서 미리 계산해 둘 수 없다.
  * 노선·상하차지는 모든 회사의 Ieo 배차 운행으로 평균을 내고(그래야 값이 된다), 내 회사·차주 리포트는 우리 회사 것만 본다.
@@ -65,6 +66,7 @@ public class BrokerReportService {
 	private final OrderRepository orderRepository;
 	private final CancellationRepository cancellationRepository;
 	private final WaitRecordRepository waitRecordRepository;
+	private final BrokerPlanService planService;
 	private final Clock clock;
 
 	/** 노선·상하차지를 보여 주는 최소 건수 (BRK-044는 10. 데이터가 적은 동안 설정으로 낮춘다) */
@@ -73,7 +75,7 @@ public class BrokerReportService {
 
 	/** 노선별 운임·소요 시간 (BRK-040). 노선 = 상차지 시·군·구 → 하차지 시·군·구 */
 	public RouteReportResponse routes(Long userId, LocalDate from, LocalDate to) {
-		requireActiveMember(userId);
+		requireActiveMember(userId, BrokerFeature.REPORTS);
 		ReportPeriod period = ReportPeriod.of(from, to, clock);
 		List<Trip> trips = tripRepository.findAllBySourceAndStatusAndCompletedAtBetween(
 				TripSource.IEO_DISPATCH, TripStatus.COMPLETED, period.start(), period.end());
@@ -125,7 +127,7 @@ public class BrokerReportService {
 
 	/** 우리 회사 운행이 들른 상하차지의 대기·작업 시간 (BRK-041). 평균은 그곳의 모든 회사 기록으로 */
 	public SiteReportResponse sites(Long userId, LocalDate from, LocalDate to) {
-		BrokerMember member = requireActiveMember(userId);
+		BrokerMember member = requireActiveMember(userId, BrokerFeature.REPORTS);
 		ReportPeriod period = ReportPeriod.of(from, to, clock);
 		Set<Long> siteIds = ourTrips(member, period).stream()
 				.flatMap(trip -> trip.getStops().stream())
@@ -157,7 +159,7 @@ public class BrokerReportService {
 
 	/** 내 회사: 오더·배차·완료·취소 건수, 평균 배차 확정 시간, 차량별 이행률, 대기비 청구 가능액 (BRK-042) */
 	public CompanyReportResponse company(Long userId, LocalDate from, LocalDate to) {
-		BrokerMember member = requireActiveMember(userId);
+		BrokerMember member = requireActiveMember(userId, BrokerFeature.REPORTS);
 		ReportPeriod period = ReportPeriod.of(from, to, clock);
 		List<Trip> trips = ourTrips(member, period);
 		long orderCount = orderRepository.countByBrokerIdAndCreatedAtBetween(
@@ -199,7 +201,7 @@ public class BrokerReportService {
 
 	/** 함께 일한 차주의 이행 기록 (BRK-043): 완료·취소·늦은 취소·정시 도착 */
 	public DriverReportResponse drivers(Long userId, LocalDate from, LocalDate to) {
-		BrokerMember member = requireActiveMember(userId);
+		BrokerMember member = requireActiveMember(userId, BrokerFeature.DRIVER_RECORDS);
 		ReportPeriod period = ReportPeriod.of(from, to, clock);
 		List<Trip> trips = ourTrips(member, period);
 		Map<Long, Cancellation> cancellationByTrip = cancellations(trips);
@@ -269,7 +271,8 @@ public class BrokerReportService {
 		return total == 0 ? null : Math.round(count * 100f / total);
 	}
 
-	private BrokerMember requireActiveMember(Long userId) {
+	/** 소속·활성 확인 뒤 플랜에 그 기능이 있는지 본다 */
+	private BrokerMember requireActiveMember(Long userId, BrokerFeature feature) {
 		BrokerMember member = memberRepository.findById(userId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.BROKER_NO_MEMBERSHIP));
 		if (member.getUser().getStatus() == UserStatus.WITHDRAWN) {
@@ -278,6 +281,7 @@ public class BrokerReportService {
 		if (!member.isActive()) {
 			throw new BusinessException(ErrorCode.BROKER_MEMBER_REMOVED);
 		}
+		planService.requireFeature(member.getBroker().getId(), feature);
 		return member;
 	}
 }

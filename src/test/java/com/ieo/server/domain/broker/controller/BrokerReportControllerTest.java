@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ieo.server.domain.broker.dto.CreateBrokerRequest;
 import com.ieo.server.domain.broker.entity.Broker;
+import com.ieo.server.domain.broker.enums.BrokerPlan;
 import com.ieo.server.domain.broker.repository.BrokerRepository;
 import com.ieo.server.domain.broker.service.BrokerService;
 import com.ieo.server.domain.dispatch.entity.Cancellation;
@@ -113,6 +114,9 @@ class BrokerReportControllerTest {
 		brokerService.register(owner.getId(), new CreateBrokerRequest("한빛로지스", "1234567891", "제2026-001호", null));
 		rivalOwner = user("01090009102", UserRole.BROKER, "박대표");
 		brokerService.register(rivalOwner.getId(), new CreateBrokerRequest("경쟁물류", "9876543215", "제2026-002호", null));
+		// 리포트는 PRO부터 (BrokerPlanControllerTest). 여기서는 둘 다 PRO로
+		brokerService.changePlan(owner.getId(), BrokerPlan.PRO);
+		brokerService.changePlan(rivalOwner.getId(), BrokerPlan.PRO);
 		hanbit = broker("한빛로지스");
 		rival = broker("경쟁물류");
 		pyeongtaek = siteRepository.save(Site.create("평택 포승 물류센터", "경기도 평택시 포승읍 평택항로 156", 36.96, 126.83, null));

@@ -5,7 +5,7 @@ import com.ieo.server.domain.broker.entity.BrokerMember;
 import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
 import java.time.Instant;
 
-/** 내 주선사 회사와 그 안에서의 내 직책. 콘솔은 이걸로 메뉴(대표 전용 설정 등)를 그린다 */
+/** 내 주선사 회사와 그 안에서의 내 직책, 플랜. 콘솔은 이걸로 메뉴(대표 전용 설정, 플랜별 기능)를 그린다 */
 public record MyBrokerResponse(
 		Long id,
 		String name,
@@ -15,9 +15,10 @@ public record MyBrokerResponse(
 		int settlementDays,
 		BrokerMemberPosition position,
 		String positionLabel,
+		BrokerPlanResponse plan,
 		Instant createdAt) {
 
-	public static MyBrokerResponse from(BrokerMember member) {
+	public static MyBrokerResponse from(BrokerMember member, BrokerPlanResponse plan) {
 		Broker broker = member.getBroker();
 		return new MyBrokerResponse(
 				broker.getId(),
@@ -28,6 +29,7 @@ public record MyBrokerResponse(
 				broker.getSettlementDays(),
 				member.getPosition(),
 				member.getPosition().getLabel(),
+				plan,
 				broker.getCreatedAt());
 	}
 }

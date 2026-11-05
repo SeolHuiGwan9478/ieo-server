@@ -33,6 +33,7 @@ public class BrokerInvitationService {
 	private final BrokerInvitationRepository invitationRepository;
 	private final BrokerMemberRepository memberRepository;
 	private final UserRepository userRepository;
+	private final BrokerPlanService planService;
 	private final Clock clock;
 
 	@Transactional(readOnly = true)
@@ -54,10 +55,11 @@ public class BrokerInvitationService {
 			throw new BusinessException(
 					member.isActive() ? ErrorCode.BROKER_ALREADY_MEMBER : ErrorCode.BROKER_MEMBER_REMOVED);
 		});
+		planService.requireMemberRoomForAccept(invitation.getBroker().getId());
 		invitation.accept(clock.instant());
 		BrokerMember member = memberRepository.save(
 				BrokerMember.of(user, invitation.getBroker(), BrokerMemberPosition.STAFF));
-		return MyBrokerResponse.from(member);
+		return MyBrokerResponse.from(member, planService.getPlan(member.getBroker().getId()));
 	}
 
 	public void decline(Long userId, Long invitationId) {

@@ -1,6 +1,7 @@
 package com.ieo.server.domain.broker.controller;
 
 import com.ieo.server.domain.broker.dto.BrokerMetricsResponse;
+import com.ieo.server.domain.broker.dto.ChangePlanRequest;
 import com.ieo.server.domain.broker.dto.CreateBrokerRequest;
 import com.ieo.server.domain.broker.dto.MyBrokerResponse;
 import com.ieo.server.domain.broker.dto.UpdateBrokerRequest;
@@ -13,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -50,6 +52,13 @@ public class BrokerController {
 	public MyBrokerResponse update(
 			@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @Valid @RequestBody UpdateBrokerRequest request) {
 		return brokerService.update(userId, request);
+	}
+
+	/** 플랜 바꾸기 (대표만, 12장 BILL-007 테스트 모드). 결제가 없어 바로 적용된다. 담당자면 403 BROKER_403_OWNER */
+	@PutMapping("/me/plan")
+	public MyBrokerResponse changePlan(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @Valid @RequestBody ChangePlanRequest request) {
+		return brokerService.changePlan(userId, request.plan());
 	}
 
 	/** 우리 회사 신뢰 지표 (BRK-030~032). 차주 오더 카드에 보이는 것과 같다. 담당자 누구나 */
