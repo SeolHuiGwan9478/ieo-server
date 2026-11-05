@@ -78,6 +78,16 @@ class VehiclePleosTest {
 	}
 
 	@Test
+	void 차대번호_형식이_아니면_연결하지_않는다() throws Exception {
+		register(bearer, "경기82사1234", null);
+
+		// 차대번호를 모르는 차(에뮬레이터)는 "invalid"를 준다
+		resolve(bearer, "invalid")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("VEHICLE_400_VIN"));
+	}
+
+	@Test
 	void 차량이_여러_대면_고르게_하고_고른_차량이_기본이_된다() throws Exception {
 		register(bearer, "경기82사1234", null);
 		Integer secondId = idOf(register(bearer, "123바4567", null));

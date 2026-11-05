@@ -43,6 +43,7 @@ public enum ErrorCode {
 	VEHICLE_DUPLICATE_PLATE(HttpStatus.CONFLICT, "VEHICLE_409_PLATE", "이미 다른 계정에 등록된 차량 번호입니다. 고객센터로 문의해 주세요."),
 	VEHICLE_NOT_DRIVER(HttpStatus.FORBIDDEN, "VEHICLE_403_ROLE", "차주 계정만 차량을 등록할 수 있습니다."),
 	VEHICLE_IN_USE(HttpStatus.CONFLICT, "VEHICLE_409_IN_USE", "운행 기록이 있는 차량은 지울 수 없습니다."),
+	VEHICLE_INVALID_VIN(HttpStatus.BAD_REQUEST, "VEHICLE_400_VIN", "차대번호 형식이 아닙니다."),
 	VEHICLE_VIN_OTHER_OWNER(HttpStatus.CONFLICT, "VEHICLE_409_VIN", "이 차량은 다른 계정에 등록돼 있습니다. 내 차라면 고객센터로 문의해 주세요."),
 
 	// 주선사
