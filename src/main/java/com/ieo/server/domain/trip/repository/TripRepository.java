@@ -1,11 +1,14 @@
 package com.ieo.server.domain.trip.repository;
 
 import com.ieo.server.domain.trip.entity.Trip;
+import com.ieo.server.domain.trip.enums.TripSource;
 import com.ieo.server.domain.trip.enums.TripStatus;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TripRepository extends JpaRepository<Trip, Long> {
@@ -34,4 +37,9 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
 
 	/** 차주 이행 기록: 완료한 운행 수 */
 	long countByDriverUserIdAndStatus(Long userId, TripStatus status);
+
+	/** 주선사 콘솔: 우리 회사 운행 (BRK-020). 출처로 Ieo 배차 운행만 고른다 */
+	@EntityGraph(attributePaths = {"driver.user", "vehicle", "order"})
+	Page<Trip> findAllByBrokerIdAndSourceAndStatusInOrderByCreatedAtDesc(
+			Long brokerId, TripSource source, Collection<TripStatus> statuses, Pageable pageable);
 }

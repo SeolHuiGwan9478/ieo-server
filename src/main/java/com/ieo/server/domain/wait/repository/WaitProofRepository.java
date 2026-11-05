@@ -1,6 +1,8 @@
 package com.ieo.server.domain.wait.repository;
 
 import com.ieo.server.domain.wait.entity.WaitProof;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -10,4 +12,6 @@ public interface WaitProofRepository extends JpaRepository<WaitProof, Long> {
 	Optional<WaitProof> findByShareToken(String shareToken);
 
 	Optional<WaitProof> findByWaitRecordId(Long waitRecordId);
+
+	List<WaitProof> findAllByWaitRecordIdIn(Collection<Long> waitRecordIds);
 }
