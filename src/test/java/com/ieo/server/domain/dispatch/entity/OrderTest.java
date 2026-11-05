@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.ieo.server.domain.broker.entity.Broker;
 import com.ieo.server.domain.broker.entity.BrokerMember;
 import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
+import com.ieo.server.domain.dispatch.enums.CargoCategory;
 import com.ieo.server.domain.dispatch.enums.ConfirmMode;
 import com.ieo.server.domain.dispatch.enums.ConsignmentType;
 import com.ieo.server.domain.dispatch.enums.DispatchRequestStatus;
@@ -55,6 +56,7 @@ class OrderTest {
 		assertThat(order.getStatus()).isEqualTo(OrderStatus.OPEN);
 		assertThat(order.getConfirmMode()).isEqualTo(ConfirmMode.SELECT);
 		assertThat(order.getBroker().getName()).isEqualTo("한빛로지스");
+		assertThat(order.getCargoCategory()).isEqualTo(CargoCategory.GENERAL);
 		assertThat(order.getCargoType()).isEqualTo("음료 파레트");
 		assertThat(order.isOpenAt(NOW)).isTrue();
 		assertThat(order.isOpenAt(PICKUP_FROM.plusSeconds(2 * 3600))).isFalse();
@@ -64,6 +66,8 @@ class OrderTest {
 	@Test
 	void 필수_항목이_빠지거나_시간_순서가_틀리면_등록되지_않는다() {
 		assertThatThrownBy(() -> draft().cargoType(" ").create())
+				.extracting("errorCode").isEqualTo(ErrorCode.ORDER_INVALID);
+		assertThatThrownBy(() -> draft().cargoCategory(null).create())
 				.extracting("errorCode").isEqualTo(ErrorCode.ORDER_INVALID);
 		assertThatThrownBy(() -> draft().loadingMethod(null).create())
 				.extracting("errorCode").isEqualTo(ErrorCode.ORDER_INVALID);
@@ -150,6 +154,18 @@ class OrderTest {
 		assertThat(trip.dropoff().getPlannedAt()).isEqualTo(order.getDropoffBy());
 	}
 
+	@Test
+	void 냉동_냉장_화물은_냉동_냉장_차로만_올릴_수_있다() {
+		assertThatThrownBy(() -> draft().cargoCategory(CargoCategory.COLD).bodyType(BodyType.WING).create())
+				.extracting("errorCode").isEqualTo(ErrorCode.ORDER_INVALID);
+
+		Order cold = draft().cargoCategory(CargoCategory.COLD).bodyType(BodyType.REFRIGERATED).create();
+		Order generalInFridge = draft().bodyType(BodyType.REFRIGERATED).create();
+
+		assertThat(cold.getCargoCategory()).isEqualTo(CargoCategory.COLD);
+		assertThat(generalInFridge.getCargoCategory()).isEqualTo(CargoCategory.GENERAL);
+	}
+
 	private Order.OrderBuilder draft() {
 		return Order.draft()
 				.createdBy(member)
@@ -158,6 +174,7 @@ class OrderTest {
 				.pickupFrom(PICKUP_FROM)
 				.pickupUntil(PICKUP_FROM.plusSeconds(2 * 3600))
 				.dropoffBy(PICKUP_FROM.plusSeconds(8 * 3600))
+				.cargoCategory(CargoCategory.GENERAL)
 				.cargoType(" 음료 파레트 ")
 				.weightKg(4500)
 				.tonnage(Tonnage.TON_5)

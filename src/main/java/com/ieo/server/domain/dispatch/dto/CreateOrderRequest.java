@@ -1,5 +1,6 @@
 package com.ieo.server.domain.dispatch.dto;
 
+import com.ieo.server.domain.dispatch.enums.CargoCategory;
 import com.ieo.server.domain.dispatch.enums.ConfirmMode;
 import com.ieo.server.domain.dispatch.enums.ConsignmentType;
 import com.ieo.server.domain.dispatch.enums.LoadingMethod;
@@ -14,6 +15,7 @@ import java.time.Instant;
  * 오더 등록 (DSP-001). 필수 항목 검사·값 범위는 Order가 한다 (DSP-002).
  * confirmMode를 비우면 SELECT, targetDriverId가 있으면 그 차주에게만 보인다 (지정 배차, DSP-006).
  * 지정은 우리 회사 단골 차주에게만 할 수 있다 (BRK-002, 아니면 400 ORDER_400_TARGET). 비우면 오더 마켓에 공개.
+ * cargoCategory는 목록(일반·냉동·냉장·이사·위험물), cargoType은 자세한 품목. 냉동·냉장이면 차종도 냉동·냉장이어야 한다.
  * expectedPaymentDays(인수증 후 지급까지 일수)를 비우면 회사 정산 주기로 채운다 (BRK-003)
  */
 public record CreateOrderRequest(
@@ -22,6 +24,7 @@ public record CreateOrderRequest(
 		@NotNull Instant pickupFrom,
 		@NotNull Instant pickupUntil,
 		@NotNull Instant dropoffBy,
+		CargoCategory cargoCategory,
 		String cargoType,
 		Integer weightKg,
 		Tonnage tonnage,

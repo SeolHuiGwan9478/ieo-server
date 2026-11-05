@@ -119,7 +119,7 @@ def order(pickup, dropoff, day, from_h, until_h, by_h, cargo, fare, **extra):
     body = {"pickup": pickup, "dropoff": dropoff,
             "pickupFrom": kst(day, from_h), "pickupUntil": kst(day, until_h),
             "dropoffBy": kst(day + timedelta(days=1) if by_h < from_h else day, by_h),
-            "cargoType": cargo, "tonnage": "TON_5", "bodyType": "CARGO", "loadingMethod": "FORKLIFT",
+            "cargoCategory": "GENERAL", "cargoType": cargo, "tonnage": "TON_5", "bodyType": "CARGO", "loadingMethod": "FORKLIFT",
             "weightKg": 4500, "fare": fare, "paymentType": "RECEIPT", "expectedPaymentDays": 30,
             "consignmentType": "DIRECT"}
     body.update(extra)

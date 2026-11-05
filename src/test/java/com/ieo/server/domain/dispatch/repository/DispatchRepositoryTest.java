@@ -10,6 +10,7 @@ import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
 import com.ieo.server.domain.broker.repository.BrokerRepository;
 import com.ieo.server.domain.dispatch.entity.DispatchRequest;
 import com.ieo.server.domain.dispatch.entity.Order;
+import com.ieo.server.domain.dispatch.enums.CargoCategory;
 import com.ieo.server.domain.dispatch.enums.ConsignmentType;
 import com.ieo.server.domain.dispatch.enums.DispatchRequestStatus;
 import com.ieo.server.domain.dispatch.enums.LoadingMethod;
@@ -163,6 +164,7 @@ class DispatchRepositoryTest {
 				.pickupFrom(pickupFrom)
 				.pickupUntil(pickupFrom.plus(Duration.ofHours(2)))
 				.dropoffBy(pickupFrom.plus(Duration.ofHours(8)))
+				.cargoCategory(CargoCategory.GENERAL)
 				.cargoType("음료 파레트")
 				.weightKg(4500)
 				.tonnage(Tonnage.TON_5)

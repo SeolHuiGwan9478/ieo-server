@@ -1,6 +1,7 @@
 package com.ieo.server.domain.dispatch.dto;
 
 import com.ieo.server.domain.dispatch.entity.Order;
+import com.ieo.server.domain.dispatch.enums.CargoCategory;
 import com.ieo.server.domain.dispatch.enums.ConfirmMode;
 import com.ieo.server.domain.dispatch.enums.ConsignmentType;
 import com.ieo.server.domain.dispatch.enums.LoadingMethod;
@@ -25,6 +26,8 @@ public record OrderResponse(
 		Instant pickupFrom,
 		Instant pickupUntil,
 		Instant dropoffBy,
+		CargoCategory cargoCategory,
+		String cargoCategoryLabel,
 		String cargoType,
 		int weightKg,
 		Tonnage tonnage,
@@ -62,6 +65,8 @@ public record OrderResponse(
 				order.getPickupFrom(),
 				order.getPickupUntil(),
 				order.getDropoffBy(),
+				order.getCargoCategory(),
+				order.getCargoCategory().getLabel(),
 				order.getCargoType(),
 				order.getWeightKg(),
 				order.getTonnage(),

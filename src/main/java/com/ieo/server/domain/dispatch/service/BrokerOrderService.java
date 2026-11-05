@@ -74,6 +74,7 @@ public class BrokerOrderService {
 				.pickupFrom(request.pickupFrom())
 				.pickupUntil(request.pickupUntil())
 				.dropoffBy(request.dropoffBy())
+				.cargoCategory(request.cargoCategory())
 				.cargoType(request.cargoType())
 				.weightKg(request.weightKg())
 				.tonnage(request.tonnage())

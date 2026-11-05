@@ -108,9 +108,18 @@ class DispatchControllerTest {
 				.andExpect(jsonPath("$.tonnageLabel").value("5톤"))
 				.andExpect(jsonPath("$.bodyTypeLabel").exists())
 				.andExpect(jsonPath("$.loadingMethodLabel").value("지게차"))
+				.andExpect(jsonPath("$.cargoCategory").value("GENERAL"))
+				.andExpect(jsonPath("$.cargoCategoryLabel").value("일반"))
+				.andExpect(jsonPath("$.cargoType").value("음료 파레트"))
 				.andExpect(jsonPath("$.pendingRequestCount").value(0));
 
 		registerOrder(orderJson("TON_5", "WING", "SELECT", null).replace("\"cargoType\": \"음료 파레트\",", ""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("ORDER_400"));
+		registerOrder(orderJson("TON_5", "WING", "SELECT", null).replace("\"cargoCategory\": \"GENERAL\", ", ""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("ORDER_400"));
+		registerOrder(orderJson("TON_5", "WING", "SELECT", null).replace("\"GENERAL\"", "\"COLD\""))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("ORDER_400"));
 		mockMvc.perform(post("/api/broker/orders").header("Authorization", driver)
@@ -380,7 +389,7 @@ class DispatchControllerTest {
 				{"pickup": {"siteId": %d},
 				 "dropoff": {"site": {"name": "대구 성서 공단", "address": "대구 달서구", "lat": 35.84, "lng": 128.49}},
 				 "pickupFrom": "%s", "pickupUntil": "%s", "dropoffBy": "%s",
-				 "cargoType": "음료 파레트",
+				 "cargoCategory": "GENERAL", "cargoType": "음료 파레트",
 				 "weightKg": 4500, "tonnage": "%s", "bodyType": "%s", "loadingMethod": "FORKLIFT",
 				 "fare": 450000, "paymentType": "RECEIPT", "expectedPaymentDays": 15,
 				 "consignmentType": "DIRECT", "confirmMode": "%s", "targetDriverId": %s}

@@ -2,6 +2,7 @@ package com.ieo.server.domain.dispatch.entity;
 
 import com.ieo.server.domain.broker.entity.Broker;
 import com.ieo.server.domain.broker.entity.BrokerMember;
+import com.ieo.server.domain.dispatch.enums.CargoCategory;
 import com.ieo.server.domain.dispatch.enums.ConfirmMode;
 import com.ieo.server.domain.dispatch.enums.ConsignmentType;
 import com.ieo.server.domain.dispatch.enums.LoadingMethod;
@@ -33,6 +34,7 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -86,7 +88,14 @@ public class Order extends BaseTimeEntity {
 	@Column(nullable = false)
 	private Instant dropoffBy;
 
-	/** 화물 종류. 예: 음료 파레트 */
+	/** 화물 종류 (일반·냉동·냉장·이사·위험물). 이 칸이 생기기 전 오더는 일반으로 채운다 */
+	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.VARCHAR)
+	@ColumnDefault("'GENERAL'")
+	@Column(nullable = false, length = 20)
+	private CargoCategory cargoCategory;
+
+	/** 자세한 품목 (자유 입력). 예: 음료 파레트 12개. 인수증에 품목으로 나온다 */
 	@Column(nullable = false, length = 50)
 	private String cargoType;
 
@@ -149,12 +158,12 @@ public class Order extends BaseTimeEntity {
 	@Builder(builderMethodName = "draft", buildMethodName = "create")
 	private Order(BrokerMember createdBy, Site pickupSite, Site dropoffSite,
 			Instant pickupFrom, Instant pickupUntil, Instant dropoffBy,
-			String cargoType, Integer weightKg, Tonnage tonnage, BodyType bodyType, LoadingMethod loadingMethod,
+			CargoCategory cargoCategory, String cargoType, Integer weightKg, Tonnage tonnage, BodyType bodyType, LoadingMethod loadingMethod,
 			Integer fare, PaymentType paymentType, Integer expectedPaymentDays,
 			ConsignmentType consignmentType, ConfirmMode confirmMode, Driver targetDriver) {
 		if (createdBy == null || pickupSite == null || dropoffSite == null
 				|| tonnage == null || bodyType == null || loadingMethod == null || paymentType == null
-				|| consignmentType == null || cargoType == null || cargoType.isBlank()) {
+				|| consignmentType == null || cargoCategory == null || cargoType == null || cargoType.isBlank()) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID, "오더 필수 항목을 모두 입력해 주세요.");
 		}
 		if (pickupFrom == null || pickupUntil == null || dropoffBy == null
@@ -166,6 +175,9 @@ public class Order extends BaseTimeEntity {
 				|| expectedPaymentDays == null || expectedPaymentDays < 0 || expectedPaymentDays > MAX_PAYMENT_DAYS) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID, "무게, 운임, 지급 예정일 값을 확인해 주세요.");
 		}
+		if (cargoCategory == CargoCategory.COLD && bodyType != BodyType.REFRIGERATED) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID, "냉동·냉장 화물은 차종을 냉동·냉장으로 골라 주세요.");
+		}
 		this.broker = createdBy.getBroker();
 		this.createdBy = createdBy;
 		this.pickupSite = pickupSite;
@@ -173,6 +185,7 @@ public class Order extends BaseTimeEntity {
 		this.pickupFrom = pickupFrom;
 		this.pickupUntil = pickupUntil;
 		this.dropoffBy = dropoffBy;
+		this.cargoCategory = cargoCategory;
 		this.cargoType = cargoType.strip();
 		this.weightKg = weightKg;
 		this.tonnage = tonnage;
