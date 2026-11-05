@@ -29,4 +29,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 			order by o.pickupFrom asc
 			""")
 	List<Order> findOpenFor(@Param("driverId") Long driverId, @Param("now") Instant now, Pageable pageable);
+
+	/** 리포트: 기간 안에 등록한 오더 수 (BRK-042) */
+	long countByBrokerIdAndCreatedAtBetween(Long brokerId, Instant from, Instant to);
 }

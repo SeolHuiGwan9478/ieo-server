@@ -47,4 +47,12 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
 	/** 주선사 신뢰 지표 표본: 기간 안에 끝난 운행 수 (BRK-032) */
 	long countByBrokerIdAndSourceAndStatusAndCompletedAtGreaterThanEqual(
 			Long brokerId, TripSource source, TripStatus status, Instant since);
+
+	/** 리포트: 기간 안에 끝난 Ieo 배차 운행, 모든 회사 (BRK-040 노선별 운임·소요 시간) */
+	@EntityGraph(attributePaths = {"stops", "stops.site"})
+	List<Trip> findAllBySourceAndStatusAndCompletedAtBetween(TripSource source, TripStatus status, Instant from, Instant to);
+
+	/** 리포트: 우리 회사 운행 중 기간 안에 배차된 것, 상태 무관 (BRK-042, 043) */
+	@EntityGraph(attributePaths = {"driver.user", "vehicle", "order", "stops", "stops.site"})
+	List<Trip> findAllByBrokerIdAndSourceAndCreatedAtBetween(Long brokerId, TripSource source, Instant from, Instant to);
 }

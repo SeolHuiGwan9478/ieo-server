@@ -40,4 +40,12 @@ public interface WaitRecordRepository extends JpaRepository<WaitRecord, Long> {
 			""")
 	List<WaitRecord> findAllForBrokerMetrics(@Param("brokerId") Long brokerId,
 			@Param("source") TripSource source, @Param("since") Instant since);
+
+	/** 리포트: 이 상하차지들에서 기간 안에 진입한 Ieo 배차 운행의 기록, 모든 회사 (BRK-041) */
+	@Query("""
+			select r from WaitRecord r join fetch r.tripStop s join fetch s.site
+			where s.site.id in :siteIds and s.trip.source = :source and r.arrivedAt between :from and :to
+			""")
+	List<WaitRecord> findAllForSiteReport(@Param("siteIds") Collection<Long> siteIds, @Param("source") TripSource source,
+			@Param("from") Instant from, @Param("to") Instant to);
 }

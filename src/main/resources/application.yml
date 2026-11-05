@@ -23,6 +23,9 @@ management:
 
 # 토큰. secret은 32바이트 이상, 환경변수로 주입 (local·test는 각 파일에 개발용 값)
 ieo:
+  # 리포트에서 노선·상하차지를 보여 주는 최소 건수 (BRK-044). 로컬·테스트는 낮춰 둔다
+  report:
+    min-samples: 10
   jwt:
     secret: ${JWT_SECRET}
     access-token-ttl: 30m

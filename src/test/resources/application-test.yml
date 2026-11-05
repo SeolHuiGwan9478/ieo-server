@@ -9,6 +9,9 @@ spring:
       ddl-auto: create-drop
 
 ieo:
+  # 리포트에서 노선·상하차지를 보여 주는 최소 건수 (BRK-044는 10, 데이터가 적은 동안 낮춤)
+  report:
+    min-samples: 2
   jwt:
     secret: test-only-secret-0123456789-abcdefghij
   vin:
