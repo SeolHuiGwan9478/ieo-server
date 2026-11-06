@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 /**
  * 배차 추천 계산에 쓰는 값 (application.yml의 ieo.recommendation). 가안은 docs/design/04_배차추천.md 3장.
  *
- * @param dieselPriceWon      경유 1L 가격(원). 나중에 오피넷 지역 평균으로 바꾼다
+ * @param dieselPriceWon      오피넷 경유가를 받지 못했을 때 쓰는 1L 가격(원)
  * @param roadFactor          직선거리에 곱해 도로 거리로 어림하는 값
  * @param averageSpeedKph     공차 이동 시간을 어림하는 평균 속도
  * @param defaultFinishMinutes 하차지 통계가 없을 때 하차 도착부터 끝날 때까지(분)

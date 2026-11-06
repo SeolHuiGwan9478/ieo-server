@@ -73,6 +73,7 @@ public class RecommendationService {
 	private final DispatchService dispatchService;
 	private final BrokerMetricsService metricsService;
 	private final EmptyRunEstimator emptyRunEstimator;
+	private final DieselPrices dieselPrices;
 	private final RecommendationProperties properties;
 	private final Clock clock;
 
@@ -90,13 +91,15 @@ public class RecommendationService {
 		Instant freeAt = freeAt(trip, dropoff, now);
 		Vehicle vehicle = trip.getVehicle();
 		double kmPerLiter = kmPerLiter(vehicle);
+		// 공차는 하차지에서 시작하므로 하차지 시도의 경유가
+		int dieselWon = dieselPrices.wonPerLiter(dropoff.getAddress());
 		Set<Long> skip = skippedOrderIds(userId, trip);
 
 		List<Candidate> candidates = orderRepository.findOpenNear(userId, now, dropoff.getLat(), dropoff.getLng(),
 						preference.getRadiusKm() * 1000.0, CANDIDATE_LIMIT).stream()
 				.filter(order -> !skip.contains(order.getId()))
 				.filter(order -> order.fits(vehicle))
-				.map(order -> candidate(order, dropoff, kmPerLiter))
+				.map(order -> candidate(order, dropoff, kmPerLiter, dieselWon))
 				.filter(candidate -> !freeAt.plus(candidate.run().duration()).isAfter(candidate.order().getPickupUntil()))
 				.filter(candidate -> preference.getMinNetProfit() == null || candidate.netProfit() >= preference.getMinNetProfit())
 				.sorted(Comparator.comparingInt(Candidate::netProfit).reversed()
@@ -197,9 +200,9 @@ public class RecommendationService {
 	}
 
 	/** 실수익 = 운임 − 공차 연료비 − 통행료(지금은 0) (REC-010) */
-	private Candidate candidate(Order order, Site dropoff, double kmPerLiter) {
+	private Candidate candidate(Order order, Site dropoff, double kmPerLiter, int dieselWon) {
 		EmptyRun run = emptyRunEstimator.estimate(dropoff, order.getPickupSite());
-		int fuelCost = (int) Math.round(run.meters() / 1000.0 / kmPerLiter * properties.dieselPriceWon());
+		int fuelCost = (int) Math.round(run.meters() / 1000.0 / kmPerLiter * dieselWon);
 		return new Candidate(order, run, fuelCost, order.getFare() - fuelCost);
 	}
 
