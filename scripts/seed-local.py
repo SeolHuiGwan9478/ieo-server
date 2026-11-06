@@ -162,8 +162,10 @@ def main():
     gimpo = site("김포 한강 물류", "경기 김포시 고촌읍 아라육로 42", 37.6060, 126.7720)
 
     orders = [
-        order(pyeongtaek, daejeon, today, soon, min(soon + 2, 23), min(soon + 6, 23), "파레트 12개 (식품)", 320000),
-        order(icheon, busan, today, soon, min(soon + 3, 23), 9, "건축 자재", 580000),
+        # 청구운임(화주)은 선택. 적으면 콘솔에 수수료(청구 − 지급)가 보인다. 차주에게는 안 나간다
+        order(pyeongtaek, daejeon, today, soon, min(soon + 2, 23), min(soon + 6, 23), "파레트 12개 (식품)", 320000,
+              billedFare=400000, customerName="대한식품"),
+        order(icheon, busan, today, soon, min(soon + 3, 23), 9, "건축 자재", 580000, feeRate=12.5, customerName="성원건설"),
         order(gimpo, pyeongtaek, tomorrow, 8, 10, 14, "가전 박스", 260000, paymentType="PREPAID"),
         order(daejeon, gimpo, tomorrow, 13, 15, 19, "기계 부품", 0),
     ]

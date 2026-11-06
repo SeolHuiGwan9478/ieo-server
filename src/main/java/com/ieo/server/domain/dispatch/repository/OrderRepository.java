@@ -50,4 +50,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
 	/** 리포트: 기간 안에 등록한 오더 수 (BRK-042) */
 	long countByBrokerIdAndCreatedAtBetween(Long brokerId, Instant from, Instant to);
+
+	/** 대시보드: 기간 안에 등록한 오더 (등록 날짜별로 센다) */
+	List<Order> findAllByBrokerIdAndCreatedAtBetween(Long brokerId, Instant from, Instant to);
 }

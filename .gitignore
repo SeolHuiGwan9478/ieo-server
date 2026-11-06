@@ -45,3 +45,6 @@ data/
 
 # 로컬 환경변수 (.env.example은 커밋)
 .env
+
+# 로컬 서버 로그 (bootRun > server.log)
+*.log

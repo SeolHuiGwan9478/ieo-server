@@ -116,7 +116,12 @@ class DispatchControllerTest {
 				.andExpect(jsonPath("$.cargoCategory").value("GENERAL"))
 				.andExpect(jsonPath("$.cargoCategoryLabel").value("일반"))
 				.andExpect(jsonPath("$.cargoType").value("음료 파레트"))
-				.andExpect(jsonPath("$.pendingRequestCount").value(0));
+				.andExpect(jsonPath("$.pendingRequestCount").value(0))
+				.andExpect(jsonPath("$.fare").value(450000))
+				.andExpect(jsonPath("$.billing.customerName").value("대한제강"))
+				.andExpect(jsonPath("$.billing.billedFare").value(600000))
+				.andExpect(jsonPath("$.billing.fee").value(150000))
+				.andExpect(jsonPath("$.billing.feeRate").value(25.0));
 
 		registerOrder(orderJson("TON_5", "WING", "SELECT", null).replace("\"cargoType\": \"음료 파레트\",", ""))
 				.andExpect(status().isBadRequest())
@@ -131,6 +136,31 @@ class DispatchControllerTest {
 						.contentType(MediaType.APPLICATION_JSON).content(orderJson("TON_5", "WING", "SELECT", null)))
 				.andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.code").value("ORDER_403_ROLE"));
+	}
+
+	@Test
+	void 청구운임은_수수료율로_계산할_수_있고_비우면_수수료가_없다() throws Exception {
+		// 지급 450,000원, 수수료율 25% → 청구 600,000원 (수수료 150,000원 = 청구의 25%)
+		registerOrder(orderJson("TON_5", "WING", "SELECT", null).replace("\"billedFare\": 600000,", "\"feeRate\": 25,"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.billing.billedFare").value(600000))
+				.andExpect(jsonPath("$.billing.feeRate").value(25.0));
+		// 12.5% → 514,285.7원 → 1,000원 단위 반올림 514,000원
+		registerOrder(orderJson("TON_5", "WING", "SELECT", null).replace("\"billedFare\": 600000,", "\"feeRate\": 12.5,"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.billing.billedFare").value(514000));
+		// 둘 다 비우면 거래처만 남고 수수료는 없다
+		registerOrder(orderJson("TON_5", "WING", "SELECT", null).replace("\"billedFare\": 600000,", ""))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.billing.customerName").value("대한제강"))
+				.andExpect(jsonPath("$.billing.billedFare").doesNotExist())
+				.andExpect(jsonPath("$.billing.fee").doesNotExist());
+		registerOrder(orderJson("TON_5", "WING", "SELECT", null).replace("\"billedFare\": 600000,", "\"feeRate\": 100,"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("BROKER_400_FEE_RATE"));
+		registerOrder(orderJson("TON_5", "WING", "SELECT", null).replace("\"billedFare\": 600000,", "\"billedFare\": -1,"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("ORDER_400"));
 	}
 
 	@Test
@@ -215,7 +245,9 @@ class DispatchControllerTest {
 				.andExpect(jsonPath("$.tripId").exists());
 		mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", driver))
 				.andExpect(jsonPath("$.status").value("ASSIGNED"))
-				.andExpect(jsonPath("$.myRequest.status").value("CONFIRMED"));
+				.andExpect(jsonPath("$.myRequest.status").value("CONFIRMED"))
+				.andExpect(jsonPath("$.fare").value(450000))
+				.andExpect(jsonPath("$.billing").doesNotExist()); // 청구운임·거래처는 차주에게 안 보인다
 	}
 
 	@Test
@@ -412,7 +444,7 @@ class DispatchControllerTest {
 				 "pickupFrom": "%s", "pickupUntil": "%s", "dropoffBy": "%s",
 				 "cargoCategory": "GENERAL", "cargoType": "음료 파레트",
 				 "weightKg": 4500, "tonnage": "%s", "bodyType": "%s", "loadingMethod": "FORKLIFT",
-				 "fare": 450000, "paymentType": "RECEIPT", "expectedPaymentDays": 15,
+				 "fare": 450000, "billedFare": 600000, "customerName": "대한제강", "paymentType": "RECEIPT", "expectedPaymentDays": 15,
 				 "consignmentType": "DIRECT", "confirmMode": "%s", "targetDriverId": %s}
 				""".formatted(pyeongtaek.getId(), pickupFrom, pickupFrom.plus(Duration.ofHours(2)),
 				pickupFrom.plus(Duration.ofHours(8)), tonnage, bodyType, confirmMode, targetDriverId);

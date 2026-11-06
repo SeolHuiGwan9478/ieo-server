@@ -1,6 +1,7 @@
 package com.ieo.server.domain.broker.dto;
 
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 
 /**
  * 회사 정보 수정 (대표만). 보낸 항목만 바꾸고, 비운(null) 항목은 그대로 둔다.
@@ -11,5 +12,6 @@ public record UpdateBrokerRequest(
 		@Size(max = 50) String name,
 		@Size(max = 30) String licenseNumber,
 		@Size(max = 30) String representativeName,
-		Integer settlementDays) {
+		Integer settlementDays,
+		BigDecimal defaultFeeRate) {
 }

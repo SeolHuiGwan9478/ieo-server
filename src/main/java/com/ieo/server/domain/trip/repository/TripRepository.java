@@ -55,4 +55,13 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
 	/** 리포트: 우리 회사 운행 중 기간 안에 배차된 것, 상태 무관 (BRK-042, 043) */
 	@EntityGraph(attributePaths = {"driver.user", "vehicle", "order", "stops", "stops.site"})
 	List<Trip> findAllByBrokerIdAndSourceAndCreatedAtBetween(Long brokerId, TripSource source, Instant from, Instant to);
+
+	/** 대시보드: 우리 회사 오더로 배차돼 기간 안에 완료된 운행 (지급·청구 운임, 수수료, 대기비 합계) */
+	@EntityGraph(attributePaths = "order")
+	List<Trip> findAllByBrokerIdAndSourceAndStatusAndCompletedAtBetween(Long brokerId, TripSource source,
+			TripStatus status, Instant from, Instant to);
+
+	/** 대시보드: 기간 안에 취소된 운행 */
+	List<Trip> findAllByBrokerIdAndSourceAndStatusAndCanceledAtBetween(Long brokerId, TripSource source,
+			TripStatus status, Instant from, Instant to);
 }

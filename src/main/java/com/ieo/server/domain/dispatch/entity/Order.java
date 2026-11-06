@@ -29,6 +29,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -54,6 +56,10 @@ public class Order extends BaseTimeEntity {
 	private static final int MAX_FARE = 100_000_000;
 	private static final int MAX_WEIGHT_KG = 50_000;
 	private static final int MAX_PAYMENT_DAYS = 365;
+	private static final int MAX_CUSTOMER_NAME = 50;
+	private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
+	/** 수수료율로 계산한 청구운임은 이 단위로 반올림한다 */
+	private static final BigDecimal BILLED_FARE_UNIT = BigDecimal.valueOf(1_000);
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -118,9 +124,20 @@ public class Order extends BaseTimeEntity {
 	@Column(nullable = false, length = 10)
 	private LoadingMethod loadingMethod;
 
-	/** 운임(원) */
+	/** 지급운임(원). 차주에게 주는 돈 */
 	@Column(nullable = false)
 	private int fare;
+
+	/**
+	 * 청구운임(원). 화주에게 받는 돈. 주선사만 보는 값이라 차주 응답에는 나가지 않는다.
+	 * 비우면 수수료를 셈하지 않는다. 수수료 = 청구운임 − 지급운임 (업계 배차 프로그램의 청구·지급·수수료와 같은 뜻)
+	 */
+	@Column
+	private Integer billedFare;
+
+	/** 거래처(화주) 이름. 주선사만 본다 */
+	@Column(length = 50)
+	private String customerName;
 
 	@Enumerated(EnumType.STRING)
 	@JdbcTypeCode(SqlTypes.VARCHAR)
@@ -159,7 +176,7 @@ public class Order extends BaseTimeEntity {
 	private Order(BrokerMember createdBy, Site pickupSite, Site dropoffSite,
 			Instant pickupFrom, Instant pickupUntil, Instant dropoffBy,
 			CargoCategory cargoCategory, String cargoType, Integer weightKg, Tonnage tonnage, BodyType bodyType, LoadingMethod loadingMethod,
-			Integer fare, PaymentType paymentType, Integer expectedPaymentDays,
+			Integer fare, Integer billedFare, String customerName, PaymentType paymentType, Integer expectedPaymentDays,
 			ConsignmentType consignmentType, ConfirmMode confirmMode, Driver targetDriver) {
 		if (createdBy == null || pickupSite == null || dropoffSite == null
 				|| tonnage == null || bodyType == null || loadingMethod == null || paymentType == null
@@ -174,6 +191,12 @@ public class Order extends BaseTimeEntity {
 				|| fare == null || fare < 0 || fare > MAX_FARE
 				|| expectedPaymentDays == null || expectedPaymentDays < 0 || expectedPaymentDays > MAX_PAYMENT_DAYS) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID, "무게, 운임, 지급 예정일 값을 확인해 주세요.");
+		}
+		if (billedFare != null && (billedFare < 0 || billedFare > MAX_FARE)) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID, "청구운임 값을 확인해 주세요.");
+		}
+		if (customerName != null && customerName.strip().length() > MAX_CUSTOMER_NAME) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID, "거래처 이름은 " + MAX_CUSTOMER_NAME + "자까지예요.");
 		}
 		if (cargoCategory == CargoCategory.COLD && bodyType != BodyType.REFRIGERATED) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID, "냉동·냉장 화물은 차종을 냉동·냉장으로 골라 주세요.");
@@ -192,12 +215,41 @@ public class Order extends BaseTimeEntity {
 		this.bodyType = bodyType;
 		this.loadingMethod = loadingMethod;
 		this.fare = fare;
+		this.billedFare = billedFare;
+		this.customerName = customerName == null || customerName.isBlank() ? null : customerName.strip();
 		this.paymentType = paymentType;
 		this.expectedPaymentDays = expectedPaymentDays;
 		this.consignmentType = consignmentType;
 		this.confirmMode = confirmMode == null ? ConfirmMode.SELECT : confirmMode;
 		this.targetDriver = targetDriver;
 		this.status = OrderStatus.OPEN;
+	}
+
+	/**
+	 * 수수료율(%)로 청구운임을 계산한다: 청구운임 = 지급운임 ÷ (1 − 수수료율). 1,000원 단위 반올림.
+	 * 예: 지급 450,000원, 25% → 600,000원 (수수료 150,000원 = 청구운임의 25%). 수수료율이 없으면 null.
+	 * 범위(0~99.9%)는 Broker.validateFeeRate와 같다 (100%면 나눌 수 없다)
+	 */
+	public static Integer billedFareFor(Integer fare, BigDecimal feeRate) {
+		if (feeRate == null || fare == null) {
+			return null;
+		}
+		BigDecimal rate = Broker.validateFeeRate(feeRate);
+		BigDecimal billed = BigDecimal.valueOf(fare).divide(BigDecimal.ONE.subtract(rate.divide(HUNDRED)), 0, RoundingMode.HALF_UP);
+		return billed.divide(BILLED_FARE_UNIT, 0, RoundingMode.HALF_UP).multiply(BILLED_FARE_UNIT).intValueExact();
+	}
+
+	/** 수수료(원) = 청구운임 − 지급운임. 청구운임을 안 적었으면 null */
+	public Integer fee() {
+		return billedFare == null ? null : billedFare - fare;
+	}
+
+	/** 수수료율(%) = 수수료 ÷ 청구운임, 소수 첫째 자리. 청구운임이 없거나 0이면 null */
+	public BigDecimal feeRate() {
+		if (billedFare == null || billedFare == 0) {
+			return null;
+		}
+		return BigDecimal.valueOf(fee()).multiply(HUNDRED).divide(BigDecimal.valueOf(billedFare), 1, RoundingMode.HALF_UP);
 	}
 
 	/** 모집 중: OPEN이고 상차 가능 시간이 끝나지 않음 */

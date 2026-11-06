@@ -42,7 +42,7 @@ public class BrokerService {
 					member.isActive() ? ErrorCode.BROKER_ALREADY_MEMBER : ErrorCode.BROKER_MEMBER_REMOVED);
 		});
 		Broker broker = Broker.create(request.name(), request.businessNumber(), request.licenseNumber(),
-				request.representativeName(), request.settlementDays());
+				request.representativeName(), request.settlementDays(), request.defaultFeeRate());
 		if (brokerRepository.existsByBusinessNumber(broker.getBusinessNumber())) {
 			throw new BusinessException(ErrorCode.BROKER_DUPLICATE_BUSINESS_NUMBER);
 		}
@@ -86,6 +86,9 @@ public class BrokerService {
 		}
 		if (request.settlementDays() != null) {
 			broker.changeSettlementDays(request.settlementDays());
+		}
+		if (request.defaultFeeRate() != null) {
+			broker.changeDefaultFeeRate(request.defaultFeeRate());
 		}
 		return toResponse(member);
 	}

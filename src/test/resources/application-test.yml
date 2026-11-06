@@ -2,11 +2,14 @@
 # 처음 한 번: createdb ieo_test && psql -d ieo_test -c 'CREATE EXTENSION IF NOT EXISTS postgis'
 # 접속 정보가 다르면 TEST_DB_URL, TEST_DB_USERNAME, TEST_DB_PASSWORD 환경변수로 바꾼다
 # 개발용 ieo DB나 배포 DB를 가리키지 않게 한다 (테스트가 테이블을 지운다)
+# Windows: ${USER}가 없어서 .env(커밋 안 됨)의 DB_USERNAME·DB_PASSWORD를 대신 쓴다. TEST_DB_*가 있으면 그게 우선
 spring:
+  config:
+    import: optional:file:.env[.properties]
   datasource:
     url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/ieo_test}
-    username: ${TEST_DB_USERNAME:${USER}}
-    password: ${TEST_DB_PASSWORD:}
+    username: ${TEST_DB_USERNAME:${DB_USERNAME:${USER}}}
+    password: ${TEST_DB_PASSWORD:${DB_PASSWORD:}}
   jpa:
     hibernate:
       ddl-auto: create-drop

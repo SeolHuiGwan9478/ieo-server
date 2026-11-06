@@ -5,6 +5,8 @@ import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.util.regex.Pattern;
 import jakarta.persistence.Column;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -13,6 +15,7 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 
 /**
  * 주선사(운송주선업체) 회사. 담당자 계정은 broker_members로 연결한다. (요구사항: docs/requirements/07_주선사.md)
@@ -25,6 +28,7 @@ public class Broker extends BaseTimeEntity {
 
 	private static final int DEFAULT_SETTLEMENT_DAYS = 30;
 	private static final int MAX_SETTLEMENT_DAYS = 365;
+	private static final BigDecimal MAX_FEE_RATE = new BigDecimal("99.9");
 	private static final Pattern BUSINESS_NUMBER = Pattern.compile("\\d{10}");
 	private static final int[] CHECK_WEIGHTS = {1, 3, 7, 1, 3, 7, 1, 3, 5};
 
@@ -52,13 +56,22 @@ public class Broker extends BaseTimeEntity {
 	@Column(nullable = false)
 	private int settlementDays;
 
+	/**
+	 * 기본 수수료율(%). 오더를 올릴 때 지급운임에서 청구운임을 미리 계산하는 데 쓴다.
+	 * 수수료율 = 수수료 ÷ 청구운임 (화주 계약 금액 기준, 주선수수료 상한 논의와 같은 기준). 0이면 자동 계산 안 함
+	 */
+	@Column(nullable = false, precision = 4, scale = 1)
+	@ColumnDefault("0")
+	private BigDecimal defaultFeeRate;
+
 	private Broker(String name, String businessNumber, String licenseNumber, String representativeName,
-			int settlementDays) {
+			int settlementDays, BigDecimal defaultFeeRate) {
 		this.name = name;
 		this.businessNumber = businessNumber;
 		this.licenseNumber = licenseNumber;
 		this.representativeName = representativeName;
 		this.settlementDays = settlementDays;
+		this.defaultFeeRate = defaultFeeRate;
 	}
 
 	/** 사업자등록번호는 하이픈을 지우고 검증 번호까지 확인한다. 허가 번호는 필수(BRK-001). 정산 주기는 30일 */
@@ -69,9 +82,16 @@ public class Broker extends BaseTimeEntity {
 	/** 정산 주기를 비우면 30일 */
 	public static Broker create(String name, String businessNumber, String licenseNumber, String representativeName,
 			Integer settlementDays) {
+		return create(name, businessNumber, licenseNumber, representativeName, settlementDays, null);
+	}
+
+	/** 정산 주기를 비우면 30일, 기본 수수료율을 비우면 0% */
+	public static Broker create(String name, String businessNumber, String licenseNumber, String representativeName,
+			Integer settlementDays, BigDecimal defaultFeeRate) {
 		return new Broker(name, normalizeBusinessNumber(businessNumber), requireLicenseNumber(licenseNumber),
 				representativeName,
-				settlementDays == null ? DEFAULT_SETTLEMENT_DAYS : validateSettlementDays(settlementDays));
+				settlementDays == null ? DEFAULT_SETTLEMENT_DAYS : validateSettlementDays(settlementDays),
+				defaultFeeRate == null ? BigDecimal.ZERO.setScale(1) : validateFeeRate(defaultFeeRate));
 	}
 
 	/**
@@ -129,6 +149,19 @@ public class Broker extends BaseTimeEntity {
 	 */
 	public void changeSettlementDays(int settlementDays) {
 		this.settlementDays = validateSettlementDays(settlementDays);
+	}
+
+	/** 기본 수수료율 (0~99.9%). 100%면 청구운임을 계산할 수 없다 */
+	public void changeDefaultFeeRate(BigDecimal feeRate) {
+		this.defaultFeeRate = validateFeeRate(feeRate);
+	}
+
+	/** 소수 첫째 자리까지. 0~99.9% 밖이면 400 BROKER_400_FEE_RATE */
+	public static BigDecimal validateFeeRate(BigDecimal feeRate) {
+		if (feeRate == null || feeRate.signum() < 0 || feeRate.compareTo(MAX_FEE_RATE) > 0) {
+			throw new BusinessException(ErrorCode.BROKER_INVALID_FEE_RATE);
+		}
+		return feeRate.setScale(1, RoundingMode.HALF_UP);
 	}
 
 	private static int validateSettlementDays(int settlementDays) {

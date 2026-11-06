@@ -10,6 +10,7 @@ import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.vehicle.entity.Vehicle;
 import com.ieo.server.domain.vehicle.enums.Tonnage;
 import com.ieo.server.global.config.WebConfig;
+import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
@@ -19,7 +20,8 @@ import java.time.Instant;
  * 차주 번호도 단골일 때만 준다 (단골 목록에서 이미 보이는 번호).
  * etaAt·progressPercent는 위치가 아니라서 모두에게 준다.
  * 셋 다 운행 중 마지막 위치(TripPosition, 운행마다 한 줄)에서 읽고, 위치가 아직 안 왔거나 상하차지에 머무는 중이면 null이다.
- * receipt는 수하인이 서명했거나 차주가 종이 인수증 사진을 올린 뒤에만 있다
+ * receipt는 수하인이 서명했거나 차주가 종이 인수증 사진을 올린 뒤에만 있다.
+ * fare는 지급운임(차주). billedFare(청구운임)·fee(수수료)·feeRate(%)는 오더에 청구운임을 적었을 때만 있다 (주선사 콘솔 전용)
  */
 public record BrokerTripResponse(
 		Long id,
@@ -38,6 +40,9 @@ public record BrokerTripResponse(
 		Instant etaAt,
 		Integer progressPercent,
 		int fare,
+		Integer billedFare,
+		Integer fee,
+		BigDecimal feeRate,
 		PaymentType paymentType,
 		String paymentTypeLabel,
 		BrokerTripStopResponse pickup,
@@ -99,6 +104,9 @@ public record BrokerTripResponse(
 				position == null ? null : position.eta().orElse(null),
 				position == null ? null : position.progressPercent().orElse(null),
 				trip.getFare(),
+				trip.getOrder() == null ? null : trip.getOrder().getBilledFare(),
+				trip.getOrder() == null ? null : trip.getOrder().fee(),
+				trip.getOrder() == null ? null : trip.getOrder().feeRate(),
 				trip.getPaymentType(),
 				trip.getPaymentType().getLabel(),
 				pickup,

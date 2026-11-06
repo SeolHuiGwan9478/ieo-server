@@ -81,6 +81,9 @@ public class BrokerOrderService {
 				.bodyType(request.bodyType())
 				.loadingMethod(request.loadingMethod())
 				.fare(request.fare())
+				.billedFare(request.billedFare() != null ? request.billedFare()
+						: Order.billedFareFor(request.fare(), request.feeRate()))
+				.customerName(request.customerName())
 				.paymentType(request.paymentType())
 				// 비우면 회사 정산 주기 (BRK-003). 오더마다 다르게 하려면 직접 넣는다
 				.expectedPaymentDays(request.expectedPaymentDays() != null
@@ -89,7 +92,7 @@ public class BrokerOrderService {
 				.confirmMode(request.confirmMode())
 				.targetDriver(target)
 				.create();
-		return OrderResponse.of(orderRepository.save(order), clock.instant(), null, null, 0L);
+		return OrderResponse.forBroker(orderRepository.save(order), clock.instant(), 0L);
 	}
 
 	/**
@@ -119,7 +122,7 @@ public class BrokerOrderService {
 		Instant now = clock.instant();
 		Map<Long, Long> pending = pendingCounts(orders.getContent(), now);
 		List<OrderResponse> items = orders.getContent().stream()
-				.map(order -> OrderResponse.of(order, now, null, null, pending.getOrDefault(order.getId(), 0L)))
+				.map(order -> OrderResponse.forBroker(order, now, pending.getOrDefault(order.getId(), 0L)))
 				.toList();
 		return new OrderPageResponse(items, orders.getTotalElements(), pageable.getPageNumber(), pageable.getPageSize());
 	}
@@ -128,7 +131,7 @@ public class BrokerOrderService {
 	public OrderResponse getOrder(Long userId, Long orderId) {
 		Order order = findMine(requireMember(userId), orderId);
 		Instant now = clock.instant();
-		return OrderResponse.of(order, now, null, null, pendingCounts(List.of(order), now).getOrDefault(orderId, 0L));
+		return OrderResponse.forBroker(order, now, pendingCounts(List.of(order), now).getOrDefault(orderId, 0L));
 	}
 
 	/** 요청한 차주 목록 (DSP-021). 먼저 요청한 순서. 이행 기록은 Ieo에서 완료한 운행 수와 늦은 취소 수 (DSP-031) */
@@ -156,7 +159,7 @@ public class BrokerOrderService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.DISPATCH_REQUEST_NOT_FOUND));
 		Instant now = clock.instant();
 		confirmer.confirm(order, request, now);
-		return OrderResponse.of(order, now, null, null, 0L);
+		return OrderResponse.forBroker(order, now, 0L);
 	}
 
 	/**
@@ -171,7 +174,7 @@ public class BrokerOrderService {
 		Instant now = clock.instant();
 		canceller.cancel(trip, member.getUser(), request.reason(), request.memo(),
 				request.reopen() == null || request.reopen(), now);
-		return OrderResponse.of(order, now, null, null, 0L);
+		return OrderResponse.forBroker(order, now, 0L);
 	}
 
 	/** 오더 내리기. 모집 중일 때만. 대기 중 요청은 마감한다 */
@@ -180,7 +183,7 @@ public class BrokerOrderService {
 		order.close();
 		Instant now = clock.instant();
 		confirmer.declineWaiting(orderId, null, now);
-		return OrderResponse.of(order, now, null, null, 0L);
+		return OrderResponse.forBroker(order, now, 0L);
 	}
 
 	private Map<Long, Long> pendingCounts(List<Order> orders, Instant now) {

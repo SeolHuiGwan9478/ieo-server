@@ -71,7 +71,8 @@ class BrokerControllerTest {
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.businessNumber").value("1234567891"))
 				.andExpect(jsonPath("$.position").value("OWNER"))
-				.andExpect(jsonPath("$.settlementDays").value(30));
+				.andExpect(jsonPath("$.settlementDays").value(30))
+				.andExpect(jsonPath("$.defaultFeeRate").value(0.0));
 
 		mockMvc.perform(get("/api/brokers/me").header(HttpHeaders.AUTHORIZATION, bearer))
 				.andExpect(status().isOk())
@@ -81,9 +82,10 @@ class BrokerControllerTest {
 	@Test
 	void 등록할_때_정산_주기를_넣을_수_있다() throws Exception {
 		postBroker("{\"name\":\"한빛로지스\",\"businessNumber\":\"1234567891\",\"licenseNumber\":\"제2026-001호\","
-				+ "\"settlementDays\":45}")
+				+ "\"settlementDays\":45,\"defaultFeeRate\":12.5}")
 				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.settlementDays").value(45));
+				.andExpect(jsonPath("$.settlementDays").value(45))
+				.andExpect(jsonPath("$.defaultFeeRate").value(12.5));
 	}
 
 	@Test
@@ -110,6 +112,12 @@ class BrokerControllerTest {
 		patchBroker(bearer, "{\"settlementDays\":366}")
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("BROKER_400_SETTLEMENT_DAYS"));
+		patchBroker(bearer, "{\"defaultFeeRate\":100}")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("BROKER_400_FEE_RATE"));
+		patchBroker(bearer, "{\"defaultFeeRate\":10.04}")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.defaultFeeRate").value(10.0));
 		patchBroker(bearer, "{\"name\":\" \"}")
 				.andExpect(status().isBadRequest());
 		mockMvc.perform(get("/api/brokers/me").header(HttpHeaders.AUTHORIZATION, bearer))

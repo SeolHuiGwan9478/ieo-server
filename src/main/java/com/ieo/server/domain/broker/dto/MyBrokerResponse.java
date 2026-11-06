@@ -3,6 +3,7 @@ package com.ieo.server.domain.broker.dto;
 import com.ieo.server.domain.broker.entity.Broker;
 import com.ieo.server.domain.broker.entity.BrokerMember;
 import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
+import java.math.BigDecimal;
 import java.time.Instant;
 
 /** 내 주선사 회사와 그 안에서의 내 직책, 플랜. 콘솔은 이걸로 메뉴(대표 전용 설정, 플랜별 기능)를 그린다 */
@@ -13,6 +14,7 @@ public record MyBrokerResponse(
 		String licenseNumber,
 		String representativeName,
 		int settlementDays,
+		BigDecimal defaultFeeRate,
 		BrokerMemberPosition position,
 		String positionLabel,
 		BrokerPlanResponse plan,
@@ -27,6 +29,7 @@ public record MyBrokerResponse(
 				broker.getLicenseNumber(),
 				broker.getRepresentativeName(),
 				broker.getSettlementDays(),
+				broker.getDefaultFeeRate(),
 				member.getPosition(),
 				member.getPosition().getLabel(),
 				plan,
