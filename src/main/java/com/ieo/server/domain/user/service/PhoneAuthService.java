@@ -48,7 +48,7 @@ public class PhoneAuthService {
 	private final SecureRandom random = new SecureRandom();
 
 	/** 가입 여부와 상관없이 같은 응답을 준다. 번호만으로 가입 여부를 알 수 없게. */
-	public void sendCode(String phone) {
+	public String sendCode(String phone) {
 		Instant now = clock.instant();
 		PhoneVerification verification = phoneVerificationRepository.findByPhoneForUpdate(phone)
 				.orElseGet(() -> phoneVerificationRepository.save(PhoneVerification.create(phone)));
@@ -56,6 +56,7 @@ public class PhoneAuthService {
 		String code = "%06d".formatted(random.nextInt(1_000_000));
 		verification.issueCode(Hashes.sha256Hex(phone + ":" + code), now, LocalDate.ofInstant(now, KST));
 		smsSender.send(phone, "[이에오] 인증번호 " + code + " (3분 안에 입력해 주세요)");
+		return code;
 	}
 
 	/** 인증번호가 맞으면 phoneToken을 발급하고, 이 번호로 가입한 계정이 있는지 알려 준다. */

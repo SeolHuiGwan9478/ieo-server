@@ -145,10 +145,10 @@ class DispatchControllerTest {
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.billing.billedFare").value(600000))
 				.andExpect(jsonPath("$.billing.feeRate").value(25.0));
-		// 12.5% → 514,285.7원 → 1,000원 단위 반올림 514,000원
+		// 12.5% → 514,285.7원 → 1원 단위 반올림 514,286원
 		registerOrder(orderJson("TON_5", "WING", "SELECT", null).replace("\"billedFare\": 600000,", "\"feeRate\": 12.5,"))
 				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.billing.billedFare").value(514000));
+				.andExpect(jsonPath("$.billing.billedFare").value(514286));
 		// 둘 다 비우면 거래처만 남고 수수료는 없다
 		registerOrder(orderJson("TON_5", "WING", "SELECT", null).replace("\"billedFare\": 600000,", ""))
 				.andExpect(status().isCreated())

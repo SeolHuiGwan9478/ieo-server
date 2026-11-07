@@ -58,8 +58,6 @@ public class Order extends BaseTimeEntity {
 	private static final int MAX_PAYMENT_DAYS = 365;
 	private static final int MAX_CUSTOMER_NAME = 50;
 	private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
-	/** 수수료율로 계산한 청구운임은 이 단위로 반올림한다 */
-	private static final BigDecimal BILLED_FARE_UNIT = BigDecimal.valueOf(1_000);
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -226,7 +224,7 @@ public class Order extends BaseTimeEntity {
 	}
 
 	/**
-	 * 수수료율(%)로 청구운임을 계산한다: 청구운임 = 지급운임 ÷ (1 − 수수료율). 1,000원 단위 반올림.
+	 * 수수료율(%)로 청구운임을 계산한다: 청구운임 = 지급운임 ÷ (1 − 수수료율). 1원 단위 반올림.
 	 * 예: 지급 450,000원, 25% → 600,000원 (수수료 150,000원 = 청구운임의 25%). 수수료율이 없으면 null.
 	 * 범위(0~99.9%)는 Broker.validateFeeRate와 같다 (100%면 나눌 수 없다)
 	 */
@@ -236,7 +234,7 @@ public class Order extends BaseTimeEntity {
 		}
 		BigDecimal rate = Broker.validateFeeRate(feeRate);
 		BigDecimal billed = BigDecimal.valueOf(fare).divide(BigDecimal.ONE.subtract(rate.divide(HUNDRED)), 0, RoundingMode.HALF_UP);
-		return billed.divide(BILLED_FARE_UNIT, 0, RoundingMode.HALF_UP).multiply(BILLED_FARE_UNIT).intValueExact();
+		return billed.intValueExact();
 	}
 
 	/** 수수료(원) = 청구운임 − 지급운임. 청구운임을 안 적었으면 null */

@@ -186,6 +186,14 @@ class OrderTest {
 				.consignmentType(ConsignmentType.DIRECT);
 	}
 
+	@Test
+	void 백원_단위의_작은_운임도_원단위로_계산한다() {
+		assertThat(Order.billedFareFor(90, new java.math.BigDecimal("10"))).isEqualTo(100);
+		assertThat(Order.billedFareFor(100, new java.math.BigDecimal("10"))).isEqualTo(111);
+		assertThat(Order.billedFareFor(450000, new java.math.BigDecimal("12.5"))).isEqualTo(514286);
+		assertThat(Order.billedFareFor(0, new java.math.BigDecimal("10"))).isZero();
+		assertThat(Order.billedFareFor(100, new java.math.BigDecimal("0"))).isEqualTo(100);
+	}
 	private static Driver driver(Long id) {
 		User user = User.create("0109000120" + id, UserRole.DRIVER);
 		ReflectionTestUtils.setField(user, "id", id);

@@ -4,6 +4,8 @@ import com.ieo.server.domain.user.dto.PhoneLoginRequest;
 import com.ieo.server.domain.user.dto.PhoneVerifyResponse;
 import com.ieo.server.domain.user.dto.RefreshTokenRequest;
 import com.ieo.server.domain.user.dto.SendCodeRequest;
+import com.ieo.server.domain.user.dto.SendCodeResponse;
+import com.ieo.server.domain.user.entity.PhoneVerification;
 import com.ieo.server.domain.user.dto.SignUpRequest;
 import com.ieo.server.domain.user.dto.TokenResponse;
 import com.ieo.server.domain.user.dto.VerifyCodeRequest;
@@ -12,6 +14,9 @@ import com.ieo.server.domain.user.service.PhoneAuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,12 +34,19 @@ public class AuthController {
 
 	private final PhoneAuthService phoneAuthService;
 	private final AuthService authService;
+	private final Environment environment;
 
 	/** 인증번호를 보낸다. 같은 번호는 1분에 한 번, 하루 5번까지. */
 	@PostMapping("/phone/code")
-	@ResponseStatus(HttpStatus.NO_CONTENT)
-	public void sendCode(@Valid @RequestBody SendCodeRequest request) {
-		phoneAuthService.sendCode(request.phone());
+	public ResponseEntity<SendCodeResponse> sendCode(@Valid @RequestBody SendCodeRequest request) {
+		String code = phoneAuthService.sendCode(request.phone());
+		boolean demo = environment.matchesProfiles("local & !prod & !dev")
+				&& environment.getProperty("ieo.auth.show-demo-code", Boolean.class, false);
+		if (demo) {
+			return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+					.body(new SendCodeResponse(code, PhoneVerification.CODE_TTL.toSeconds()));
+		}
+		return ResponseEntity.noContent().build();
 	}
 
 	/** 인증번호를 확인하고 phoneToken을 준다. 가입된 계정이 있으면 그 정보도 같이 준다. */
