@@ -30,7 +30,10 @@ ieo:
     average-speed-kph: 60         # 공차 이동 시간 어림
     default-finish-minutes: 60    # 하차지 통계가 없을 때 도착 ~ 하차 끝
     long-wait-minutes: 60         # 상차지 평균 대기가 이 이상이면 "대기 길었던 곳"
-  # 오피넷 유가정보 (시도별 경유 평균). 키가 없으면 부르지 않고 diesel-price-won을 쓴다
+  # 주소 검색 결과의 좌표 조회. REST API 키는 서버에서만 사용한다
+  kakao:
+    rest-api-key: ${KAKAO_REST_API_KEY:}
+  # 오피넷 유가정보 (시도별 경유 평균). 키가 없으면 diesel-price-won을 쓴다
   opinet:
     api-key: ${OPINET_API_KEY:}
   # 리포트에서 노선·상하차지를 보여 주는 최소 건수 (BRK-044). 로컬·테스트는 낮춰 둔다

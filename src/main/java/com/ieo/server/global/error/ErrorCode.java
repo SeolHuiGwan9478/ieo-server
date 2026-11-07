@@ -119,7 +119,12 @@ public enum ErrorCode {
 	LEDGER_AUTO_ENTRY(HttpStatus.CONFLICT, "LEDGER_409_AUTO", "운행으로 자동 생긴 장부는 지울 수 없습니다. 운임이나 결제 방식을 고쳐 주세요."),
 	EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND, "EXPENSE_404", "경비를 찾을 수 없습니다."),
 
-	// 상하차지
+	// 주소 조회
+    ADDRESS_INVALID(HttpStatus.BAD_REQUEST, "ADDRESS_400", "검색할 주소를 200자 이내로 입력해 주세요."),
+    ADDRESS_NOT_FOUND(HttpStatus.NOT_FOUND, "ADDRESS_404", "이 주소의 위치를 찾지 못했어요. 주소를 다시 검색해 주세요."),
+    ADDRESS_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "ADDRESS_503", "위치를 조회하지 못했어요. 잠시 뒤 다시 시도해 주세요."),
+
+    // 상하차지
 	SITE_NOT_FOUND(HttpStatus.NOT_FOUND, "SITE_404", "상하차지를 찾을 수 없습니다."),
 	SITE_NOT_DRIVER(HttpStatus.FORBIDDEN, "SITE_403_ROLE", "차주 계정만 상하차지 정보와 메모를 남길 수 있습니다."),
 	SITE_INVALID_LOCATION(HttpStatus.BAD_REQUEST, "SITE_400_LOCATION", "위치 좌표가 올바르지 않습니다."),
