@@ -119,7 +119,12 @@ public enum ErrorCode {
 	LEDGER_AUTO_ENTRY(HttpStatus.CONFLICT, "LEDGER_409_AUTO", "운행으로 자동 생긴 장부는 지울 수 없습니다. 운임이나 결제 방식을 고쳐 주세요."),
 	EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND, "EXPENSE_404", "경비를 찾을 수 없습니다."),
 
-	// 주소 조회
+	// 자주 쓰는 주소
+    SAVED_ADDRESS_NOT_FOUND(HttpStatus.NOT_FOUND, "SAVED_ADDRESS_404", "저장한 주소를 찾을 수 없습니다."),
+    SAVED_ADDRESS_DUPLICATE(HttpStatus.CONFLICT, "SAVED_ADDRESS_409", "이미 저장한 주소예요. 자주 쓰는 주소에서 선택해 주세요."),
+    SAVED_ADDRESS_INVALID(HttpStatus.BAD_REQUEST, "SAVED_ADDRESS_400", "주소와 상세주소는 합쳐서 200자 이내로 입력해 주세요. 위치도 확인해 주세요."),
+
+    // 주소 조회
     ADDRESS_INVALID(HttpStatus.BAD_REQUEST, "ADDRESS_400", "검색할 주소를 200자 이내로 입력해 주세요."),
     ADDRESS_NOT_FOUND(HttpStatus.NOT_FOUND, "ADDRESS_404", "이 주소의 위치를 찾지 못했어요. 주소를 다시 검색해 주세요."),
     ADDRESS_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "ADDRESS_503", "위치를 조회하지 못했어요. 잠시 뒤 다시 시도해 주세요."),
