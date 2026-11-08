@@ -128,3 +128,21 @@ Requirements for every domain are in the [ieo-app docs](https://github.com/SeolH
 ## Tech stack
 
 Java 21 · Spring Boot 4.1 · Spring Data JPA (Hibernate 7) · PostgreSQL + PostGIS · Gradle
+
+## 주선사 콘솔 시연 데이터 (로컬 전용)
+
+PostgreSQL 설정과 `local` 서버 실행 후 다음 명령으로 별도 시연 회사를 준비한다.
+
+```powershell
+python scripts/seed-console.py
+```
+
+- 로그인 번호: `01098765432`, 회사: `[시연] 한빛물류`. 인증번호 받기를 누르면 로컬 로그인 화면 아래에 표시된다.
+- 오더 42건: 과거 완료 24건, 취소 3건, 진행 4건, 예약 3건, 모집 6건, 마감 2건.
+- 단골 차주 6명, 직원 3명, 초대 대기, 저장 주소 6곳, 대기 증빙, 최근 서명 인수증과 월별 실적을 포함한다.
+- 회사 플랜은 시연 회사에 한해 `PRO_PLUS`로 설정해 리포트도 둘러볼 수 있다. 실제 결제는 없다.
+- 기존 회사·오더·계정은 삭제하지 않는다. 고정 시연 번호·회사명·오더 태그를 검사하며, 충돌하면 중단한다.
+- API로 데이터를 만들고, 과거 실적을 보여 주기 위한 시각과 장부 보정은 해당 시연 회사의 생성 ID 범위에서만 수행한다.
+- `.env`의 DB 주소가 `jdbc:postgresql://localhost:5432/ieo`인 경우에만 실행한다. `psql` 경로가 다르면 `--psql`로 지정한다.
+- 재실행은 기존 태그 데이터를 재사용한다. 휴대폰 인증 재발급은 1분 간격·하루 5회 제한을 따른다.
+- 배차 요청은 10분 후 만료되고, 진행 중 위치는 저장한 시각의 샘플이다. 실시간으로 운행하는 차량이 아니다.

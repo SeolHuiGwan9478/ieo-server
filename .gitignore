@@ -48,3 +48,6 @@ data/
 
 # 로컬 서버 로그 (bootRun > server.log)
 *.log
+
+# Python seed scripts
+__pycache__/
