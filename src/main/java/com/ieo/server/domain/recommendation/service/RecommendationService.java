@@ -99,6 +99,7 @@ public class RecommendationService {
 						preference.getRadiusKm() * 1000.0, CANDIDATE_LIMIT).stream()
 				.filter(order -> !skip.contains(order.getId()))
 				.filter(order -> order.fits(vehicle))
+				.filter(order -> !preference.excludes(order.getCargoCategory()))
 				.map(order -> candidate(order, dropoff, kmPerLiter, dieselWon))
 				.filter(candidate -> !freeAt.plus(candidate.run().duration()).isAfter(candidate.order().getPickupUntil()))
 				.filter(candidate -> preference.getMinNetProfit() == null || candidate.netProfit() >= preference.getMinNetProfit())
@@ -154,7 +155,8 @@ public class RecommendationService {
 		Driver driver = requireDriver(userId);
 		RecommendationPreference preference = preferenceRepository.findById(userId)
 				.orElseGet(() -> preferenceRepository.save(RecommendationPreference.defaults(driver)));
-		preference.change(request.enabled(), request.radiusKm(), request.minNetProfit());
+		preference.change(request.enabled(), request.radiusKm(), request.minNetProfit(),
+				request.excludedCargoCategories());
 		return RecommendationPreferenceResponse.from(preference);
 	}
 
