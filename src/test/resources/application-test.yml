@@ -26,3 +26,6 @@ ieo:
     allowed-origins: http://localhost:5173
   storage:
     local-dir: build/test-files
+  # .env의 OPINET_API_KEY를 쓰지 않는다. 키가 있으면 실제 경유가를 받아 와 기름값 계산 테스트가 날마다 달라진다
+  opinet:
+    api-key: ""

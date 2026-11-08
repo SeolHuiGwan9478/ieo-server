@@ -226,6 +226,33 @@ class RecommendationControllerTest {
 	}
 
 	@Test
+	void 제외한_화물_종류는_추천하지_않는다() throws Exception {
+		order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)), "MOVING");
+		order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)), "GENERAL");
+
+		mockMvc.perform(get("/api/recommendation-preference").header("Authorization", driver))
+				.andExpect(jsonPath("$.excludedCargoCategories.length()").value(0));
+		recommend().andExpect(jsonPath("$.items.length()").value(2));
+
+		preference("{\"enabled\": true, \"radiusKm\": 30, \"excludedCargoCategories\": [\"MOVING\", \"COLD\"]}")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.excludedCargoCategories[0]").value("COLD"))
+				.andExpect(jsonPath("$.excludedCargoCategories[1]").value("MOVING"));
+		recommend().andExpect(jsonPath("$.items.length()").value(1))
+				.andExpect(jsonPath("$.items[0].order.pickup.name").value("대구 북구 창고"));
+
+		// 제외 화물을 보내지 않으면 그대로 둔다
+		preference("{\"enabled\": true, \"radiusKm\": 30}")
+				.andExpect(jsonPath("$.excludedCargoCategories.length()").value(2));
+
+		preference("{\"enabled\": true, \"radiusKm\": 30, \"excludedCargoCategories\": []}");
+		recommend().andExpect(jsonPath("$.items.length()").value(2));
+
+		preference("{\"enabled\": true, \"radiusKm\": 30, \"excludedCargoCategories\": [\"FROZEN\"]}")
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
 	void 운송을_시작하기_전에는_추천하지_않는다() throws Exception {
 		order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
 		Trip scheduled = tripRepository.save(Trip.create(trip.getDriver(), trip.getVehicle(), null, "한빛로지스",
@@ -258,16 +285,21 @@ class RecommendationControllerTest {
 
 	/** 상차 가능 시간은 pickupFrom부터 2시간 */
 	private Integer order(Site pickup, int fare, String tonnage, String bodyType, Instant pickupFrom) throws Exception {
+		return order(pickup, fare, tonnage, bodyType, pickupFrom, "GENERAL");
+	}
+
+	private Integer order(Site pickup, int fare, String tonnage, String bodyType, Instant pickupFrom,
+			String cargoCategory) throws Exception {
 		String json = """
 				{"pickup": {"siteId": %d},
 				 "dropoff": {"site": {"name": "부산 신항", "address": "부산 강서구", "lat": 35.08, "lng": 128.83}},
 				 "pickupFrom": "%s", "pickupUntil": "%s", "dropoffBy": "%s",
-				 "cargoCategory": "GENERAL", "cargoType": "음료 파레트",
+				 "cargoCategory": "%s", "cargoType": "음료 파레트",
 				 "weightKg": 4500, "tonnage": "%s", "bodyType": "%s", "loadingMethod": "FORKLIFT",
 				 "fare": %d, "paymentType": "RECEIPT", "expectedPaymentDays": 15,
 				 "consignmentType": "DIRECT", "confirmMode": "SELECT", "targetDriverId": null}
 				""".formatted(pickup.getId(), pickupFrom, pickupFrom.plus(Duration.ofHours(2)),
-				pickupFrom.plus(Duration.ofHours(8)), tonnage, bodyType, fare);
+				pickupFrom.plus(Duration.ofHours(8)), cargoCategory, tonnage, bodyType, fare);
 		String body = mockMvc.perform(post("/api/broker/orders").header("Authorization", broker)
 						.contentType(MediaType.APPLICATION_JSON).content(json))
 				.andExpect(status().isCreated())

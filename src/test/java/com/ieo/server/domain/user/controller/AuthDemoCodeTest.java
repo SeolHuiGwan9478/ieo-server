@@ -7,13 +7,14 @@ import static org.mockito.Mockito.when;
 import com.ieo.server.domain.user.dto.SendCodeRequest;
 import com.ieo.server.domain.user.service.AuthService;
 import com.ieo.server.domain.user.service.PhoneAuthService;
+import com.ieo.server.domain.user.service.SocialAuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 
 class AuthDemoCodeTest {
     private final PhoneAuthService phoneAuth = mock(PhoneAuthService.class);
     private final MockEnvironment environment = new MockEnvironment();
-    private final AuthController controller = new AuthController(phoneAuth, mock(AuthService.class), environment);
+    private final AuthController controller = new AuthController(phoneAuth, mock(SocialAuthService.class), mock(AuthService.class), environment);
 
     @Test
     void 로컬에서_명시적으로_켠_경우에만_시연번호를_보여준다() {
