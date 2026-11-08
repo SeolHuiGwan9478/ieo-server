@@ -14,6 +14,7 @@ import com.ieo.server.domain.user.dto.WithdrawRequest;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.user.repository.PhoneTokenRepository;
+import com.ieo.server.domain.user.repository.SocialIdentityRepository;
 import com.ieo.server.domain.user.repository.PhoneVerificationRepository;
 import com.ieo.server.domain.user.repository.UserRepository;
 import com.ieo.server.global.error.BusinessException;
@@ -32,6 +33,7 @@ public class UserService {
 	private final DriverRepository driverRepository;
 	private final PhoneVerificationRepository phoneVerificationRepository;
 	private final PhoneTokenRepository phoneTokenRepository;
+	private final SocialIdentityRepository socialIdentityRepository;
 	private final SiteRepository siteRepository;
 	private final SiteAttributeRepository siteAttributeRepository;
 	private final SiteNoteRepository siteNoteRepository;
@@ -74,6 +76,8 @@ public class UserService {
 		siteRepository.detachCreator(userId);
 		siteAttributeRepository.detachReporter(userId);
 		siteNoteRepository.detachAuthor(userId);
+		// 소셜 계정 연결도 개인정보라 지운다. 같은 소셜 계정으로 다시 가입할 수 있다
+		socialIdentityRepository.deleteByUser(user);
 		if (phone != null) {
 			phoneVerificationRepository.deleteByPhone(phone);
 			phoneTokenRepository.deleteByPhone(phone);

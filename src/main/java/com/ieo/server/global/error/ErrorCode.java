@@ -29,6 +29,10 @@ public enum ErrorCode {
 	AUTH_INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_TOKEN", "로그인 정보가 올바르지 않습니다. 다시 로그인해 주세요."),
 	AUTH_PHONE_ALREADY_REGISTERED(HttpStatus.CONFLICT, "AUTH_409_PHONE", "이미 가입된 번호입니다."),
 	AUTH_REQUIRED_CONSENT_MISSING(HttpStatus.BAD_REQUEST, "AUTH_400_CONSENT", "필수 약관에 동의해 주세요."),
+	AUTH_SOCIAL_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "AUTH_503_SOCIAL", "아직 지원하지 않는 로그인 방법입니다. 휴대폰 번호로 로그인해 주세요."),
+	AUTH_SOCIAL_PROVIDER_REJECTED(HttpStatus.UNAUTHORIZED, "AUTH_401_SOCIAL_PROVIDER", "소셜 계정 확인에 실패했습니다. 다시 시도해 주세요."),
+	AUTH_SOCIAL_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_401_SOCIAL", "소셜 인증이 만료되었습니다. 다시 로그인해 주세요."),
+	AUTH_SOCIAL_ALREADY_REGISTERED(HttpStatus.CONFLICT, "AUTH_409_SOCIAL", "이미 가입된 소셜 계정입니다."),
 
 	// 차량 QR 로그인
 	CAR_LOGIN_NOT_FOUND(HttpStatus.NOT_FOUND, "CAR_LOGIN_404", "로그인 요청을 찾을 수 없습니다. 차량 화면의 코드를 확인해 주세요."),
