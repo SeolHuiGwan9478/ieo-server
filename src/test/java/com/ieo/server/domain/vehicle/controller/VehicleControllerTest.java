@@ -116,6 +116,22 @@ class VehicleControllerTest {
 	}
 
 	@Test
+	void 폭_길이_총중량은_선택이고_범위를_벗어나면_거절한다() throws Exception {
+		String bearer = bearerOfNewDriver("01090005551");
+		Integer id = idOf(register(bearer, "경기82사7777", "TON_5", "CARGO", "3.6"));
+
+		mockMvc.perform(patch("/api/vehicles/" + id).header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"tonnage\":\"TON_5\",\"bodyType\":\"CARGO\",\"widthCm\":249,\"lengthCm\":850,\"totalWeightKg\":11000}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.widthCm").value(249))
+				.andExpect(jsonPath("$.totalWeightKg").value(11000));
+		mockMvc.perform(patch("/api/vehicles/" + id).header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"tonnage\":\"TON_5\",\"bodyType\":\"CARGO\",\"widthCm\":999}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("VEHICLE_400_DIMENSION"));
+	}
+
+	@Test
 	void Pleos_연비를_올리면_km_L로_저장하고_이상한_값은_무시한다() throws Exception {
 		Integer id = idOf(register(driverBearer, "경기82사1234", "TON_5", "CARGO", null));
 

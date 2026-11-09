@@ -71,6 +71,13 @@ public class Vehicle extends BaseTimeEntity {
 	@Column(precision = 3, scale = 2)
 	private BigDecimal heightM;
 
+	/** 트럭 폭·길이(cm)와 총중량(kg). 선택 입력이고 비어 있으면 톤수별 기본값으로 경로를 찾는다 */
+	private Integer widthCm;
+
+	private Integer lengthCm;
+
+	private Integer totalWeightKg;
+
 	/** Pleos 누적 연비를 km/L로 바꿔 저장한다 (VEH-003) */
 	@Column(precision = 4, scale = 2)
 	private BigDecimal measuredKmPerLiter;
@@ -101,6 +108,20 @@ public class Vehicle extends BaseTimeEntity {
 		this.tonnage = tonnage;
 		this.bodyType = bodyType;
 		this.heightM = validateHeight(heightM);
+	}
+
+	/** 폭·길이·총중량을 바꾼다. null이면 비운다. 범위는 TMAP이 받는 값에 맞췄다 */
+	public void changeDimensions(Integer widthCm, Integer lengthCm, Integer totalWeightKg) {
+		this.widthCm = validateRange(widthCm, 100, 300);
+		this.lengthCm = validateRange(lengthCm, 200, 2_000);
+		this.totalWeightKg = validateRange(totalWeightKg, 500, 40_000);
+	}
+
+	private static Integer validateRange(Integer value, int min, int max) {
+		if (value != null && (value < min || value > max)) {
+			throw new BusinessException(ErrorCode.VEHICLE_INVALID_DIMENSION);
+		}
+		return value;
 	}
 
 	/**

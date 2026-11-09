@@ -40,7 +40,7 @@ public class OrderController {
 	}
 
 	/** 지금 위치에서 이 오더를 맡을 때의 실수익 내역 */
-	@GetMapping("/{orderId}/profit")
+	@GetMapping("/api/orders/{orderId}/profit")
 	public com.ieo.server.domain.recommendation.dto.ProfitEstimateResponse estimateProfit(
 			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
 			@PathVariable Long orderId,

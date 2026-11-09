@@ -186,6 +186,12 @@ class DispatchControllerTest {
 				.andExpect(jsonPath("$[0].brokerMetrics.minSampleCount").value(20))
 				.andExpect(jsonPath("$[0].brokerMetrics.avgPaymentDays").doesNotExist());
 
+		mockMvc.perform(get("/api/orders/" + fits + "/profit").header("Authorization", driver)
+						.param("lat", String.valueOf(LAT + 0.1)).param("lng", String.valueOf(LNG)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.netProfit").isNumber())
+				.andExpect(jsonPath("$.fuelCost").isNumber());
+
 		mockMvc.perform(get("/api/orders").header("Authorization", driver)
 						.param("lat", "35.1").param("lng", "129.0").param("radiusM", "50000"))
 				.andExpect(jsonPath("$.length()").value(0));

@@ -43,6 +43,7 @@ public enum ErrorCode {
 	// 차량
 	VEHICLE_NOT_FOUND(HttpStatus.NOT_FOUND, "VEHICLE_404", "차량을 찾을 수 없습니다."),
 	VEHICLE_INVALID_PLATE(HttpStatus.BAD_REQUEST, "VEHICLE_400_PLATE", "차량 번호 형식이 올바르지 않습니다. 예: 경기82사1234, 123바4567"),
+	VEHICLE_INVALID_DIMENSION(HttpStatus.BAD_REQUEST, "VEHICLE_400_DIMENSION", "트럭 폭·길이·중량이 입력할 수 있는 범위를 벗어났습니다."),
 	VEHICLE_INVALID_HEIGHT(HttpStatus.BAD_REQUEST, "VEHICLE_400_HEIGHT", "차량 높이는 1.5m에서 4.2m 사이로 입력해 주세요."),
 	VEHICLE_DUPLICATE_PLATE(HttpStatus.CONFLICT, "VEHICLE_409_PLATE", "이미 다른 계정에 등록된 차량 번호입니다. 고객센터로 문의해 주세요."),
 	VEHICLE_NOT_DRIVER(HttpStatus.FORBIDDEN, "VEHICLE_403_ROLE", "차주 계정만 차량을 등록할 수 있습니다."),

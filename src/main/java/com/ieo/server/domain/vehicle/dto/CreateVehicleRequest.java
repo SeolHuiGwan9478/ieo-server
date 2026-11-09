@@ -16,5 +16,8 @@ public record CreateVehicleRequest(
 		@NotNull Tonnage tonnage,
 		@NotNull BodyType bodyType,
 		BigDecimal heightM,
-		@Size(max = 32) String vin) {
+		@Size(max = 32) String vin,
+		Integer widthCm,
+		Integer lengthCm,
+		Integer totalWeightKg) {
 }
