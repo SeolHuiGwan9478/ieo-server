@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,6 +37,18 @@ public class BrokerOrderController {
 	public OrderResponse register(
 			@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @Valid @RequestBody CreateOrderRequest request) {
 		return brokerOrderService.register(userId, request);
+	}
+
+	/**
+	 * 오더 수정 (BRK-010). 모집 중이면 전부 고칠 수 있고, 차주에게 보이는 조건이 바뀌면 대기 중 요청은 마감된다.
+	 * 배차 확정 뒤에는 거래처·청구운임만 (아니면 409 ORDER_409_LOCKED). 내린 오더는 409 ORDER_409_CLOSED
+	 */
+	@PutMapping("/{orderId}")
+	public OrderResponse update(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long orderId,
+			@Valid @RequestBody CreateOrderRequest request) {
+		return brokerOrderService.update(userId, orderId, request);
 	}
 
 	/** 우리 회사 오더. page는 0부터, size 기본 20 최대 100 */

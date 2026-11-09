@@ -36,6 +36,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +50,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class BrokerOrderService {
 
 	static final int MAX_PAGE_SIZE = 100;
+	/** 같은 상하차지로 보는 거리. SiteService.findOrCreate의 SAME_SITE_METERS와 같다 */
+	private static final double SAME_SITE_METERS = 100;
 
 	private final OrderRepository orderRepository;
 	private final DispatchRequestRepository requestRepository;
@@ -93,6 +96,70 @@ public class BrokerOrderService {
 				.targetDriver(target)
 				.create();
 		return OrderResponse.forBroker(orderRepository.save(order), clock.instant(), 0L);
+	}
+
+	/**
+	 * 오더 수정 (BRK-010).
+	 * - 모집 중: 전부 고칠 수 있다. 상차 시간이 지난 오더도 시간을 고쳐 다시 모집할 수 있다.
+	 *   단, 대기 중 요청이 있으면 차주에게 보이는 조건은 못 바꾼다 (차주는 그 조건을 보고 요청했고, 한 오더에 다시 요청할 수 없다).
+	 *   요청은 10분 안에 확정되거나 만료되므로 그 뒤에 고치면 된다. 거래처·청구운임은 언제나 된다
+	 * - 배차 확정 뒤: 거래처·청구운임만. 조건을 바꾸려면 배차를 취소하고 다시 모집한다
+	 * - 내린 오더: 못 고친다. 복사해서 새로 올린다
+	 * 다른 담당자가 먼저 바꾼 오더면(@Version) 409
+	 */
+	public OrderResponse update(Long userId, Long orderId, CreateOrderRequest request) {
+		BrokerMember member = requireMember(userId);
+		Order order = findMine(member, orderId);
+		if (order.getStatus() == OrderStatus.CLOSED) {
+			throw new BusinessException(ErrorCode.ORDER_NOT_OPEN);
+		}
+		Instant now = clock.instant();
+		Integer billedFare = request.billedFare() != null ? request.billedFare()
+				: Order.billedFareFor(request.fare(), request.feeRate());
+		Integer paymentDays = request.expectedPaymentDays() != null
+				? request.expectedPaymentDays() : member.getBroker().getSettlementDays();
+		long pending = pendingCounts(List.of(order), now).getOrDefault(orderId, 0L);
+
+		if (order.getStatus() == OrderStatus.ASSIGNED || pending > 0) {
+			if (!sameTermsAs(order, request, paymentDays)) {
+				throw new BusinessException(order.getStatus() == OrderStatus.ASSIGNED ? ErrorCode.ORDER_LOCKED : ErrorCode.ORDER_HAS_REQUESTS);
+			}
+			order.changeBilling(billedFare, request.customerName());
+		} else {
+			Driver target = request.targetDriverId() == null ? null : requireLinkedDriver(member, request.targetDriverId());
+			order.change(resolveSite(request.pickup()), resolveSite(request.dropoff()),
+					request.pickupFrom(), request.pickupUntil(), request.dropoffBy(),
+					request.cargoCategory(), request.cargoType(), request.weightKg(), request.tonnage(), request.bodyType(),
+					request.loadingMethod(), request.fare(), billedFare, request.customerName(), request.paymentType(), paymentDays,
+					request.consignmentType(), request.confirmMode(), target);
+		}
+		try {
+			orderRepository.flush();
+		} catch (ObjectOptimisticLockingFailureException e) {
+			throw new BusinessException(ErrorCode.ORDER_CONFLICT);
+		}
+		return OrderResponse.forBroker(order, now, pending);
+	}
+
+	/** 차주에게 보이는 조건이 요청과 같은지. 상하차지는 새로 만들지 않고 같은 곳인지만 본다 */
+	private static boolean sameTermsAs(Order order, CreateOrderRequest request, Integer paymentDays) {
+		return order.hasSameTerms(
+				siteIdIfSame(request.pickup(), order.getPickupSite()), siteIdIfSame(request.dropoff(), order.getDropoffSite()),
+				request.pickupFrom(), request.pickupUntil(), request.dropoffBy(),
+				request.cargoCategory(), request.cargoType(), request.weightKg(), request.tonnage(), request.bodyType(),
+				request.loadingMethod(), request.fare(), request.paymentType(), paymentDays, request.consignmentType(),
+				request.confirmMode(), request.targetDriverId());
+	}
+
+	/** 수정 요청의 상하차지가 지금 것과 같은 곳이면 그 id, 아니면 null. SiteService.findOrCreate와 같은 100m 기준 */
+	private static Long siteIdIfSame(OrderSiteRequest request, Site current) {
+		if (request.siteId() != null) {
+			return request.siteId();
+		}
+		if (request.site() == null) {
+			return null;
+		}
+		return current.isWithin(request.site().lat(), request.site().lng(), SAME_SITE_METERS) ? current.getId() : null;
 	}
 
 	/**

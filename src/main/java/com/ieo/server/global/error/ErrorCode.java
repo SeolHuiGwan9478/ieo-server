@@ -86,6 +86,8 @@ public enum ErrorCode {
 	ORDER_NOT_ASSIGNED(HttpStatus.CONFLICT, "ORDER_409_NOT_ASSIGNED", "배차가 확정된 오더가 아닙니다."),
 	ORDER_ALREADY_REPORTED(HttpStatus.CONFLICT, "ORDER_409_REPORTED", "이미 신고한 오더입니다."),
 	ORDER_NOT_OPEN(HttpStatus.CONFLICT, "ORDER_409_CLOSED", "모집이 끝난 오더입니다."),
+	ORDER_LOCKED(HttpStatus.CONFLICT, "ORDER_409_LOCKED", "배차가 확정된 오더는 거래처와 청구운임만 고칠 수 있습니다. 조건을 바꾸려면 배차를 취소한 뒤 다시 모집해 주세요."),
+	ORDER_HAS_REQUESTS(HttpStatus.CONFLICT, "ORDER_409_REQUESTS", "대기 중인 배차 요청이 있어 차주에게 보이는 조건은 바꿀 수 없습니다. 요청이 확정·만료된 뒤 고치거나, 지금은 거래처와 청구운임만 고쳐 주세요."),
 	DISPATCH_NOT_DRIVER(HttpStatus.FORBIDDEN, "DISPATCH_403_ROLE", "차주 계정만 배차를 요청할 수 있습니다."),
 	DISPATCH_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "DISPATCH_404", "배차 요청을 찾을 수 없습니다."),
 	DISPATCH_VEHICLE_MISMATCH(HttpStatus.BAD_REQUEST, "DISPATCH_400_VEHICLE", "차종이 오더와 같고 톤수가 오더 이상인 차량만 요청할 수 있습니다."),

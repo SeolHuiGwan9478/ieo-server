@@ -32,6 +32,7 @@ import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -176,7 +177,88 @@ public class Order extends BaseTimeEntity {
 			CargoCategory cargoCategory, String cargoType, Integer weightKg, Tonnage tonnage, BodyType bodyType, LoadingMethod loadingMethod,
 			Integer fare, Integer billedFare, String customerName, PaymentType paymentType, Integer expectedPaymentDays,
 			ConsignmentType consignmentType, ConfirmMode confirmMode, Driver targetDriver) {
-		if (createdBy == null || pickupSite == null || dropoffSite == null
+		if (createdBy == null) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID, "오더 필수 항목을 모두 입력해 주세요.");
+		}
+		validate(pickupSite, dropoffSite, pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoType, weightKg, tonnage, bodyType,
+				loadingMethod, fare, billedFare, customerName, paymentType, expectedPaymentDays, consignmentType);
+		this.broker = createdBy.getBroker();
+		this.createdBy = createdBy;
+		apply(pickupSite, dropoffSite, pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoType, weightKg, tonnage, bodyType,
+				loadingMethod, fare, billedFare, customerName, paymentType, expectedPaymentDays, consignmentType, confirmMode, targetDriver);
+		this.status = OrderStatus.OPEN;
+	}
+
+	/**
+	 * 모집 중인 오더를 고친다 (BRK-010). 내린 오더와 확정된 오더는 못 고친다 (확정 뒤는 changeBilling).
+	 * 대기 중 요청이 있을 때 차주에게 보이는 조건을 바꿔도 되는지는 서비스가 먼저 본다.
+	 * 차주에게 보이는 조건이 하나라도 바뀌었으면 true
+	 */
+	public boolean change(Site pickupSite, Site dropoffSite, Instant pickupFrom, Instant pickupUntil, Instant dropoffBy,
+			CargoCategory cargoCategory, String cargoType, Integer weightKg, Tonnage tonnage, BodyType bodyType, LoadingMethod loadingMethod,
+			Integer fare, Integer billedFare, String customerName, PaymentType paymentType, Integer expectedPaymentDays,
+			ConsignmentType consignmentType, ConfirmMode confirmMode, Driver targetDriver) {
+		if (status != OrderStatus.OPEN) {
+			throw new BusinessException(ErrorCode.ORDER_NOT_OPEN);
+		}
+		validate(pickupSite, dropoffSite, pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoType, weightKg, tonnage, bodyType,
+				loadingMethod, fare, billedFare, customerName, paymentType, expectedPaymentDays, consignmentType);
+		boolean termsChanged = !hasSameTerms(pickupSite.getId(), dropoffSite.getId(), pickupFrom, pickupUntil, dropoffBy,
+				cargoCategory, cargoType, weightKg, tonnage, bodyType, loadingMethod, fare, paymentType, expectedPaymentDays,
+				consignmentType, confirmMode, targetDriver == null ? null : targetDriver.getUserId());
+		apply(pickupSite, dropoffSite, pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoType, weightKg, tonnage, bodyType,
+				loadingMethod, fare, billedFare, customerName, paymentType, expectedPaymentDays, consignmentType, confirmMode, targetDriver);
+		return termsChanged;
+	}
+
+	/** 배차 확정 뒤에는 주선사만 보는 거래처·청구운임만 고친다. 내린 오더는 못 고친다 */
+	public void changeBilling(Integer billedFare, String customerName) {
+		if (status == OrderStatus.CLOSED) {
+			throw new BusinessException(ErrorCode.ORDER_NOT_OPEN);
+		}
+		validateBilling(billedFare, customerName);
+		this.billedFare = billedFare;
+		this.customerName = normalizeCustomerName(customerName);
+	}
+
+	/**
+	 * 차주에게 보이는 조건이 지금과 같은지: 상하차지, 시간, 화물, 차량, 지급운임, 결제, 운송 형태, 배차 방식.
+	 * 청구운임·거래처는 주선사만 보므로 넣지 않는다. 확정 뒤 수정은 이게 참일 때만 받는다
+	 */
+	public boolean hasSameTerms(Long pickupSiteId, Long dropoffSiteId, Instant pickupFrom, Instant pickupUntil, Instant dropoffBy,
+			CargoCategory cargoCategory, String cargoType, Integer weightKg, Tonnage tonnage, BodyType bodyType, LoadingMethod loadingMethod,
+			Integer fare, PaymentType paymentType, Integer expectedPaymentDays, ConsignmentType consignmentType, ConfirmMode confirmMode,
+			Long targetDriverId) {
+		return Objects.equals(this.pickupSite.getId(), pickupSiteId)
+				&& Objects.equals(this.dropoffSite.getId(), dropoffSiteId)
+				&& Objects.equals(this.pickupFrom, pickupFrom)
+				&& Objects.equals(this.pickupUntil, pickupUntil)
+				&& Objects.equals(this.dropoffBy, dropoffBy)
+				&& this.cargoCategory == cargoCategory
+				&& Objects.equals(this.cargoType, cargoType == null ? null : cargoType.strip())
+				&& Objects.equals(this.weightKg, weightKg)
+				&& this.tonnage == tonnage
+				&& this.bodyType == bodyType
+				&& this.loadingMethod == loadingMethod
+				&& Objects.equals(this.fare, fare)
+				&& this.paymentType == paymentType
+				&& Objects.equals(this.expectedPaymentDays, expectedPaymentDays)
+				&& this.consignmentType == consignmentType
+				&& this.confirmMode == (confirmMode == null ? ConfirmMode.SELECT : confirmMode)
+				&& Objects.equals(targetDriverId(), targetDriverId);
+	}
+
+	/** 지정 배차 차주 id. 마켓 공개 오더면 null */
+	public Long targetDriverId() {
+		return targetDriver == null ? null : targetDriver.getUserId();
+	}
+
+	/** 필수 항목과 값 범위 (DSP-002). 등록과 수정이 같은 규칙을 쓴다 */
+	private static void validate(Site pickupSite, Site dropoffSite, Instant pickupFrom, Instant pickupUntil, Instant dropoffBy,
+			CargoCategory cargoCategory, String cargoType, Integer weightKg, Tonnage tonnage, BodyType bodyType, LoadingMethod loadingMethod,
+			Integer fare, Integer billedFare, String customerName, PaymentType paymentType, Integer expectedPaymentDays,
+			ConsignmentType consignmentType) {
+		if (pickupSite == null || dropoffSite == null
 				|| tonnage == null || bodyType == null || loadingMethod == null || paymentType == null
 				|| consignmentType == null || cargoCategory == null || cargoType == null || cargoType.isBlank()) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID, "오더 필수 항목을 모두 입력해 주세요.");
@@ -190,17 +272,29 @@ public class Order extends BaseTimeEntity {
 				|| expectedPaymentDays == null || expectedPaymentDays < 0 || expectedPaymentDays > MAX_PAYMENT_DAYS) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID, "무게, 운임, 지급 예정일 값을 확인해 주세요.");
 		}
+		validateBilling(billedFare, customerName);
+		if (cargoCategory == CargoCategory.COLD && bodyType != BodyType.REFRIGERATED) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID, "냉동·냉장 화물은 차종을 냉동·냉장으로 골라 주세요.");
+		}
+	}
+
+	private static void validateBilling(Integer billedFare, String customerName) {
 		if (billedFare != null && (billedFare < 0 || billedFare > MAX_FARE)) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID, "청구운임 값을 확인해 주세요.");
 		}
 		if (customerName != null && customerName.strip().length() > MAX_CUSTOMER_NAME) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID, "거래처 이름은 " + MAX_CUSTOMER_NAME + "자까지예요.");
 		}
-		if (cargoCategory == CargoCategory.COLD && bodyType != BodyType.REFRIGERATED) {
-			throw new BusinessException(ErrorCode.ORDER_INVALID, "냉동·냉장 화물은 차종을 냉동·냉장으로 골라 주세요.");
-		}
-		this.broker = createdBy.getBroker();
-		this.createdBy = createdBy;
+	}
+
+	private static String normalizeCustomerName(String customerName) {
+		return customerName == null || customerName.isBlank() ? null : customerName.strip();
+	}
+
+	private void apply(Site pickupSite, Site dropoffSite, Instant pickupFrom, Instant pickupUntil, Instant dropoffBy,
+			CargoCategory cargoCategory, String cargoType, Integer weightKg, Tonnage tonnage, BodyType bodyType, LoadingMethod loadingMethod,
+			Integer fare, Integer billedFare, String customerName, PaymentType paymentType, Integer expectedPaymentDays,
+			ConsignmentType consignmentType, ConfirmMode confirmMode, Driver targetDriver) {
 		this.pickupSite = pickupSite;
 		this.dropoffSite = dropoffSite;
 		this.pickupFrom = pickupFrom;
@@ -214,13 +308,12 @@ public class Order extends BaseTimeEntity {
 		this.loadingMethod = loadingMethod;
 		this.fare = fare;
 		this.billedFare = billedFare;
-		this.customerName = customerName == null || customerName.isBlank() ? null : customerName.strip();
+		this.customerName = normalizeCustomerName(customerName);
 		this.paymentType = paymentType;
 		this.expectedPaymentDays = expectedPaymentDays;
 		this.consignmentType = consignmentType;
 		this.confirmMode = confirmMode == null ? ConfirmMode.SELECT : confirmMode;
 		this.targetDriver = targetDriver;
-		this.status = OrderStatus.OPEN;
 	}
 
 	/**

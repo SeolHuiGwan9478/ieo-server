@@ -3,6 +3,7 @@ package com.ieo.server.domain.dispatch.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -29,6 +30,7 @@ import com.ieo.server.global.auth.JwtProvider;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -431,6 +433,66 @@ class DispatchControllerTest {
 		registerOrder(orderJson("TON_5", "WING", "SELECT", null))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.expectedPaymentDays").value(15));
+	}
+
+	@Test
+	void 오더_수정은_모집_중이면_전부되고_요청이_기다리거나_확정된_뒤에는_거래처와_청구운임만_된다() throws Exception {
+		Instant from = Instant.now().plus(Duration.ofDays(1)).truncatedTo(ChronoUnit.SECONDS);
+		String original = orderJson("TON_5", "WING", "SELECT", null, from);
+		String raised = original.replace("\"fare\": 450000", "\"fare\": 480000");
+
+		// 요청이 없으면 차주에게 보이는 조건도 바꿀 수 있다
+		Integer quiet = idOf(registerOrder(original));
+		updateOrder(quiet, broker, raised.replace("\"cargoType\": \"음료 파레트\"", "\"cargoType\": \"건축 자재\""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("OPEN"))
+				.andExpect(jsonPath("$.fare").value(480000))
+				.andExpect(jsonPath("$.cargoType").value("건축 자재"))
+				.andExpect(jsonPath("$.billing.billedFare").value(600000));
+
+		// 대기 중 요청이 있으면 조건은 못 바꾸고(409) 청구운임·거래처만 된다. 요청은 그대로 기다린다
+		Integer orderId = idOf(registerOrder(original));
+		Integer requestId = idOf(request(driver, orderId));
+		updateOrder(orderId, broker, raised)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("ORDER_409_REQUESTS"));
+		updateOrder(orderId, broker, original.replace("\"billedFare\": 600000", "\"billedFare\": 650000"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.billing.billedFare").value(650000))
+				.andExpect(jsonPath("$.billing.fee").value(200000))
+				.andExpect(jsonPath("$.pendingRequestCount").value(1));
+		mockMvc.perform(get("/api/dispatch-requests").header("Authorization", driver))
+				.andExpect(jsonPath("$[0].status").value("PENDING"));
+
+		// 확정 뒤에도 거래처·청구운임만. 조건을 바꾸면 409
+		mockMvc.perform(post("/api/broker/orders/" + orderId + "/requests/" + requestId + "/confirm").header("Authorization", broker))
+				.andExpect(status().isOk());
+		updateOrder(orderId, broker, raised)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("ORDER_409_LOCKED"));
+		updateOrder(orderId, broker, original.replace("\"customerName\": \"대한제강\"", "\"customerName\": \"성원건설\"")
+						.replace("\"billedFare\": 600000", "\"billedFare\": 700000"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("ASSIGNED"))
+				.andExpect(jsonPath("$.fare").value(450000))
+				.andExpect(jsonPath("$.billing.customerName").value("성원건설"))
+				.andExpect(jsonPath("$.billing.billedFare").value(700000));
+
+		// 다른 회사는 404, 내린 오더는 409
+		Broker rival = brokerRepository.save(Broker.create("경쟁물류", "9876543215", "제2026-002호", null));
+		updateOrder(orderId, brokerBearer(rival, BrokerMemberPosition.OWNER), original)
+				.andExpect(status().isNotFound());
+		Integer closedId = idOf(registerOrder(original));
+		mockMvc.perform(post("/api/broker/orders/" + closedId + "/close").header("Authorization", broker))
+				.andExpect(status().isOk());
+		updateOrder(closedId, broker, original)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("ORDER_409_CLOSED"));
+	}
+
+	private ResultActions updateOrder(Integer orderId, String bearer, String json) throws Exception {
+		return mockMvc.perform(put("/api/broker/orders/" + orderId).header("Authorization", bearer)
+				.contentType(MediaType.APPLICATION_JSON).content(json));
 	}
 
 	private String orderJson(String tonnage, String bodyType, String confirmMode, Long targetDriverId) {
