@@ -6,6 +6,8 @@ import com.ieo.server.domain.broker.enums.DriverLinkStatus;
 import com.ieo.server.domain.broker.repository.BrokerDriverLinkRepository;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
+import com.ieo.server.domain.user.enums.ConsentType;
+import com.ieo.server.domain.user.service.ConsentService;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.enums.UserStatus;
@@ -29,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class DriverLinkService {
 
 	private final BrokerDriverLinkRepository linkRepository;
+	private final ConsentService consentService;
 	private final DriverRepository driverRepository;
 	private final UserRepository userRepository;
 	private final Clock clock;
@@ -64,6 +67,8 @@ public class DriverLinkService {
 		}
 		Instant now = clock.instant();
 		link.accept(driver, now);
+		// 수락 화면에서 위치·도착 시각 공유를 안내하고 받으므로 공유 동의로 기록한다
+		consentService.change(userId, ConsentType.BROKER_SHARE, true);
 		return DriverLinkResponse.from(link, now);
 	}
 

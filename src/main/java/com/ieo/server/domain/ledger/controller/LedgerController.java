@@ -7,13 +7,18 @@ import com.ieo.server.domain.ledger.dto.ExtraIncomeResponse;
 import com.ieo.server.domain.ledger.dto.LedgerEntryResponse;
 import com.ieo.server.domain.ledger.dto.ReceivablesResponse;
 import com.ieo.server.domain.ledger.dto.UpdateLedgerEntryRequest;
+import com.ieo.server.domain.ledger.service.LedgerExportService;
 import com.ieo.server.domain.ledger.service.LedgerService;
 import com.ieo.server.global.auth.AuthInterceptor;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -32,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class LedgerController {
 
 	private final LedgerService ledgerService;
+	private final LedgerExportService ledgerExportService;
 
 	/** 기간 장부. 비우면 이번 달 */
 	@GetMapping("/api/ledger")
@@ -40,6 +46,18 @@ public class LedgerController {
 			@RequestParam(required = false) LocalDate from,
 			@RequestParam(required = false) LocalDate to) {
 		return ledgerService.getEntries(userId, from, to);
+	}
+
+	/** 기간 장부를 CSV 파일로 받는다 (LEDG-033) */
+	@GetMapping("/api/ledger/export")
+	public ResponseEntity<byte[]> export(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@RequestParam LocalDate from,
+			@RequestParam LocalDate to) {
+		return ResponseEntity.ok()
+				.contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+				.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"ieo-ledger-" + from + "_" + to + ".csv\"")
+				.body(ledgerExportService.export(userId, from, to));
 	}
 
 	/** 직접 추가 */

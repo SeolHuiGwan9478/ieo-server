@@ -29,6 +29,9 @@ import com.ieo.server.domain.trip.event.TripProgressed;
 import com.ieo.server.domain.trip.repository.TripPositionRepository;
 import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.user.entity.User;
+import com.ieo.server.domain.user.entity.UserConsent;
+import com.ieo.server.domain.user.enums.ConsentType;
+import com.ieo.server.domain.user.repository.UserConsentRepository;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.repository.UserRepository;
 import com.ieo.server.domain.vehicle.entity.Vehicle;
@@ -106,6 +109,9 @@ class TripLocationControllerTest {
 	private String bearer;
 	private Trip trip;
 	private Instant now;
+
+	@Autowired
+	private UserConsentRepository consentRepository;
 
 	@BeforeEach
 	void setUp() {
@@ -188,6 +194,7 @@ class TripLocationControllerTest {
 		brokerMemberRepository.save(BrokerMember.of(owner, broker, BrokerMemberPosition.OWNER));
 		trip = tripRepository.save(Trip.create(trip.getDriver(), trip.getVehicle(), broker, null, 450_000, PaymentType.RECEIPT,
 				TripSource.MANUAL, trip.pickup().getSite(), now, trip.dropoff().getSite(), now.plusSeconds(36_000)));
+		consentRepository.save(UserConsent.of(trip.getDriver().getUser(), ConsentType.BROKER_SHARE, "2026-11", true));
 		toInTransit();
 
 		send(points(point(now.minusSeconds(150), 36.9, 126.9, 300_000, 12_000)));
@@ -197,6 +204,20 @@ class TripLocationControllerTest {
 		send(points(point(now.minusSeconds(30), 35.9, 128.4, 25_000, 1_700)));
 
 		verify(smsSender, times(3)).send(eq("01090001777"), contains("도착해요"));
+	}
+
+	@Test
+	void 주선사_공유에_동의하지_않으면_도착_시각을_보내지_않는다() throws Exception {
+		Broker broker = brokerRepository.save(Broker.create("대한운송", "1234567891", "제2026-002호", null));
+		User owner = userRepository.save(User.create("01090001778", UserRole.BROKER));
+		brokerMemberRepository.save(BrokerMember.of(owner, broker, BrokerMemberPosition.OWNER));
+		trip = tripRepository.save(Trip.create(trip.getDriver(), trip.getVehicle(), broker, null, 450_000, PaymentType.RECEIPT,
+				TripSource.MANUAL, trip.pickup().getSite(), now, trip.dropoff().getSite(), now.plusSeconds(36_000)));
+		toInTransit();
+
+		send(points(point(now.minusSeconds(60), 36.9, 126.9, 300_000, 12_000)));
+
+		verifyNoInteractions(smsSender);
 	}
 
 	@Test

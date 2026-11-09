@@ -9,9 +9,11 @@ import com.ieo.server.domain.user.repository.UserRepository;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,25 @@ public class ConsentService {
 		return Arrays.stream(ConsentType.values())
 				.map(type -> toResponse(user, type, latest.get(type)))
 				.toList();
+	}
+
+	@Transactional(readOnly = true)
+	public boolean isAgreed(Long userId, ConsentType type) {
+		return userConsentRepository.findFirstByUserIdAndTypeOrderByCreatedAtDescIdDesc(userId, type)
+				.map(UserConsent::isAgreed)
+				.orElse(false);
+	}
+
+	/** [userIds] 중 지금 동의한 사람 */
+	@Transactional(readOnly = true)
+	public Set<Long> agreedAmong(Collection<Long> userIds, ConsentType type) {
+		if (userIds.isEmpty()) {
+			return Set.of();
+		}
+		return userConsentRepository.findLatestByUserIdInAndType(userIds, type).stream()
+				.filter(UserConsent::isAgreed)
+				.map(consent -> consent.getUser().getId())
+				.collect(Collectors.toSet());
 	}
 
 	/** 필수 항목은 철회할 수 없다. 지금 상태와 같으면 이력을 쌓지 않는다 */

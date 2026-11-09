@@ -18,7 +18,7 @@ import java.time.Instant;
  *
  * 위치 규칙 (BRK-002): 단골 차주(linkedDriver)일 때만 locationVisible이고, 그때만 location을 채운다.
  * 차주 번호도 단골일 때만 준다 (단골 목록에서 이미 보이는 번호).
- * etaAt·progressPercent는 위치가 아니라서 모두에게 준다.
+ * etaAt·progressPercent는 위치가 아니라서 단골이 아니어도 준다. 차주가 주선사 공유 동의를 끄면(ACC-006) 위치·ETA·진행률 모두 주지 않는다.
  * 셋 다 운행 중 마지막 위치(TripPosition, 운행마다 한 줄)에서 읽고, 위치가 아직 안 왔거나 상하차지에 머무는 중이면 null이다.
  * receipt는 수하인이 서명했거나 차주가 종이 인수증 사진을 올린 뒤에만 있다.
  * fare는 지급운임(차주). billedFare(청구운임)·fee(수수료)·feeRate(%)는 오더에 청구운임을 적었을 때만 있다 (주선사 콘솔 전용)
@@ -82,11 +82,12 @@ public record BrokerTripResponse(
 	}
 
 	/** position은 아직 위치가 없으면 null */
-	public static BrokerTripResponse of(Trip trip, boolean linkedDriver, TripPosition position,
+	public static BrokerTripResponse of(Trip trip, boolean linkedDriver, boolean sharing, TripPosition shared,
 			BrokerTripStopResponse pickup, BrokerTripStopResponse dropoff,
 			DeliveryProof deliveryProof, boolean hasPaperPhoto) {
 		User user = trip.getDriver().getUser();
 		Vehicle vehicle = trip.getVehicle();
+		TripPosition position = sharing ? shared : null;
 		return new BrokerTripResponse(
 				trip.getId(),
 				trip.getOrder() == null ? null : trip.getOrder().getId(),
@@ -99,7 +100,7 @@ public record BrokerTripResponse(
 				vehicle.getPlateNumber(),
 				vehicle.getTonnage(),
 				vehicle.getTonnage().getLabel(),
-				linkedDriver,
+				linkedDriver && sharing,
 				linkedDriver && position != null ? Location.of(position) : null,
 				position == null ? null : position.eta().orElse(null),
 				position == null ? null : position.progressPercent().orElse(null),

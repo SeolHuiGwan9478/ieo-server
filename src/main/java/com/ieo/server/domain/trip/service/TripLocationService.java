@@ -2,6 +2,8 @@ package com.ieo.server.domain.trip.service;
 
 import com.ieo.server.domain.trip.dto.TripLocationRequest;
 import com.ieo.server.domain.trip.entity.Trip;
+import com.ieo.server.domain.user.enums.ConsentType;
+import com.ieo.server.domain.user.service.ConsentService;
 import com.ieo.server.domain.trip.entity.TripPosition;
 import com.ieo.server.domain.trip.enums.TripStatus;
 import com.ieo.server.domain.notification.service.BrokerNotifier;
@@ -49,6 +51,7 @@ public class TripLocationService {
 	private final TripPositionRepository positionRepository;
 	private final ApplicationEventPublisher events;
 	private final BrokerNotifier brokerNotifier;
+	private final ConsentService consentService;
 	private final Clock clock;
 
 	/** 끝난 운행이면 조용히 무시한다: 차량 앱이 쌓아 둔 위치를 버릴 수 있게 */
@@ -100,6 +103,9 @@ public class TripLocationService {
 		boolean changed = !first && Duration.between(trip.getNotifiedEta(), eta).abs().compareTo(ETA_CHANGE) >= 0
 				&& !now.isBefore(trip.getEtaSharedAt().plus(ETA_RENOTICE_GAP));
 		if (!first && !halfWay && !nearArrival && !changed) {
+			return;
+		}
+		if (!consentService.isAgreed(trip.getDriver().getUserId(), ConsentType.BROKER_SHARE)) {
 			return;
 		}
 		brokerNotifier.send(trip.getBroker(), "[이에오] " + trip.getVehicle().getPlateNumber() + " 차량이 "

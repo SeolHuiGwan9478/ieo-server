@@ -2,6 +2,7 @@ package com.ieo.server.domain.broker.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,6 +26,9 @@ import com.ieo.server.domain.trip.enums.TripSource;
 import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.trip.service.TripLocationService;
 import com.ieo.server.domain.user.entity.User;
+import com.ieo.server.domain.user.entity.UserConsent;
+import com.ieo.server.domain.user.enums.ConsentType;
+import com.ieo.server.domain.user.repository.UserConsentRepository;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.repository.UserRepository;
 import com.ieo.server.domain.vehicle.entity.Vehicle;
@@ -67,6 +71,9 @@ class BrokerTripControllerTest {
 
 	@Autowired
 	private UserRepository userRepository;
+
+	@Autowired
+	private UserConsentRepository consentRepository;
 
 	@Autowired
 	private DriverRepository driverRepository;
@@ -163,6 +170,7 @@ class BrokerTripControllerTest {
 		link("01090007001", regular);
 		Trip regularTrip = trip(regular, hanbit, TripSource.IEO_DISPATCH);
 		Trip strangerTrip = trip(stranger, hanbit, TripSource.IEO_DISPATCH);
+		consentRepository.save(UserConsent.of(stranger.getUser(), ConsentType.BROKER_SHARE, "2026-11", true));
 
 		// 아직 위치가 안 왔으면 모두 비어 있다
 		perform(get("/api/brokers/me/trips/{id}", regularTrip.getId()), owner)
@@ -279,6 +287,29 @@ class BrokerTripControllerTest {
 	}
 
 	/** 주선사가 요청하고 차주가 수락해 단골이 된다 (2-4 API 그대로) */
+	@Test
+	void 차주가_주선사_공유_동의를_끄면_위치와_도착_시각을_주지_않는다() throws Exception {
+		Driver regular = driver("01090007011", "박기사");
+		link("01090007011", regular);
+		Trip regularTrip = trip(regular, hanbit, TripSource.IEO_DISPATCH);
+		Instant recordedAt = clock.instant().minusSeconds(60);
+		regularTrip.start(recordedAt.minusSeconds(600));
+		sendLocation(regularTrip, recordedAt.minusSeconds(300), 250_000, 11_000);
+		sendLocation(regularTrip, recordedAt, 200_000, 9_000);
+		perform(get("/api/brokers/me/trips/{id}", regularTrip.getId()), owner)
+				.andExpect(jsonPath("$.locationVisible").value(true))
+				.andExpect(jsonPath("$.location.lat").value(36.5));
+
+		perform(put("/api/users/me/consents/BROKER_SHARE").contentType(MediaType.APPLICATION_JSON).content("{\"agreed\":false}"), regular.getUser())
+				.andExpect(status().isOk());
+
+		perform(get("/api/brokers/me/trips/{id}", regularTrip.getId()), owner)
+				.andExpect(jsonPath("$.locationVisible").value(false))
+				.andExpect(jsonPath("$.location").doesNotExist())
+				.andExpect(jsonPath("$.etaAt").doesNotExist())
+				.andExpect(jsonPath("$.progressPercent").doesNotExist());
+	}
+
 	private void link(String phone, Driver driver) throws Exception {
 		String body = perform(post("/api/brokers/me/driver-invitations").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"phone\":\"" + phone + "\"}"), owner)

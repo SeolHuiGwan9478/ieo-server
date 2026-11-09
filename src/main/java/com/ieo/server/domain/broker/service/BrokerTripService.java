@@ -14,6 +14,8 @@ import com.ieo.server.domain.delivery.enums.ProofPhotoType;
 import com.ieo.server.domain.delivery.repository.DeliveryProofRepository;
 import com.ieo.server.domain.delivery.repository.ProofPhotoRepository;
 import com.ieo.server.domain.trip.entity.Trip;
+import com.ieo.server.domain.user.enums.ConsentType;
+import com.ieo.server.domain.user.service.ConsentService;
 import com.ieo.server.domain.trip.entity.TripPosition;
 import com.ieo.server.domain.trip.entity.TripStop;
 import com.ieo.server.domain.trip.enums.TripSource;
@@ -53,6 +55,7 @@ public class BrokerTripService {
 	private static final int MAX_PAGE_SIZE = 100;
 
 	private final BrokerMemberRepository memberRepository;
+	private final ConsentService consentService;
 	private final BrokerDriverLinkRepository linkRepository;
 	private final TripRepository tripRepository;
 	private final TripPositionRepository positionRepository;
@@ -94,6 +97,8 @@ public class BrokerTripService {
 				.map(BrokerDriverLink::getDriver)
 				.map(driver -> driver.getUserId())
 				.collect(Collectors.toSet());
+		Set<Long> sharingDriverIds = consentService.agreedAmong(
+				trips.stream().map(trip -> trip.getDriver().getUserId()).collect(Collectors.toSet()), ConsentType.BROKER_SHARE);
 
 		Map<Long, TripPosition> positionByTrip = positionRepository.findAllById(tripIds).stream()
 				.collect(Collectors.toMap(TripPosition::getTripId, Function.identity()));
@@ -115,6 +120,7 @@ public class BrokerTripService {
 					DeliveryProof receipt = receiptByTrip.get(trip.getId());
 					return BrokerTripResponse.of(trip,
 							linkedDriverIds.contains(trip.getDriver().getUserId()),
+							sharingDriverIds.contains(trip.getDriver().getUserId()),
 								positionByTrip.get(trip.getId()),
 							stop(trip.pickup(), recordByStop, proofByRecord),
 							stop(trip.dropoff(), recordByStop, proofByRecord),

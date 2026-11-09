@@ -1,5 +1,9 @@
 package com.ieo.server.domain.ledger.controller;
 
+import java.nio.charset.StandardCharsets;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.hamcrest.Matchers.containsString;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -100,6 +104,34 @@ class LedgerControllerTest {
 		policyRepository.save(WaitPolicy.create(broker, 120, 30, 10_000, 50_000, WaitRounding.UP));
 		pyeongtaek = siteRepository.save(Site.create("평택 포승 물류센터", "경기 평택시", 36.98, 126.84, null));
 		daegu = siteRepository.save(Site.create("대구 성서 공단", "대구 달서구", 35.84, 128.49, null));
+	}
+
+	@Test
+	void 기간_장부를_CSV로_내보내고_수식처럼_보이는_글자를_막는다() throws Exception {
+		driver.changeBusinessInfo("한길운수", "1234567891", "홍길동");
+		mockMvc.perform(post("/api/ledger").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"workDate\":\"2026-03-10\",\"description\":\"=평택, 대구\",\"fare\":300000,\"paymentType\":\"RECEIPT\",\"brokerName\":\"한빛\"}"))
+				.andExpect(status().is2xxSuccessful());
+		mockMvc.perform(post("/api/expenses").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"spentOn\":\"2026-03-09\",\"category\":\"FUEL\",\"amount\":50000,\"memo\":\"경유\"}"))
+				.andExpect(status().is2xxSuccessful());
+
+		var response = mockMvc.perform(get("/api/ledger/export").header("Authorization", bearer).param("from", "2026-03-01").param("to", "2026-03-31"))
+				.andExpect(status().isOk())
+				.andExpect(header().string("Content-Disposition", containsString("ieo-ledger-2026-03-01_2026-03-31.csv")))
+				.andReturn().getResponse();
+		String csv = new String(response.getContentAsByteArray(), StandardCharsets.UTF_8);
+
+		assertThat(csv).startsWith("\uFEFF기간,2026-03-01 ~ 2026-03-31\r\n상호,한길운수\r\n사업자등록번호,1234567891\r\n");
+		assertThat(csv).contains("일자,구분,항목,거래처,내용,결제 방식,수입금액,지출금액,입금 여부,입금일,주행거리(km)");
+		assertThat(csv.indexOf("2026-03-09,지출,주유,,경유,,,50000")).isLessThan(csv.indexOf("2026-03-10,수입,운임,한빛,\"'=평택, 대구\""));
+		assertThat(csv).contains("합계,,,,,,300000,50000");
+	}
+
+	@Test
+	void 내보내기_기간이_1년을_넘으면_거절한다() throws Exception {
+		mockMvc.perform(get("/api/ledger/export").header("Authorization", bearer).param("from", "2024-01-01").param("to", "2026-01-01"))
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test
