@@ -23,6 +23,8 @@ management:
 
 # 토큰. secret은 32바이트 이상, 환경변수로 주입 (local·test는 각 파일에 개발용 값)
 ieo:
+  # 문자에 넣는 공개 링크의 주소. 배포할 때 IEO_PUBLIC_BASE_URL로 넘긴다
+  public-base-url: ${IEO_PUBLIC_BASE_URL:http://localhost:8080}
   # 배차 추천 계산 (03). 가안 값이고 docs/design/04_배차추천.md 3장에서 정한다
   recommendation:
     diesel-price-won: 1600        # 경유 1L. 오피넷을 받지 못할 때만 쓴다

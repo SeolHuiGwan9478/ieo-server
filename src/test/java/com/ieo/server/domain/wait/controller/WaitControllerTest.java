@@ -1,5 +1,12 @@
 package com.ieo.server.domain.wait.controller;
 
+import com.ieo.server.global.sms.SmsSender;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -50,6 +57,9 @@ class WaitControllerTest {
 
 	/** 상차 예정 시각. 테스트 시각은 모두 과거라 미래 시각 검사에 걸리지 않는다 */
 	private static final Instant PLANNED = Instant.parse("2026-01-10T01:00:00Z");
+
+	@MockitoBean
+	private SmsSender smsSender;
 
 	@Autowired
 	private WebApplicationContext context;
@@ -271,6 +281,20 @@ class WaitControllerTest {
 				.header("Authorization", bearer)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"at\":\"" + at + "\"}"));
+	}
+
+	@Test
+	void 증빙은_주선사에게_한_번만_보내고_다시_눌러도_문자가_늘지_않는다() throws Exception {
+		event("PICKUP", "arrive", PLANNED);
+		String url = "/api/trips/" + trip.getId() + "/stops/PICKUP/wait/proof/send";
+
+		proof().andExpect(jsonPath("$.canSend").value(true)).andExpect(jsonPath("$.sentAt").doesNotExist());
+		mockMvc.perform(post(url).header("Authorization", bearer))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.sentAt").exists());
+		mockMvc.perform(post(url).header("Authorization", bearer)).andExpect(status().isOk());
+
+		verify(smsSender, times(1)).send(eq("01090001002"), contains("대기 증빙"));
 	}
 
 	private ResultActions proof() throws Exception {

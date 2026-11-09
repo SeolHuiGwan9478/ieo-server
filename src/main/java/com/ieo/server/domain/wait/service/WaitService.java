@@ -11,6 +11,7 @@ import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.trip.service.TripLocationService;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.wait.dto.EditWaitRequest;
+import com.ieo.server.domain.notification.service.BrokerNotifier;
 import com.ieo.server.domain.wait.dto.WaitProofLinkResponse;
 import com.ieo.server.domain.wait.dto.WaitProofResponse;
 import com.ieo.server.domain.wait.dto.WaitRecordResponse;
@@ -30,6 +31,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,8 +58,12 @@ public class WaitService {
 	private final SiteStatsCalculator siteStatsCalculator;
 	private final BrokerMetricsCalculator metricsCalculator;
 	private final LedgerRecorder ledgerRecorder;
+	private final BrokerNotifier brokerNotifier;
 	private final TripLocationService locationService;
 	private final Clock clock;
+
+	@Value("${ieo.public-base-url}")
+	private String publicBaseUrl;
 
 	public record Arrival(WaitRecordResponse record, boolean created) {
 	}
@@ -83,6 +89,10 @@ public class WaitService {
 		WaitPolicy policy = trip.getBroker() == null ? null
 				: policyRepository.findFirstByBrokerIdAndActiveTrue(trip.getBroker().getId()).orElse(null);
 		WaitRecord record = recordRepository.save(WaitRecord.start(stop, arrivedAt, policy));
+		if (type == StopType.DROPOFF && trip.getBroker() != null && trip.isEtaNoticeEnabled()) {
+			brokerNotifier.send(trip.getBroker(), "[이에오] " + trip.getVehicle().getPlateNumber() + " 차량이 "
+					+ stop.getSite().getName() + "에 도착했어요.");
+		}
 		return new Arrival(WaitRecordResponse.from(record), true);
 	}
 
@@ -140,15 +150,41 @@ public class WaitService {
 	}
 
 	/**
-	 * 증빙 링크를 만든다 (WAIT-020). 이탈까지 끝난 기록만. 이미 있으면 같은 링크를 돌려준다.
-	 * TODO: 주선사에게 보내기(sentAt)는 09 알림을 만든 뒤 붙인다 (WAIT-022)
+	 * 증빙 링크를 만든다 (WAIT-020). 이미 있으면 같은 링크를 돌려준다.
 	 */
 	public WaitProofLinkResponse createProof(Long userId, Long tripId, StopType type) {
 		// 대기 중에도 만든다. 주선사는 링크에서 지금까지의 대기 시간을 보고, 이탈하면 같은 링크에 최종 기록이 남는다
 		WaitRecord record = findRecord(userId, tripId, type);
-		WaitProof proof = proofRepository.findByWaitRecordId(record.getId())
+		return WaitProofLinkResponse.from(proofOf(record), canSend(record));
+	}
+
+	/**
+	 * 증빙 링크를 주선사에게 문자로 보낸다 (WAIT-022). 이미 보냈으면 다시 보내지 않는다 (NOTI-003).
+	 * 차주가 이름만 적은 주선사는 연락처를 모르므로 보낼 수 없다
+	 */
+	public WaitProofLinkResponse sendProof(Long userId, Long tripId, StopType type) {
+		WaitRecord record = findRecord(userId, tripId, type);
+		if (!canSend(record)) {
+			throw new BusinessException(ErrorCode.WAIT_PROOF_NO_BROKER);
+		}
+		WaitProof proof = proofOf(record);
+		if (proof.getSentAt() == null) {
+			Trip trip = findMine(userId, tripId);
+			brokerNotifier.send(trip.getBroker(), "[이에오] " + trip.getVehicle().getPlateNumber()
+					+ " 차량의 대기 증빙이 도착했어요. " + publicBaseUrl.replaceAll("/+$", "")
+					+ WaitProofLinkResponse.from(proof, true).path());
+			proof.markSent(clock.instant());
+		}
+		return WaitProofLinkResponse.from(proof, true);
+	}
+
+	private WaitProof proofOf(WaitRecord record) {
+		return proofRepository.findByWaitRecordId(record.getId())
 				.orElseGet(() -> proofRepository.save(WaitProof.create(record, clock.instant().plus(PROOF_TTL))));
-		return WaitProofLinkResponse.from(proof);
+	}
+
+	private static boolean canSend(WaitRecord record) {
+		return record.getTripStop().getTrip().getBroker() != null;
 	}
 
 	/** 주선사가 링크로 보는 증빙. 로그인 없이 열린다. 없거나 만료되면 404 */

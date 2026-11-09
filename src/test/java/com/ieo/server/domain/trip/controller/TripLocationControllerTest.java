@@ -1,5 +1,17 @@
 package com.ieo.server.domain.trip.controller;
 
+import com.ieo.server.domain.broker.entity.Broker;
+import com.ieo.server.domain.broker.entity.BrokerMember;
+import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
+import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
+import com.ieo.server.domain.broker.repository.BrokerRepository;
+import com.ieo.server.global.sms.SmsSender;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -47,6 +59,15 @@ import org.springframework.web.context.WebApplicationContext;
 @Transactional
 @RecordApplicationEvents
 class TripLocationControllerTest {
+
+	@MockitoBean
+	private SmsSender smsSender;
+
+	@Autowired
+	private BrokerRepository brokerRepository;
+
+	@Autowired
+	private BrokerMemberRepository brokerMemberRepository;
 
 	@Autowired
 	private WebApplicationContext context;
@@ -158,6 +179,31 @@ class TripLocationControllerTest {
 						.content(points(point(now, 36.9, 127.0, null, null))))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.code").value("TRIP_404"));
+	}
+
+	@Test
+	void 주선사에게_출발_50퍼센트_도착_30분_전에_도착_시각을_알린다() throws Exception {
+		Broker broker = brokerRepository.save(Broker.create("대한운송", "1234567891", "제2026-002호", null));
+		User owner = userRepository.save(User.create("01090001777", UserRole.BROKER));
+		brokerMemberRepository.save(BrokerMember.of(owner, broker, BrokerMemberPosition.OWNER));
+		trip = tripRepository.save(Trip.create(trip.getDriver(), trip.getVehicle(), broker, null, 450_000, PaymentType.RECEIPT,
+				TripSource.MANUAL, trip.pickup().getSite(), now, trip.dropoff().getSite(), now.plusSeconds(36_000)));
+		toInTransit();
+
+		send(points(point(now.minusSeconds(150), 36.9, 126.9, 300_000, 12_000)));
+		send(points(point(now.minusSeconds(120), 36.7, 127.2, 200_000, 8_000)));
+		send(points(point(now.minusSeconds(90), 36.5, 127.5, 140_000, 6_000)));
+		send(points(point(now.minusSeconds(60), 36.0, 128.2, 30_000, 2_000)));
+		send(points(point(now.minusSeconds(30), 35.9, 128.4, 25_000, 1_700)));
+
+		verify(smsSender, times(3)).send(eq("01090001777"), contains("도착해요"));
+	}
+
+	@Test
+	void 이름만_적은_주선사에게는_도착_시각을_보내지_않는다() throws Exception {
+		toInTransit();
+		send(points(point(now.minusSeconds(60), 36.9, 126.9, 300_000, 12_000)));
+		verifyNoInteractions(smsSender);
 	}
 
 	private void toInTransit() {

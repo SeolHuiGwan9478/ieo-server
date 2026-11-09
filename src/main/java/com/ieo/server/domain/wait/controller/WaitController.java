@@ -90,6 +90,15 @@ public class WaitController {
 		return waitService.createProof(userId, tripId, stopType);
 	}
 
+	/** 증빙 링크를 주선사에게 보내기 (WAIT-022) */
+	@PostMapping("/stops/{stopType}/wait/proof/send")
+	public WaitProofLinkResponse sendProof(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long tripId,
+			@PathVariable StopType stopType) {
+		return waitService.sendProof(userId, tripId, stopType);
+	}
+
 	private static Instant at(WaitTimeRequest request) {
 		return request == null ? null : request.at();
 	}
