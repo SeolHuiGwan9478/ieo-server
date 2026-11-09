@@ -40,6 +40,7 @@ public class UserService {
 	private final BrokerMemberService brokerMemberService;
 	private final BrokerInvitationRepository brokerInvitationRepository;
 	private final BrokerDriverLinkRepository brokerDriverLinkRepository;
+	private final CarSessionService carSessionService;
 	private final Clock clock;
 
 	public UserResponse getUser(Long userId) {
@@ -73,6 +74,7 @@ public class UserService {
 		brokerMemberService.leaveOnWithdraw(userId);
 		user.withdraw(request == null ? null : request.reason(), clock.instant());
 		driverRepository.findById(userId).ifPresent(Driver::clearPersonalInfo);
+		carSessionService.revokeAll(userId);
 		siteRepository.detachCreator(userId);
 		siteAttributeRepository.detachReporter(userId);
 		siteNoteRepository.detachAuthor(userId);

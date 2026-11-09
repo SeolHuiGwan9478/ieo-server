@@ -28,6 +28,7 @@ import org.springframework.stereotype.Component;
 public class JwtProvider {
 
 	private static final String TYPE_CLAIM = "typ";
+	private static final String CAR_SESSION_CLAIM = "csid";
 
 	private enum TokenType { ACCESS, REFRESH }
 
@@ -49,25 +50,31 @@ public class JwtProvider {
 	}
 
 	public TokenResponse issue(Long userId) {
+		return issue(userId, null);
+	}
+
+	/** 차량에 주는 토큰. carSessionId를 넣어 차량별로 끊을 수 있게 한다 */
+	public TokenResponse issue(Long userId, UUID carSessionId) {
 		Instant now = clock.instant();
-		String accessToken = sign(userId, TokenType.ACCESS, now, now.plus(properties.accessTokenTtl()));
-		String refreshToken = sign(userId, TokenType.REFRESH, now, now.plus(properties.refreshTokenTtl()));
+		String accessToken = sign(userId, TokenType.ACCESS, carSessionId, now, now.plus(properties.accessTokenTtl()));
+		String refreshToken = sign(userId, TokenType.REFRESH, carSessionId, now, now.plus(properties.refreshTokenTtl()));
 		return new TokenResponse(accessToken, refreshToken);
 	}
 
 	/** 인증 인터셉터에서 쓴다. 올바르지 않거나 만료되면 401. */
-	public Long parseAccessToken(String token) {
+	public TokenClaims parseAccessToken(String token) {
 		return parse(token, TokenType.ACCESS);
 	}
 
-	public Long parseRefreshToken(String token) {
+	public TokenClaims parseRefreshToken(String token) {
 		return parse(token, TokenType.REFRESH);
 	}
 
-	private String sign(Long userId, TokenType type, Instant issuedAt, Instant expiresAt) {
+	private String sign(Long userId, TokenType type, UUID carSessionId, Instant issuedAt, Instant expiresAt) {
 		JWTClaimsSet claims = new JWTClaimsSet.Builder()
 				.subject(userId.toString())
 				.claim(TYPE_CLAIM, type.name())
+				.claim(CAR_SESSION_CLAIM, carSessionId == null ? null : carSessionId.toString())
 				.jwtID(UUID.randomUUID().toString())
 				.issueTime(Date.from(issuedAt))
 				.expirationTime(Date.from(expiresAt))
@@ -81,7 +88,7 @@ public class JwtProvider {
 		return jwt.serialize();
 	}
 
-	private Long parse(String token, TokenType expectedType) {
+	private TokenClaims parse(String token, TokenType expectedType) {
 		try {
 			SignedJWT jwt = SignedJWT.parse(token);
 			if (!JWSAlgorithm.HS256.equals(jwt.getHeader().getAlgorithm()) || !jwt.verify(verifier)) {
@@ -95,8 +102,9 @@ public class JwtProvider {
 			if (!expectedType.name().equals(claims.getStringClaim(TYPE_CLAIM))) {
 				throw invalid();
 			}
-			return Long.valueOf(claims.getSubject());
-		} catch (ParseException | JOSEException | NumberFormatException e) {
+			String carSessionId = claims.getStringClaim(CAR_SESSION_CLAIM);
+			return new TokenClaims(Long.valueOf(claims.getSubject()), carSessionId == null ? null : UUID.fromString(carSessionId));
+		} catch (ParseException | JOSEException | IllegalArgumentException e) {
 			throw invalid();
 		}
 	}

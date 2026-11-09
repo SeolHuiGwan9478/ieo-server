@@ -16,6 +16,8 @@ public enum ErrorCode {
 
 	// 사용자
 	USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_404", "사용자를 찾을 수 없습니다."),
+	CAR_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "CAR_SESSION_404", "로그인된 차량을 찾을 수 없습니다."),
+	CONSENT_REQUIRED(HttpStatus.BAD_REQUEST, "USER_400_CONSENT", "필수 동의는 철회할 수 없습니다. 동의하지 않으려면 탈퇴해 주세요."),
 	USER_NOT_ACTIVE(HttpStatus.FORBIDDEN, "USER_403", "이용이 제한되었거나 탈퇴한 계정입니다."),
 	USER_INVALID_STATUS(HttpStatus.CONFLICT, "USER_409", "지금 계정 상태에서는 할 수 없는 요청입니다."),
 

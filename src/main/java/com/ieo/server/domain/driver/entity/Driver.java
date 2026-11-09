@@ -37,6 +37,16 @@ public class Driver extends BaseTimeEntity {
 	@Column(length = 30)
 	private String licenseNumber;
 
+	/** 사업자 정보 (선택, ACC-003). 셋 다 있거나 셋 다 없다 */
+	@Column(length = 50)
+	private String businessName;
+
+	@Column(length = 10)
+	private String businessNumber;
+
+	@Column(length = 30)
+	private String representativeName;
+
 	private Driver(User user) {
 		this.user = user;
 	}
@@ -53,8 +63,19 @@ public class Driver extends BaseTimeEntity {
 		this.licenseNumber = licenseNumber;
 	}
 
+	public void changeBusinessInfo(String businessName, String businessNumber, String representativeName) {
+		this.businessName = businessName;
+		this.businessNumber = businessNumber;
+		this.representativeName = representativeName;
+	}
+
+	public void clearBusinessInfo() {
+		changeBusinessInfo(null, null, null);
+	}
+
 	/** 탈퇴할 때 개인정보를 지운다. 운행·장부와의 연결을 위해 행은 남긴다. */
 	public void clearPersonalInfo() {
 		this.licenseNumber = null;
+		clearBusinessInfo();
 	}
 }

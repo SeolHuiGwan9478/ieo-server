@@ -19,6 +19,7 @@ import com.ieo.server.domain.user.repository.UserRepository;
 import com.ieo.server.domain.user.service.social.SocialProfile;
 import com.ieo.server.domain.vehicle.service.VehicleService;
 import com.ieo.server.global.auth.JwtProvider;
+import com.ieo.server.global.auth.TokenClaims;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.time.Clock;
@@ -51,6 +52,7 @@ public class AuthService {
 	private final DriverRepository driverRepository;
 	private final VehicleService vehicleService;
 	private final JwtProvider jwtProvider;
+	private final CarSessionService carSessionService;
 	private final Clock clock;
 
 	/** "이미 가입된 계정이 있어요" 모달에서 로그인을 누르면 호출한다. */
@@ -59,6 +61,9 @@ public class AuthService {
 		User user = userRepository.findByPhone(phone)
 				.orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 		user.recordLogin(clock.instant());
+		if (request.carDeviceName() != null) {
+			return jwtProvider.issue(user.getId(), carSessionService.open(user, request.deviceId(), request.carDeviceName(), request.appVersion()));
+		}
 		return jwtProvider.issue(user.getId());
 	}
 
@@ -145,13 +150,17 @@ public class AuthService {
 
 	@Transactional(readOnly = true)
 	public TokenResponse refresh(RefreshTokenRequest request) {
-		Long userId = jwtProvider.parseRefreshToken(request.refreshToken());
+		TokenClaims claims = jwtProvider.parseRefreshToken(request.refreshToken());
+		Long userId = claims.userId();
 		User user = userRepository.findById(userId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_TOKEN));
 		if (!user.isActive()) {
 			throw new BusinessException(ErrorCode.USER_NOT_ACTIVE);
 		}
-		return jwtProvider.issue(userId);
+		if (claims.carSessionId() != null) {
+			carSessionService.touch(claims.carSessionId(), userId);
+		}
+		return jwtProvider.issue(userId, claims.carSessionId());
 	}
 
 	private void validateConsents(UserRole role, List<ConsentRequest> consents) {

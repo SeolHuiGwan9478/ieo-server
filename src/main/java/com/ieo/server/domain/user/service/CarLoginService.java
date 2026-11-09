@@ -42,6 +42,7 @@ public class CarLoginService {
 	private final CarLoginSessionRepository carLoginSessionRepository;
 	private final UserRepository userRepository;
 	private final JwtProvider jwtProvider;
+	private final CarSessionService carSessionService;
 	private final Clock clock;
 	private final SecureRandom random = new SecureRandom();
 
@@ -76,7 +77,8 @@ public class CarLoginService {
 		}
 		User user = session.consume(now);
 		user.recordLogin(now);
-		return new CarLoginPollResponse(CarLoginStatus.APPROVED, jwtProvider.issue(user.getId()));
+		UUID carSessionId = carSessionService.open(user, session.getDeviceId(), session.getDeviceName(), session.getAppVersion());
+		return new CarLoginPollResponse(CarLoginStatus.APPROVED, jwtProvider.issue(user.getId(), carSessionId));
 	}
 
 	/** 휴대폰이 QR을 찍고 승인 화면을 띄울 때. */

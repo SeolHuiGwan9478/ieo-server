@@ -79,7 +79,7 @@ class CarLoginControllerTest {
 				.andExpect(jsonPath("$.status").value("APPROVED"))
 				.andReturn().getResponse().getContentAsString();
 		String accessToken = JsonPath.read(tokens, "$.tokens.accessToken");
-		assertThat(jwtProvider.parseAccessToken(accessToken)).isEqualTo(userId);
+		assertThat(jwtProvider.parseAccessToken(accessToken).userId()).isEqualTo(userId);
 		assertThat(userRepository.findById(userId).orElseThrow().getLastLoginAt()).isNotNull();
 
 		// 다시 물어도 토큰은 다시 안 준다

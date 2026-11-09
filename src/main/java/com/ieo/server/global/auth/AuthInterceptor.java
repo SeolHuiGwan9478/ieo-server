@@ -1,5 +1,6 @@
 package com.ieo.server.global.auth;
 
+import com.ieo.server.domain.user.service.CarSessionService;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,9 +20,11 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class AuthInterceptor implements HandlerInterceptor {
 
 	public static final String USER_ID = "userId";
+	public static final String CAR_SESSION_ID = "carSessionId";
 	private static final String BEARER = "Bearer ";
 
 	private final JwtProvider jwtProvider;
+	private final CarSessionService carSessionService;
 
 	@Override
 	public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -33,7 +36,15 @@ public class AuthInterceptor implements HandlerInterceptor {
 		if (header == null || !header.startsWith(BEARER)) {
 			throw new BusinessException(ErrorCode.UNAUTHORIZED);
 		}
-		request.setAttribute(USER_ID, jwtProvider.parseAccessToken(header.substring(BEARER.length())));
+		TokenClaims claims = jwtProvider.parseAccessToken(header.substring(BEARER.length()));
+		// 휴대폰에서 끊은 차량은 액세스 토큰이 남아 있어도 바로 막는다
+		if (claims.carSessionId() != null && !carSessionService.isActive(claims.carSessionId())) {
+			throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+		}
+		request.setAttribute(USER_ID, claims.userId());
+		if (claims.carSessionId() != null) {
+			request.setAttribute(CAR_SESSION_ID, claims.carSessionId());
+		}
 		return true;
 	}
 }
