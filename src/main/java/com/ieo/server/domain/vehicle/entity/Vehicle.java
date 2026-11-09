@@ -78,6 +78,9 @@ public class Vehicle extends BaseTimeEntity {
 
 	private Integer totalWeightKg;
 
+	/** 축 수. 선택 입력이고 고속도로 통행료 차종을 정하는 데 쓴다 */
+	private Integer axleCount;
+
 	/** Pleos 누적 연비를 km/L로 바꿔 저장한다 (VEH-003) */
 	@Column(precision = 4, scale = 2)
 	private BigDecimal measuredKmPerLiter;
@@ -110,11 +113,12 @@ public class Vehicle extends BaseTimeEntity {
 		this.heightM = validateHeight(heightM);
 	}
 
-	/** 폭·길이·총중량을 바꾼다. null이면 비운다. 범위는 TMAP이 받는 값에 맞췄다 */
-	public void changeDimensions(Integer widthCm, Integer lengthCm, Integer totalWeightKg) {
+	/** 폭·길이·총중량·축 수를 바꾼다. null이면 비운다. 범위는 TMAP이 받는 값에 맞췄다 */
+	public void changeDimensions(Integer widthCm, Integer lengthCm, Integer totalWeightKg, Integer axleCount) {
 		this.widthCm = validateRange(widthCm, 100, 300);
 		this.lengthCm = validateRange(lengthCm, 200, 2_000);
 		this.totalWeightKg = validateRange(totalWeightKg, 500, 40_000);
+		this.axleCount = validateRange(axleCount, 2, 6);
 	}
 
 	private static Integer validateRange(Integer value, int min, int max) {

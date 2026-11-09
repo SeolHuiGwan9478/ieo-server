@@ -121,10 +121,11 @@ class VehicleControllerTest {
 		Integer id = idOf(register(bearer, "경기82사7777", "TON_5", "CARGO", "3.6"));
 
 		mockMvc.perform(patch("/api/vehicles/" + id).header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
-						.content("{\"tonnage\":\"TON_5\",\"bodyType\":\"CARGO\",\"widthCm\":249,\"lengthCm\":850,\"totalWeightKg\":11000}"))
+						.content("{\"tonnage\":\"TON_5\",\"bodyType\":\"CARGO\",\"widthCm\":249,\"lengthCm\":850,\"totalWeightKg\":11000,\"axleCount\":3}"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.widthCm").value(249))
-				.andExpect(jsonPath("$.totalWeightKg").value(11000));
+				.andExpect(jsonPath("$.totalWeightKg").value(11000))
+				.andExpect(jsonPath("$.axleCount").value(3));
 		mockMvc.perform(patch("/api/vehicles/" + id).header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
 						.content("{\"tonnage\":\"TON_5\",\"bodyType\":\"CARGO\",\"widthCm\":999}"))
 				.andExpect(status().isBadRequest())

@@ -19,5 +19,6 @@ public record CreateVehicleRequest(
 		@Size(max = 32) String vin,
 		Integer widthCm,
 		Integer lengthCm,
-		Integer totalWeightKg) {
+		Integer totalWeightKg,
+		Integer axleCount) {
 }

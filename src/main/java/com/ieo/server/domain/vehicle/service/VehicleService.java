@@ -50,7 +50,7 @@ public class VehicleService {
 	public VehicleResponse register(Long userId, CreateVehicleRequest request) {
 		Driver driver = requireDriver(userId);
 		Vehicle vehicle = Vehicle.create(driver, request.plateNumber(), request.tonnage(), request.bodyType(), request.heightM());
-		vehicle.changeDimensions(request.widthCm(), request.lengthCm(), request.totalWeightKg());
+		vehicle.changeDimensions(request.widthCm(), request.lengthCm(), request.totalWeightKg(), request.axleCount());
 		if (vehicleRepository.existsByPlateNumber(vehicle.getPlateNumber())) {
 			throw new BusinessException(ErrorCode.VEHICLE_DUPLICATE_PLATE);
 		}
@@ -112,7 +112,7 @@ public class VehicleService {
 	public VehicleResponse update(Long userId, Long vehicleId, UpdateVehicleRequest request) {
 		Vehicle vehicle = findMine(userId, vehicleId);
 		vehicle.changeSpec(request.tonnage(), request.bodyType(), request.heightM());
-		vehicle.changeDimensions(request.widthCm(), request.lengthCm(), request.totalWeightKg());
+		vehicle.changeDimensions(request.widthCm(), request.lengthCm(), request.totalWeightKg(), request.axleCount());
 		return VehicleResponse.from(vehicle);
 	}
 
