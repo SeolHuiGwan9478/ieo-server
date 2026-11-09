@@ -16,7 +16,7 @@ import java.time.Instant;
 /**
  * 오더. 화면 표기(label)를 같이 준다. open은 지금 요청할 수 있는지(OPEN이고 상차 시간이 남음).
  * 보는 쪽에 따라 채워지는 값: 차주 목록은 distanceM·myRequest, 주선사 목록은 pendingRequestCount.
- * netProfit(운임 − 지금 위치에서 상차지까지 공차 연료비, DSP-011)은 차주가 위치를 보내고 찾았을 때만 채운다.
+ * netProfit(운임 − 공차·운송 구간 기름값의 어림값. 통행료는 상세에서 계산, DSP-011)은 차주가 위치를 보내고 찾았을 때만 채운다.
  * brokerMetrics(주선사 신뢰 지표, BRK-031·DSP-011)는 차주가 볼 때만 채운다.
  * billing(거래처·청구운임·수수료)은 주선사가 볼 때만 채운다 (forBroker). 차주에게는 절대 나가지 않는다
  */

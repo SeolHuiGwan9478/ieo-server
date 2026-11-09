@@ -60,6 +60,8 @@ public class RecommendationService {
 	static final int MAX_ITEMS = 5;
 	static final int MAX_REJECTIONS = 3;
 	private static final int CANDIDATE_LIMIT = 100;
+	private static final Comparator<Candidate> BY_PROFIT = Comparator.comparingInt(Candidate::netProfit).reversed()
+			.thenComparingLong(candidate -> candidate.estimate().emptyMeters());
 	private static final Set<TripStatus> RECOMMENDABLE = Set.of(TripStatus.IN_TRANSIT, TripStatus.AT_DROPOFF);
 
 	private final TripRepository tripRepository;
@@ -73,7 +75,7 @@ public class RecommendationService {
 	private final DispatchService dispatchService;
 	private final BrokerMetricsService metricsService;
 	private final EmptyRunEstimator emptyRunEstimator;
-	private final EmptyRunCost emptyRunCost;
+	private final ProfitEstimator profitEstimator;
 	private final RecommendationProperties properties;
 	private final Clock clock;
 
@@ -99,20 +101,23 @@ public class RecommendationService {
 				.filter(order -> !preference.excludes(order.getCargoCategory()))
 				.map(order -> candidate(order, dropoff, vehicle))
 				.filter(candidate -> !freeAt.plus(candidate.run().duration()).isAfter(candidate.order().getPickupUntil()))
-				.filter(candidate -> preference.getMinNetProfit() == null || candidate.netProfit() >= preference.getMinNetProfit())
-				.sorted(Comparator.comparingInt(Candidate::netProfit).reversed()
-						.thenComparingLong(candidate -> candidate.run().meters()))
+				.filter(candidate -> meetsMinimum(candidate, preference))
+				.sorted(BY_PROFIT)
 				.limit(MAX_ITEMS)
+				.toList();
+		candidates = withExactRoutes(candidates, vehicle).stream()
+				.filter(candidate -> meetsMinimum(candidate, preference))
+				.sorted(BY_PROFIT)
 				.toList();
 
 		Map<Long, BrokerMetricsResponse> metrics = metricsService.getAll(
 				candidates.stream().map(candidate -> candidate.order().getBroker().getId()).toList());
 		List<RecommendationResponse> items = candidates.stream()
 				.map(candidate -> new RecommendationResponse(
-						OrderResponse.of(candidate.order(), now, candidate.run().meters(), null, null,
+						OrderResponse.of(candidate.order(), now, candidate.estimate().emptyMeters(), null, null,
 								metrics.get(candidate.order().getBroker().getId())),
-						candidate.run().meters(), candidate.fuelCost(), candidate.netProfit(),
-						isLongWait(candidate.order().getPickupSite())))
+						candidate.estimate().emptyMeters(), candidate.estimate().fuelCost(), candidate.netProfit(),
+						isLongWait(candidate.order().getPickupSite()), candidate.estimate().tollFare()))
 				.toList();
 		return new RecommendationListResponse(freeAt, items);
 	}
@@ -191,12 +196,28 @@ public class RecommendationService {
 		return skip;
 	}
 
-	/** 실수익 = 운임 − 공차 연료비 − 통행료(지금은 0) (REC-010) */
+	/** 먼저 어림값으로 추리고, 상위 몇 건만 실제 경로로 다시 계산한다 (TMAP 호출을 아낀다) */
 	private Candidate candidate(Order order, Site dropoff, Vehicle vehicle) {
 		EmptyRun run = emptyRunEstimator.estimate(dropoff, order.getPickupSite());
-		// 공차는 하차지에서 시작하므로 하차지 시도의 경유가
-		int fuelCost = emptyRunCost.fuelCost(run.meters(), vehicle, dropoff.getAddress());
-		return new Candidate(order, run, fuelCost, order.getFare() - fuelCost);
+		return new Candidate(order, run, target(order, dropoff), profitEstimator.rough(target(order, dropoff), vehicle));
+	}
+
+	/** 공차는 하차지에서 시작하므로 하차지 시도의 경유가 */
+	private static ProfitEstimator.Target target(Order order, Site dropoff) {
+		return new ProfitEstimator.Target(order, dropoff.getLat(), dropoff.getLng(), dropoff.getAddress());
+	}
+
+	private List<Candidate> withExactRoutes(List<Candidate> candidates, Vehicle vehicle) {
+		Map<Long, ProfitEstimator.Estimate> exact = profitEstimator.exact(
+				candidates.stream().map(Candidate::target).toList(), vehicle);
+		return candidates.stream()
+				.map(candidate -> new Candidate(candidate.order(), candidate.run(), candidate.target(),
+						exact.get(candidate.order().getId())))
+				.toList();
+	}
+
+	private static boolean meetsMinimum(Candidate candidate, RecommendationPreference preference) {
+		return preference.getMinNetProfit() == null || candidate.netProfit() >= preference.getMinNetProfit();
 	}
 
 	private boolean isLongWait(Site site) {
@@ -227,6 +248,10 @@ public class RecommendationService {
 		return driver;
 	}
 
-	private record Candidate(Order order, EmptyRun run, int fuelCost, int netProfit) {
+	private record Candidate(Order order, EmptyRun run, ProfitEstimator.Target target, ProfitEstimator.Estimate estimate) {
+
+		int netProfit() {
+			return estimate.netProfit();
+		}
 	}
 }

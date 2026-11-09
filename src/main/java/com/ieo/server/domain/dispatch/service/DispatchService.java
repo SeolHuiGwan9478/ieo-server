@@ -2,7 +2,8 @@ package com.ieo.server.domain.dispatch.service;
 
 import com.ieo.server.domain.broker.dto.BrokerMetricsResponse;
 import com.ieo.server.domain.broker.service.BrokerMetricsService;
-import com.ieo.server.domain.recommendation.service.EmptyRunCost;
+import com.ieo.server.domain.recommendation.dto.ProfitEstimateResponse;
+import com.ieo.server.domain.recommendation.service.ProfitEstimator;
 import com.ieo.server.domain.dispatch.dto.CreateDispatchRequestRequest;
 import com.ieo.server.domain.dispatch.dto.CreateOrderReportRequest;
 import com.ieo.server.domain.dispatch.dto.DispatchRequestResponse;
@@ -64,7 +65,7 @@ public class DispatchService {
 	private final DispatchConfirmer confirmer;
 	private final OrderReportRepository reportRepository;
 	private final BrokerMetricsService metricsService;
-	private final EmptyRunCost emptyRunCost;
+	private final ProfitEstimator profitEstimator;
 	private final Clock clock;
 	private final ApplicationEventPublisher events;
 
@@ -101,18 +102,33 @@ public class DispatchService {
 					if (lat == null) {
 						return OrderResponse.of(order, now, null, myRequest, null, brokerMetrics);
 					}
-					double straight = order.getPickupSite().distanceMeters(lat, lng);
-					return OrderResponse.near(order, now, Math.round(straight),
-							netProfit(order, straight, vehicles), myRequest, brokerMetrics);
+					return OrderResponse.near(order, now, Math.round(order.getPickupSite().distanceMeters(lat, lng)),
+							profitEstimator.rough(target(order, lat, lng), vehicleFor(order, vehicles)).netProfit(),
+							myRequest, brokerMetrics);
 				})
 				.toList();
 	}
 
-	/** 맡을 수 있는 내 첫 차량으로 계산한 실수익 (DSP-011). 현재 위치의 주소를 모르므로 경유가는 상차지 시도 기준 */
-	private int netProfit(Order order, double straightMeters, List<Vehicle> vehicles) {
-		Vehicle vehicle = vehicles.stream().filter(order::fits).findFirst().orElseThrow();
-		return order.getFare() - emptyRunCost.fuelCost(emptyRunCost.roadMeters(straightMeters), vehicle,
-				order.getPickupSite().getAddress());
+	/** 오더 상세의 실수익 내역 (DSP-011). 지금 위치에서 출발한다고 치고 실제 경로로 계산한다 */
+	@Transactional(readOnly = true)
+	public ProfitEstimateResponse estimateProfit(Long userId, Long orderId, double lat, double lng) {
+		requireDriver(userId);
+		Site.validateLocation(lat, lng);
+		Order order = findVisible(userId, orderId);
+		Vehicle vehicle = vehicleFor(order, vehicleRepository.findAllByDriverUserIdOrderByCreatedAtAsc(userId));
+		return ProfitEstimateResponse.from(
+				profitEstimator.exact(List.of(target(order, lat, lng)), vehicle).get(order.getId()));
+	}
+
+	/** 맡을 수 있는 내 첫 차량 */
+	private static Vehicle vehicleFor(Order order, List<Vehicle> vehicles) {
+		return vehicles.stream().filter(order::fits).findFirst()
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+	}
+
+	/** 현재 위치의 주소를 모르므로 경유가는 상차지 시도 기준 */
+	private static ProfitEstimator.Target target(Order order, double lat, double lng) {
+		return new ProfitEstimator.Target(order, lat, lng, order.getPickupSite().getAddress());
 	}
 
 	/** 오더 상세. 지정 배차 오더는 그 차주에게만 보인다 */

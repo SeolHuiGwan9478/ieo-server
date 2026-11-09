@@ -39,6 +39,16 @@ public class OrderController {
 		return dispatchService.getOpenOrders(userId, lat, lng, radiusM, size);
 	}
 
+	/** 지금 위치에서 이 오더를 맡을 때의 실수익 내역 */
+	@GetMapping("/{orderId}/profit")
+	public com.ieo.server.domain.recommendation.dto.ProfitEstimateResponse estimateProfit(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long orderId,
+			@RequestParam double lat,
+			@RequestParam double lng) {
+		return dispatchService.estimateProfit(userId, orderId, lat, lng);
+	}
+
 	@GetMapping("/api/orders/{orderId}")
 	public OrderResponse getOrder(@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @PathVariable Long orderId) {
 		return dispatchService.getOrder(userId, orderId);

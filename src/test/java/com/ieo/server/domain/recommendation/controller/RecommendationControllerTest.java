@@ -1,5 +1,12 @@
 package com.ieo.server.domain.recommendation.controller;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import com.ieo.server.domain.recommendation.service.TruckRouteEstimator;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -49,6 +56,9 @@ import org.springframework.web.context.WebApplicationContext;
 @ActiveProfiles("test")
 @Transactional
 class RecommendationControllerTest {
+
+	@MockitoBean
+	private TruckRouteEstimator truckRoutes;
 
 	@Autowired
 	private WebApplicationContext context;
@@ -141,14 +151,34 @@ class RecommendationControllerTest {
 				.andExpect(jsonPath("$.items[0].longWait").value(false))
 				.andReturn().getResponse().getContentAsString();
 
-		// 실수익 = 운임 − 공차 거리(km) ÷ 기본 연비(11톤 3.5km/L) × 경유 1,600원
+		// 실수익 = 운임 − (공차 + 운송) 기름값. 경로를 못 받으면 통행료는 비운다
 		long emptyMeters = ((Number) JsonPath.read(body, "$.items[0].emptyMeters")).longValue();
 		int fuelCost = JsonPath.read(body, "$.items[0].fuelCost");
 		int netProfit = JsonPath.read(body, "$.items[0].netProfit");
 		assertThat(emptyMeters).isBetween(16_000L, 18_000L);   // 직선 약 13km × 1.3
-		assertThat(fuelCost).isEqualTo((int) Math.round(emptyMeters / 1000.0 / 3.5 * 1600));
+		assertThat(fuelCost).isGreaterThan((int) Math.round(emptyMeters / 1000.0 / 3.5 * 1600));
 		assertThat(netProfit).isEqualTo(300_000 - fuelCost);
+		assertThat((Object) JsonPath.read(body, "$.items[0].tollFare")).isNull();
 		assertThat(((Number) JsonPath.read(body, "$.items[0].order.distanceM")).longValue()).isEqualTo(emptyMeters);
+	}
+
+	@Test
+	void 실제_경로를_받으면_두_구간의_기름값과_통행료를_뺀다() throws Exception {
+		order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		given(truckRoutes.routes(any(), any())).willAnswer(call -> {
+			Map<TruckRouteEstimator.Leg, TruckRouteEstimator.TruckRoute> found = new HashMap<>();
+			Collection<TruckRouteEstimator.Leg> legs = call.getArgument(0);
+			legs.forEach(leg -> found.put(leg, new TruckRouteEstimator.TruckRoute(35_000, 1_800, 4_000)));
+			return found;
+		});
+
+		String body = recommend().andExpect(jsonPath("$.items[0].tollFare").value(8_000))
+				.andExpect(jsonPath("$.items[0].emptyMeters").value(35_000))
+				.andReturn().getResponse().getContentAsString();
+
+		int fuelCost = JsonPath.read(body, "$.items[0].fuelCost");
+		assertThat(fuelCost).isEqualTo((int) Math.round(70.0 / 3.5 * 1600));
+		assertThat((int) JsonPath.read(body, "$.items[0].netProfit")).isEqualTo(300_000 - fuelCost - 8_000);
 	}
 
 	@Test
@@ -214,7 +244,7 @@ class RecommendationControllerTest {
 		recommend().andExpect(jsonPath("$.items.length()").value(1))
 				.andExpect(jsonPath("$.items[0].order.pickup.name").value("대구 북구 창고"));
 
-		preference("{\"enabled\": true, \"radiusKm\": 30, \"minNetProfit\": 290000}");
+		preference("{\"enabled\": true, \"radiusKm\": 30, \"minNetProfit\": 220000}");
 		recommend().andExpect(jsonPath("$.items.length()").value(1))
 				.andExpect(jsonPath("$.items[0].order.pickup.name").value("칠곡 물류센터"));
 
