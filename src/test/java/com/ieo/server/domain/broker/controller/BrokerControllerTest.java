@@ -30,13 +30,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
+@SpringBootTest(properties = "ieo.cors.allowed-origins=" + BrokerControllerTest.CONSOLE_ORIGIN)
 @ActiveProfiles("test")
 @Transactional
 class BrokerControllerTest {
 
-	/** application-test.yml의 ieo.cors.allowed-origins */
-	private static final String CONSOLE_ORIGIN = "http://localhost:5173";
+	/** 허용한 콘솔 주소. .env의 ieo.cors.allowed-origins(포트를 바꾼 컴퓨터)가 application-test.yml을 덮지 않도록 @SpringBootTest에서 이 값으로 고정한다 */
+	static final String CONSOLE_ORIGIN = "http://localhost:5173";
 
 	@Autowired
 	private WebApplicationContext context;
