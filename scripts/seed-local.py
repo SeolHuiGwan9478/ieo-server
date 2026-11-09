@@ -2,16 +2,18 @@
 """
 로컬 서버에 차량 앱 확인용 테스트 데이터를 넣는다.
 
-  python3 scripts/seed-local.py <서버 로그 파일>
+  python3 scripts/seed-local.py [서버 로그 파일]
 
+- 서버 주소는 IEO_API_BASE 환경변수로 바꾼다 (기본 http://localhost:8080). 주선사 번호는 IEO_SEED_BROKER_PHONE
 - 차주(010-1234-5678, 5톤 카고)와 주선사(010-9876-5432, 회사·대기비 정책)를 만든다. 이미 있으면 로그인한다
 - 모집 중인 주선사 오더가 없으면(전에 올린 오더는 상차 시간이 지나면 마감된다) 오늘·내일 상차로 4건 올린다
 - 차주에게 예약된 운행이 없으면 오더 하나를 요청하고 주선사가 확정한다
 - 지급일 지난 장부가 없으면 직접 추가한 지난 운행 2줄을 넣는다. 하나는 지급일이 지나 미수금 경고에 나온다
 
-인증번호는 문자 대신 서버 로그의 [문자 발송] 줄에서 읽는다 (local 프로필의 LogSmsSender).
+인증번호는 local 프로필이 응답에 넣어 주는 시연용 번호(demoCode)를 쓰고, 없으면 서버 로그의 [문자 발송] 줄에서 읽는다.
 """
 import json
+import os
 import re
 import sys
 import time
@@ -20,9 +22,9 @@ import urllib.request
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-BASE = "http://localhost:8080"
+BASE = os.environ.get("IEO_API_BASE", "http://localhost:8080")
 DRIVER_PHONE = "01012345678"
-BROKER_PHONE = "01098765432"
+BROKER_PHONE = os.environ.get("IEO_SEED_BROKER_PHONE", "01098765432")
 KST = timezone(timedelta(hours=9))
 
 
@@ -70,16 +72,21 @@ def log_size(log_path):
 
 
 def phone_token(log_path, phone, device_id):
-    size = log_size(log_path)
+    size = log_size(log_path) if log_path else 0
     try:
-        call("POST", "/api/auth/phone/code", {"phone": phone})
+        sent = call("POST", "/api/auth/phone/code", {"phone": phone})
     except ApiError as e:
         if e.status != 429:
             raise
         print("인증번호는 1분에 한 번만 받을 수 있어 1분 기다려요")
         time.sleep(61)
-        call("POST", "/api/auth/phone/code", {"phone": phone})
-    code = read_code(log_path, phone, size)
+        sent = call("POST", "/api/auth/phone/code", {"phone": phone})
+    # local 프로필은 응답에 시연용 인증번호를 넣어 준다. 없으면 서버 로그에서 읽는다
+    code = sent.get("demoCode") if isinstance(sent, dict) else None
+    if not code:
+        if not log_path:
+            sys.exit("서버가 시연용 인증번호를 주지 않아요. 서버 로그 파일 경로를 넘겨 주세요")
+        code = read_code(log_path, phone, size)
     return call("POST", "/api/auth/phone/verify", {"phone": phone, "code": code, "deviceId": device_id})
 
 
@@ -127,9 +134,9 @@ def order(pickup, dropoff, day, from_h, until_h, by_h, cargo, fare, **extra):
 
 
 def main():
-    if len(sys.argv) != 2:
+    if len(sys.argv) > 2:
         sys.exit(__doc__)
-    log_path = sys.argv[1]
+    log_path = sys.argv[1] if len(sys.argv) == 2 else None
 
     driver, driver_new = login_or_signup(
         log_path, DRIVER_PHONE, "DRIVER", "김기사",

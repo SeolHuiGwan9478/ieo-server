@@ -20,7 +20,7 @@ import uuid
 import zlib
 from datetime import datetime, timedelta, timezone
 ROOT = Path(__file__).resolve().parents[1]
-BASE = 'http://localhost:8080'
+BASE = os.environ.get('IEO_API_BASE', 'http://localhost:8080')
 KST = timezone(timedelta(hours=9))
 PHONE = '01098765432'
 COMPANY = '[시연] 한빛물류'
