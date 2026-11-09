@@ -178,6 +178,7 @@ class DispatchControllerTest {
 				.andExpect(jsonPath("$.length()").value(1))
 				.andExpect(jsonPath("$[0].id").value(fits))
 				.andExpect(jsonPath("$[0].distanceM").value(11119))
+				.andExpect(jsonPath("$[0].netProfit").isNumber())
 				.andExpect(jsonPath("$[0].myRequest").doesNotExist())
 				// 끝난 운행이 없는 새 회사라 신뢰 지표는 아직 공개 전 (BRK-032)
 				.andExpect(jsonPath("$[0].brokerMetrics.published").value(false))

@@ -73,7 +73,7 @@ public class RecommendationService {
 	private final DispatchService dispatchService;
 	private final BrokerMetricsService metricsService;
 	private final EmptyRunEstimator emptyRunEstimator;
-	private final DieselPrices dieselPrices;
+	private final EmptyRunCost emptyRunCost;
 	private final RecommendationProperties properties;
 	private final Clock clock;
 
@@ -90,9 +90,6 @@ public class RecommendationService {
 		Site dropoff = trip.dropoff().getSite();
 		Instant freeAt = freeAt(trip, dropoff, now);
 		Vehicle vehicle = trip.getVehicle();
-		double kmPerLiter = kmPerLiter(vehicle);
-		// 공차는 하차지에서 시작하므로 하차지 시도의 경유가
-		int dieselWon = dieselPrices.wonPerLiter(dropoff.getAddress());
 		Set<Long> skip = skippedOrderIds(userId, trip);
 
 		List<Candidate> candidates = orderRepository.findOpenNear(userId, now, dropoff.getLat(), dropoff.getLng(),
@@ -100,7 +97,7 @@ public class RecommendationService {
 				.filter(order -> !skip.contains(order.getId()))
 				.filter(order -> order.fits(vehicle))
 				.filter(order -> !preference.excludes(order.getCargoCategory()))
-				.map(order -> candidate(order, dropoff, kmPerLiter, dieselWon))
+				.map(order -> candidate(order, dropoff, vehicle))
 				.filter(candidate -> !freeAt.plus(candidate.run().duration()).isAfter(candidate.order().getPickupUntil()))
 				.filter(candidate -> preference.getMinNetProfit() == null || candidate.netProfit() >= preference.getMinNetProfit())
 				.sorted(Comparator.comparingInt(Candidate::netProfit).reversed()
@@ -175,13 +172,6 @@ public class RecommendationService {
 		return arrival.plus(finish);
 	}
 
-	/** 실측 연비가 있으면 그것, 없으면 톤수별 기본값 (REC-011) */
-	private static double kmPerLiter(Vehicle vehicle) {
-		return vehicle.getMeasuredKmPerLiter() != null
-				? vehicle.getMeasuredKmPerLiter().doubleValue()
-				: vehicle.getTonnage().getDefaultKmPerLiter();
-	}
-
 	/**
 	 * 지금 운행의 오더, 이미 배차 요청한 오더는 뺀다.
 	 * 운송 중에는 음성으로 한 건씩 안내하므로 이미 안내한 오더를 빼고,
@@ -202,9 +192,10 @@ public class RecommendationService {
 	}
 
 	/** 실수익 = 운임 − 공차 연료비 − 통행료(지금은 0) (REC-010) */
-	private Candidate candidate(Order order, Site dropoff, double kmPerLiter, int dieselWon) {
+	private Candidate candidate(Order order, Site dropoff, Vehicle vehicle) {
 		EmptyRun run = emptyRunEstimator.estimate(dropoff, order.getPickupSite());
-		int fuelCost = (int) Math.round(run.meters() / 1000.0 / kmPerLiter * dieselWon);
+		// 공차는 하차지에서 시작하므로 하차지 시도의 경유가
+		int fuelCost = emptyRunCost.fuelCost(run.meters(), vehicle, dropoff.getAddress());
 		return new Candidate(order, run, fuelCost, order.getFare() - fuelCost);
 	}
 

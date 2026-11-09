@@ -16,6 +16,7 @@ import java.time.Instant;
 /**
  * 오더. 화면 표기(label)를 같이 준다. open은 지금 요청할 수 있는지(OPEN이고 상차 시간이 남음).
  * 보는 쪽에 따라 채워지는 값: 차주 목록은 distanceM·myRequest, 주선사 목록은 pendingRequestCount.
+ * netProfit(운임 − 지금 위치에서 상차지까지 공차 연료비, DSP-011)은 차주가 위치를 보내고 찾았을 때만 채운다.
  * brokerMetrics(주선사 신뢰 지표, BRK-031·DSP-011)는 차주가 볼 때만 채운다.
  * billing(거래처·청구운임·수수료)은 주선사가 볼 때만 채운다 (forBroker). 차주에게는 절대 나가지 않는다
  */
@@ -50,6 +51,7 @@ public record OrderResponse(
 		Long targetDriverId,
 		Instant createdAt,
 		Long distanceM,
+		Integer netProfit,
 		DispatchRequestResponse myRequest,
 		Long pendingRequestCount,
 		Billing billing) {
@@ -71,7 +73,7 @@ public record OrderResponse(
 
 	/** 주선사가 보는 오더: 청구·수수료를 같이 준다 */
 	public static OrderResponse forBroker(Order order, Instant now, Long pendingRequestCount) {
-		return of(order, now, null, null, pendingRequestCount, null, Billing.of(order));
+		return of(order, now, null, null, null, pendingRequestCount, null, Billing.of(order));
 	}
 
 	public static OrderResponse of(Order order, Instant now, Long distanceM, DispatchRequestResponse myRequest,
@@ -81,11 +83,18 @@ public record OrderResponse(
 
 	public static OrderResponse of(Order order, Instant now, Long distanceM, DispatchRequestResponse myRequest,
 			Long pendingRequestCount, BrokerMetricsResponse brokerMetrics) {
-		return of(order, now, distanceM, myRequest, pendingRequestCount, brokerMetrics, null);
+		return of(order, now, distanceM, null, myRequest, pendingRequestCount, brokerMetrics, null);
 	}
 
-	private static OrderResponse of(Order order, Instant now, Long distanceM, DispatchRequestResponse myRequest,
-			Long pendingRequestCount, BrokerMetricsResponse brokerMetrics, Billing billing) {
+	/** 차주의 위치 기반 목록: 지금 위치에서 간다고 치고 계산한 실수익을 같이 준다 */
+	public static OrderResponse near(Order order, Instant now, long distanceM, Integer netProfit,
+			DispatchRequestResponse myRequest, BrokerMetricsResponse brokerMetrics) {
+		return of(order, now, distanceM, netProfit, myRequest, null, brokerMetrics, null);
+	}
+
+	private static OrderResponse of(Order order, Instant now, Long distanceM, Integer netProfit,
+			DispatchRequestResponse myRequest, Long pendingRequestCount, BrokerMetricsResponse brokerMetrics,
+			Billing billing) {
 		return new OrderResponse(
 				order.getId(),
 				order.getStatus(),
@@ -117,6 +126,7 @@ public record OrderResponse(
 				order.getTargetDriver() == null ? null : order.getTargetDriver().getUserId(),
 				order.getCreatedAt(),
 				distanceM,
+				netProfit,
 				myRequest,
 				pendingRequestCount,
 				billing);

@@ -2,6 +2,7 @@ package com.ieo.server.domain.dispatch.service;
 
 import com.ieo.server.domain.broker.dto.BrokerMetricsResponse;
 import com.ieo.server.domain.broker.service.BrokerMetricsService;
+import com.ieo.server.domain.recommendation.service.EmptyRunCost;
 import com.ieo.server.domain.dispatch.dto.CreateDispatchRequestRequest;
 import com.ieo.server.domain.dispatch.dto.CreateOrderReportRequest;
 import com.ieo.server.domain.dispatch.dto.DispatchRequestResponse;
@@ -63,6 +64,7 @@ public class DispatchService {
 	private final DispatchConfirmer confirmer;
 	private final OrderReportRepository reportRepository;
 	private final BrokerMetricsService metricsService;
+	private final EmptyRunCost emptyRunCost;
 	private final Clock clock;
 	private final ApplicationEventPublisher events;
 
@@ -93,10 +95,24 @@ public class DispatchService {
 		Map<Long, BrokerMetricsResponse> metrics = metricsService.getAll(
 				orders.stream().map(order -> order.getBroker().getId()).toList());
 		return orders.stream()
-				.map(order -> OrderResponse.of(order, now,
-						lat == null ? null : Math.round(order.getPickupSite().distanceMeters(lat, lng)),
-						toResponse(mine.get(order.getId()), now), null, metrics.get(order.getBroker().getId())))
+				.map(order -> {
+					DispatchRequestResponse myRequest = toResponse(mine.get(order.getId()), now);
+					BrokerMetricsResponse brokerMetrics = metrics.get(order.getBroker().getId());
+					if (lat == null) {
+						return OrderResponse.of(order, now, null, myRequest, null, brokerMetrics);
+					}
+					double straight = order.getPickupSite().distanceMeters(lat, lng);
+					return OrderResponse.near(order, now, Math.round(straight),
+							netProfit(order, straight, vehicles), myRequest, brokerMetrics);
+				})
 				.toList();
+	}
+
+	/** 맡을 수 있는 내 첫 차량으로 계산한 실수익 (DSP-011). 현재 위치의 주소를 모르므로 경유가는 상차지 시도 기준 */
+	private int netProfit(Order order, double straightMeters, List<Vehicle> vehicles) {
+		Vehicle vehicle = vehicles.stream().filter(order::fits).findFirst().orElseThrow();
+		return order.getFare() - emptyRunCost.fuelCost(emptyRunCost.roadMeters(straightMeters), vehicle,
+				order.getPickupSite().getAddress());
 	}
 
 	/** 오더 상세. 지정 배차 오더는 그 차주에게만 보인다 */
