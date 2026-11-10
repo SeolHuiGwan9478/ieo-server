@@ -345,6 +345,31 @@ def ensure_broker_verified(broker_token, admin_token, **company):
     return True
 
 
+def ensure_driver_verified(driver_token, admin_token, biz_prefix='309120040', opened='2019-03-01', plate=''):
+    """필수 서류 4종이 모두 승인되게 한다 (승인 전에는 배차를 요청할 수 없다). 없으면 올리고, 심사 대기면 승인한다.
+    몇 번 불러도 되고, 바뀐 게 있으면 True. seed-console.py와 seed-demo.py가 배차를 요청하기 전에 부른다.
+    biz_prefix의 아홉째 자리가 스텁 국세청 결과를 정한다(0이면 계속사업자). 운영 국세청에서는 조회 결과만 다르고 승인은 된다"""
+    status = api('GET', '/api/drivers/me/documents', token=driver_token)
+    if status['verified']:
+        return False
+    for item in status['documents']:
+        if not item['required']:
+            continue
+        latest = item['latest']
+        if latest and latest['status'] == 'APPROVED':
+            continue
+        if latest and latest['status'] == 'PENDING':
+            approve(admin_token, latest['id'])
+            continue
+        fields, lines = None, [f'PLATE: {plate}']
+        if item['type'] == 'BUSINESS_REGISTRATION':
+            number = business_number(biz_prefix)
+            fields = {'businessNumber': number, 'openedOn': opened}
+            lines += [f'BIZ NO: {number}', f'OPENED: {opened}']
+        approve(admin_token, upload(driver_token, item['type'], document_png(item['type'], lines, 1), fields)['id'])
+    return True
+
+
 def approve(admin, document_id):
     api('POST', f'/api/admin/driver-documents/{document_id}/approve', token=admin)
 

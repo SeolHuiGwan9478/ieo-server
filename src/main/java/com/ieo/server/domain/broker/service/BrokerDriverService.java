@@ -1,5 +1,6 @@
 package com.ieo.server.domain.broker.service;
 
+import com.ieo.server.domain.driver.service.DriverRecordService;
 import com.ieo.server.domain.broker.dto.LinkedDriverResponse;
 import com.ieo.server.domain.broker.dto.SentDriverInvitationResponse;
 import com.ieo.server.domain.broker.entity.BrokerDriverLink;
@@ -39,6 +40,7 @@ public class BrokerDriverService {
 	private final VehicleRepository vehicleRepository;
 	private final SmsSender smsSender;
 	private final Clock clock;
+	private final DriverRecordService driverRecordService;
 
 	/** 우리 회사 단골 차주. 최근 연결한 순서. 기본 차량을 같이 보여 준다 (지정 배차할 때 차를 보고 고른다) */
 	@Transactional(readOnly = true)
@@ -47,7 +49,8 @@ public class BrokerDriverService {
 		return linkRepository.findAllByBrokerIdAndStatusOrderByLinkedAtDesc(me.getBroker().getId(), DriverLinkStatus.LINKED)
 				.stream()
 				.map(link -> LinkedDriverResponse.from(link,
-						vehicleRepository.findByDriverUserIdAndDefaultVehicleTrue(link.getDriver().getUserId()).orElse(null)))
+						vehicleRepository.findByDriverUserIdAndDefaultVehicleTrue(link.getDriver().getUserId()).orElse(null),
+						driverRecordService.of(link.getDriver().getUserId())))
 				.toList();
 	}
 

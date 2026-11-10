@@ -156,6 +156,7 @@ class Seed:
         admin = docs.login(docs.ADMIN_PHONE)
         if admin is None:
             raise RuntimeError('운영자 로그인에 실패했어요')
+        self.documents, self.admin = docs, admin
         if docs.ensure_broker_verified(self.owner, admin):
             print(f'{COMPANY} 회사 서류 2종 승인 (인증된 주선사)')
 
@@ -176,6 +177,9 @@ class Seed:
             token = login(self.db, phone, 'DRIVER', '[시연] ' + name, {'plateNumber': f'경기80바{8101 + i}', 'tonnage': 'TON_11' if i == 5 else 'TON_5', 'bodyType': 'CARGO', 'heightM': 3.6})
             me = api('GET', '/api/users/me', token=token)
             self.drivers.append({'token': token, 'id': me['id']})
+            # 필수 서류 4종이 승인돼야 배차를 요청한다. 차주 서류 심사 시연(대기·반려)은 seed-documents.py --reset으로 다시 만든다
+            if self.documents.ensure_driver_verified(token, self.admin, biz_prefix=f'3{i + 1:02d}120040', plate=f'80-{8101 + i}'):
+                print(f'  [시연] {name} 필수 서류 4종 승인 (인증된 차주)')
             if not any((r['brokerId'] == self.bid for r in api('GET', '/api/driver-links', token=token))):
                 invites = api('GET', '/api/driver-links/invitations', token=token)
                 if not any((r['brokerId'] == self.bid for r in invites)):

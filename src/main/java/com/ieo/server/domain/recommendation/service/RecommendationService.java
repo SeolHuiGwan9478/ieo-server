@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import com.ieo.server.domain.document.service.DriverVerification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,6 +79,7 @@ public class RecommendationService {
 	private final ProfitEstimator profitEstimator;
 	private final RecommendationProperties properties;
 	private final Clock clock;
+	private final DriverVerification driverVerification;
 
 	/** 지금 운행 다음 배차 후보. 추천하지 않는 상태(운송 전, 추천 끔, 3번 거절)면 빈 목록 */
 	@Transactional(readOnly = true)
@@ -112,10 +114,11 @@ public class RecommendationService {
 
 		Map<Long, BrokerMetricsResponse> metrics = metricsService.getAll(
 				candidates.stream().map(candidate -> candidate.order().getBroker().getId()).toList());
+		boolean verified = driverVerification.isVerified(userId);
 		List<RecommendationResponse> items = candidates.stream()
 				.map(candidate -> new RecommendationResponse(
-						OrderResponse.of(candidate.order(), now, candidate.estimate().emptyMeters(), null, null,
-								metrics.get(candidate.order().getBroker().getId())),
+						limitUnless(verified, OrderResponse.of(candidate.order(), now, candidate.estimate().emptyMeters(), null, null,
+								metrics.get(candidate.order().getBroker().getId()))),
 						candidate.estimate().emptyMeters(), candidate.estimate().fuelCost(), candidate.netProfit(),
 						isLongWait(candidate.order().getPickupSite()), candidate.estimate().tollFare()))
 				.toList();
@@ -253,5 +256,10 @@ public class RecommendationService {
 		int netProfit() {
 			return estimate.netProfit();
 		}
+	}
+
+	/** 서류 심사 전 차주에게는 줄인 오더를 보낸다 (DriverVerification) */
+	private static OrderResponse limitUnless(boolean verified, OrderResponse order) {
+		return verified ? order : order.forUnverified();
 	}
 }

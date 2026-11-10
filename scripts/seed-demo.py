@@ -8,6 +8,7 @@
 - 시연 차주(010-0000-0001, 5톤 카고)와 시연 주선사(010-0000-0002, [시연] 한빛물류, 대기비 정책)를 만든다. 이미 있으면 로그인한다
 - 시연 주선사의 회사 서류 2종이 승인돼 있지 않으면 운영자(IEO_ADMIN_PHONE, DB에 ADMIN으로 넣어 둔 계정)로 로그인해 올리고 승인한다.
   승인 전에는 오더를 올릴 수 없다 (07 운영자 서류심사 인계 13장)
+- 시연 차주의 필수 서류 4종도 같은 방법으로 올리고 승인한다. 승인 전에는 배차를 요청할 수 없다
 - 모집 중인 시연 오더가 없으면 오늘·내일 상차로 4건 올린다 (상차 시간이 지나면 마감되니 시연 전날 다시 돌린다)
 - 시연 차주에게 예약된 운행이 없으면 오더 하나를 요청하고 시연 주선사가 확정한다
 - 지급일 지난 장부가 없으면 지난 운행 2줄을 넣는다
@@ -38,12 +39,15 @@ PROJECT = os.environ.get("IEO_GCLOUD_PROJECT", "ieo-server-prod")
 ADMIN_PHONE = os.environ.get("IEO_ADMIN_PHONE")
 
 
-def verify_company(broker):
-    """회사 서류 2종(사업자등록증·운송주선사업 허가증)이 승인돼야 오더를 올릴 수 있다. 운영자 번호가 있으면 서류를 올리고 승인한다"""
-    if call("GET", "/api/brokers/me/documents", token=broker)["verified"]:
-        return
+_admin = {}
+
+
+def admin_and_docs(who):
+    """운영자로 한 번만 로그인하고 seed-documents.py의 함수를 불러온다. who는 운영자 번호가 없을 때 안내에 쓴다"""
+    if _admin:
+        return _admin["token"], _admin["docs"]
     if not ADMIN_PHONE:
-        sys.exit("시연 주선사의 회사 서류가 승인되지 않아 오더를 올릴 수 없어요. 운영자 번호를 IEO_ADMIN_PHONE로 주면 서류를 올리고 승인해요 "
+        sys.exit(f"{who}의 서류가 승인되지 않았어요. 운영자 번호를 IEO_ADMIN_PHONE로 주면 서류를 올리고 승인해요 "
                  "(운영자 계정은 scripts/users-role-admin.sql 적용 뒤 users에 role=ADMIN으로 넣는다)")
     device_id = f"seed-demo-admin-{uuid.uuid4()}"
     verified = phone_token(ADMIN_PHONE, device_id)
@@ -54,8 +58,26 @@ def verify_company(broker):
     docs = importlib.util.module_from_spec(docs_spec)
     docs_spec.loader.exec_module(docs)
     docs.BASE = base.BASE
+    _admin.update(token=admin, docs=docs)
+    return admin, docs
+
+
+def verify_company(broker):
+    """회사 서류 2종(사업자등록증·운송주선사업 허가증)이 승인돼야 오더를 올릴 수 있다. 운영자 번호가 있으면 서류를 올리고 승인한다"""
+    if call("GET", "/api/brokers/me/documents", token=broker)["verified"]:
+        return
+    admin, docs = admin_and_docs("시연 주선사")
     if docs.ensure_broker_verified(broker, admin, company="HANBIT LOGISTICS", biz="999-99-9990", license="0000", opened="2018-05-14"):
         print("시연 주선사 회사 서류 2종 올리고 승인 (인증된 주선사)")
+
+
+def verify_driver(driver):
+    """필수 서류 4종(사업자등록증·자동차등록증·운전면허증·화물운송종사 자격증)이 승인돼야 배차를 요청할 수 있다"""
+    if call("GET", "/api/drivers/me/documents", token=driver)["verified"]:
+        return
+    admin, docs = admin_and_docs("시연 차주")
+    if docs.ensure_driver_verified(driver, admin, biz_prefix="999999910", opened="2016-04-01", plate="99-9999"):
+        print("시연 차주 필수 서류 4종 올리고 승인 (인증된 차주)")
 
 
 def code_from_cloud_logging(phone, since):
@@ -122,6 +144,7 @@ def main():
              {"freeMinutes": 120, "unitMinutes": 30, "unitAmount": 10000, "maxAmount": 50000, "rounding": "UP"}, token=broker)
         print("시연 주선사 회사 등록:", TAG + "한빛물류")
     verify_company(broker)
+    verify_driver(driver)
 
     today = datetime.now(KST).date()
     tomorrow = today + timedelta(days=1)

@@ -36,3 +36,4 @@ ieo:
   # 오더를 만드는 테스트마다 회사 서류를 승인해 두지 않도록 게이트를 끈다. AdminBrokerDocumentControllerTest만 켜서 검사한다
   review:
     gate-broker-orders: false
+    gate-driver-requests: false

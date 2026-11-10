@@ -72,3 +72,5 @@ ieo:
   # 서류 심사 게이트. 회사 서류가 모두 승인된 주선사만 오더를 올린다 (테스트 프로필은 끈다)
   review:
     gate-broker-orders: true
+    # 필수 서류 4종이 모두 승인된 차주만 배차를 요청한다
+    gate-driver-requests: true

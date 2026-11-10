@@ -1,5 +1,6 @@
 package com.ieo.server.domain.dispatch.service;
 
+import com.ieo.server.domain.driver.service.DriverRecordService;
 import com.ieo.server.domain.broker.entity.BrokerMember;
 import com.ieo.server.domain.broker.enums.DriverLinkStatus;
 import com.ieo.server.domain.broker.repository.BrokerDriverLinkRepository;
@@ -12,7 +13,6 @@ import com.ieo.server.domain.dispatch.dto.CreateOrderRequest;
 import com.ieo.server.domain.dispatch.dto.OrderPageResponse;
 import com.ieo.server.domain.dispatch.dto.OrderResponse;
 import com.ieo.server.domain.dispatch.dto.OrderSiteRequest;
-import com.ieo.server.domain.dispatch.entity.Cancellation;
 import com.ieo.server.domain.dispatch.entity.DispatchRequest;
 import com.ieo.server.domain.dispatch.entity.Order;
 import com.ieo.server.domain.dispatch.enums.OrderStatus;
@@ -69,6 +69,7 @@ public class BrokerOrderService {
 	private final BrokerDocumentService brokerDocumentService;
 	private final ReviewProperties reviewProperties;
 	private final Clock clock;
+	private final DriverRecordService driverRecordService;
 
 	public OrderResponse register(Long userId, CreateOrderRequest request) {
 		BrokerMember member = requireMember(userId);
@@ -219,14 +220,7 @@ public class BrokerOrderService {
 		Order order = findMine(requireMember(userId), orderId);
 		Instant now = clock.instant();
 		return requestRepository.findAllByOrderIdOrderByCreatedAtAsc(order.getId()).stream()
-				.map(request -> {
-					Long driverId = request.getDriver().getUserId();
-					long completed = tripRepository.countByDriverUserIdAndStatus(driverId, TripStatus.COMPLETED);
-					long lateCancels = cancellationRepository.findAllByCanceledById(driverId).stream()
-							.filter(Cancellation::isLate)
-							.count();
-					return ApplicantResponse.of(request, now, completed, lateCancels);
-				})
+				.map(request -> ApplicantResponse.of(request, now, driverRecordService.of(request.getDriver().getUserId())))
 				.toList();
 	}
 

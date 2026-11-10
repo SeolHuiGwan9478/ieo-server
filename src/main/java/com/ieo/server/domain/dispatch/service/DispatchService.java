@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import com.ieo.server.domain.document.service.DriverVerification;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
@@ -68,6 +69,7 @@ public class DispatchService {
 	private final ProfitEstimator profitEstimator;
 	private final Clock clock;
 	private final ApplicationEventPublisher events;
+	private final DriverVerification driverVerification;
 
 	/** 모집 중 오더. 상차가 빠른 순서. 좌표를 주면 상차지까지 직선거리로 거르고 distanceM을 붙인다 */
 	@Transactional(readOnly = true)
@@ -93,6 +95,7 @@ public class DispatchService {
 				.limit(limit)
 				.toList();
 		Map<Long, DispatchRequest> mine = myRequestsByOrder(userId, orders);
+		boolean verified = driverVerification.isVerified(userId);
 		Map<Long, BrokerMetricsResponse> metrics = metricsService.getAll(
 				orders.stream().map(order -> order.getBroker().getId()).toList());
 		return orders.stream()
@@ -106,6 +109,7 @@ public class DispatchService {
 							profitEstimator.rough(target(order, lat, lng), vehicleFor(order, vehicles)).netProfit(),
 							myRequest, brokerMetrics);
 				})
+				.map(response -> verified ? response : response.forUnverified())
 				.toList();
 	}
 
@@ -138,8 +142,9 @@ public class DispatchService {
 		Order order = findVisible(userId, orderId);
 		Instant now = clock.instant();
 		DispatchRequest mine = requestRepository.findByOrderIdAndDriverUserId(orderId, userId).orElse(null);
-		return OrderResponse.of(order, now, null, toResponse(mine, now), null,
+		OrderResponse response = OrderResponse.of(order, now, null, toResponse(mine, now), null,
 				metricsService.getAll(List.of(order.getBroker().getId())).get(order.getBroker().getId()));
+		return driverVerification.isVerified(userId) ? response : response.forUnverified();
 	}
 
 	/**
@@ -148,6 +153,7 @@ public class DispatchService {
 	 */
 	public DispatchRequestResponse request(Long userId, Long orderId, CreateDispatchRequestRequest body) {
 		Driver driver = requireDriver(userId);
+		requireVerified(userId);
 		Order order = findVisible(userId, orderId);
 		Vehicle vehicle = resolveVehicle(userId, body == null ? null : body.vehicleId());
 		Instant now = clock.instant();
@@ -255,6 +261,13 @@ public class DispatchService {
 		return vehicleRepository.findById(vehicleId)
 				.filter(vehicle -> vehicle.isOwnedBy(userId))
 				.orElseThrow(() -> new BusinessException(ErrorCode.VEHICLE_NOT_FOUND));
+	}
+
+	/** 필수 서류 4종이 모두 승인된 차주만 배차를 요청한다. 오더 보기·실수익 계산·철회는 막지 않는다 */
+	private void requireVerified(Long userId) {
+		if (!driverVerification.isVerified(userId)) {
+			throw new BusinessException(ErrorCode.DRIVER_NOT_VERIFIED);
+		}
 	}
 
 	private Driver requireDriver(Long userId) {

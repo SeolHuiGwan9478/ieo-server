@@ -54,7 +54,9 @@ public record OrderResponse(
 		Integer netProfit,
 		DispatchRequestResponse myRequest,
 		Long pendingRequestCount,
-		Billing billing) {
+		Billing billing,
+		/** 서류 심사 전 차주에게 보낸 줄인 오더. 상하차지는 시·구까지, 주선사·화물 내용은 비운다 (forUnverified()) */
+		boolean limited) {
 
 	/**
 	 * 화주 쪽 숫자. 주선사 콘솔만 본다. billedFare는 청구운임, fee는 수수료(청구 − 지급), feeRate는 수수료율(%, 청구운임 기준).
@@ -129,6 +131,19 @@ public record OrderResponse(
 				netProfit,
 				myRequest,
 				pendingRequestCount,
-				billing);
+				billing,
+				false);
+	}
+
+	/**
+	 * 서류 심사를 통과하기 전 차주에게 보낼 모양. 일감이 얼마나 있는지(구간·톤수·운임·상차 시간)는 보여 주되,
+	 * 정확한 상하차 주소·주선사·화물 내용은 가린다. 가입만 하고 오더를 긁어 가지 못하게 하려는 것이다
+	 */
+	public OrderResponse forUnverified() {
+		return new OrderResponse(id, status, open, null, null, brokerMetrics, pickup.coarse(), dropoff.coarse(),
+				pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoCategoryLabel, cargoCategoryLabel, weightKg,
+				tonnage, tonnageLabel, bodyType, bodyTypeLabel, loadingMethod, loadingMethodLabel, fare, paymentType,
+				paymentTypeLabel, expectedPaymentDays, consignmentType, confirmMode, targetDriverId, createdAt, distanceM,
+				netProfit, myRequest, pendingRequestCount, null, true);
 	}
 }

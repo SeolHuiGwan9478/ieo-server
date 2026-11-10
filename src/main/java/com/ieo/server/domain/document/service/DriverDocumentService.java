@@ -55,6 +55,11 @@ public class DriverDocumentService {
 		return DriverDocumentsResponse.of(DocumentReview.ofDriver(documentRepository.findAllByDriverUserIdOrderByCreatedAtDescIdDesc(userId)));
 	}
 
+	/** 필수 서류 4종이 모두 승인됐는지. 배차 요청 게이트가 쓴다 */
+	public boolean isVerified(Long userId) {
+		return DocumentReview.ofDriver(documentRepository.findAllByDriverUserIdOrderByCreatedAtDescIdDesc(userId)).verified();
+	}
+
 	@Transactional
 	public DocumentResponse submit(Long userId, DocumentType type, MultipartFile file, BusinessInput businessInput) {
 		Driver driver = requireDriver(userId);

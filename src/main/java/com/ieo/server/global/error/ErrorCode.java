@@ -152,6 +152,8 @@ public enum ErrorCode {
 	DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_404", "서류를 찾을 수 없습니다."),
 	DOCUMENT_NOT_DRIVER(HttpStatus.FORBIDDEN, "DOCUMENT_403_ROLE", "차주 계정만 서류를 낼 수 있습니다."),
 	DOCUMENT_NOT_BROKER(HttpStatus.FORBIDDEN, "DOCUMENT_403_BROKER", "주선사 담당자 계정만 회사 서류를 낼 수 있습니다."),
+	DRIVER_NOT_VERIFIED(HttpStatus.FORBIDDEN, "DRIVER_403_UNVERIFIED",
+			"서류 심사가 끝나야 배차를 요청할 수 있어요. 내 정보 > 서류에서 4가지 서류를 올려 주세요."),
 	BROKER_NOT_VERIFIED(HttpStatus.FORBIDDEN, "BROKER_403_UNVERIFIED",
 			"회사 서류 심사가 끝나야 오더를 올릴 수 있습니다. 설정 > 회사 서류에서 사업자등록증과 운송주선사업 허가증을 올려 주세요."),
 	DOCUMENT_INVALID_FILE(HttpStatus.BAD_REQUEST, "DOCUMENT_400_FILE", "서류 사진은 JPG·PNG 5MB 이하로 올려 주세요."),
