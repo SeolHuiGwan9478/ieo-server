@@ -64,3 +64,8 @@ ieo:
   # 서명 이미지·사진 저장 폴더 (로컬 디스크). 운영에서는 클라우드 저장소로 바꾼다
   storage:
     local-dir: ${IEO_STORAGE_DIR:./data/files}
+  # 사업자등록증 진위확인 (국세청, 공공데이터포털 15081808). 키가 없으면 조회하지 않고 운영자가 눈으로만 본다
+  # NTS_STUB=true 면 키 없이 시연용 가짜 결과를 쓴다 (사업자번호 아홉째 자리: 0~6 계속사업자, 7 휴업, 8 폐업, 9 불일치)
+  nts:
+    service-key: ${NTS_SERVICE_KEY:}
+    stub: ${NTS_STUB:false}

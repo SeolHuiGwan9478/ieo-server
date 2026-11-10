@@ -84,6 +84,9 @@ public class AuthService {
 	 */
 	public TokenResponse signUp(SignUpRequest request) {
 		// 입력을 먼저 확인해서, 고칠 수 있는 실수 때문에 인증 토큰을 쓰지 않게 한다
+		if (request.role() == UserRole.ADMIN) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT, "운영자 계정은 가입으로 만들 수 없습니다.");
+		}
 		validateConsents(request.role(), request.consents());
 		if (request.vehicle() != null && request.role() != UserRole.DRIVER) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT, "차주만 가입할 때 차량을 등록할 수 있습니다.");

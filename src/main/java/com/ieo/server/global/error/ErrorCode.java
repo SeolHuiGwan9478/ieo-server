@@ -145,7 +145,17 @@ public enum ErrorCode {
 	SITE_INVALID_LOCATION(HttpStatus.BAD_REQUEST, "SITE_400_LOCATION", "위치 좌표가 올바르지 않습니다."),
 	SITE_INVALID_RADIUS(HttpStatus.BAD_REQUEST, "SITE_400_RADIUS", "도착 판정 반경은 50m에서 1,000m 사이로 정해 주세요."),
 	SITE_INVALID_ATTRIBUTE(HttpStatus.BAD_REQUEST, "SITE_400_ATTRIBUTE", "상하차지 정보 값이 올바르지 않습니다."),
-	SITE_INVALID_NOTE(HttpStatus.BAD_REQUEST, "SITE_400_NOTE", "메모는 1자에서 500자 사이로 남겨 주세요.");
+	SITE_INVALID_NOTE(HttpStatus.BAD_REQUEST, "SITE_400_NOTE", "메모는 1자에서 500자 사이로 남겨 주세요."),
+
+	// 운영자 · 차주 서류 심사
+	ADMIN_FORBIDDEN(HttpStatus.FORBIDDEN, "ADMIN_403_ROLE", "운영자 계정만 쓸 수 있습니다."),
+	DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_404", "서류를 찾을 수 없습니다."),
+	DOCUMENT_NOT_DRIVER(HttpStatus.FORBIDDEN, "DOCUMENT_403_ROLE", "차주 계정만 서류를 낼 수 있습니다."),
+	DOCUMENT_INVALID_FILE(HttpStatus.BAD_REQUEST, "DOCUMENT_400_FILE", "서류 사진은 JPG·PNG 5MB 이하로 올려 주세요."),
+	DOCUMENT_BUSINESS_INFO(HttpStatus.BAD_REQUEST, "DOCUMENT_400_BUSINESS", "사업자등록증의 사업자등록번호 10자리와 개업일을 입력해 주세요."),
+	DOCUMENT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "DOCUMENT_400_REASON", "반려 사유를 골라 주세요. 기타는 사유를 직접 적어야 합니다."),
+	DOCUMENT_PENDING(HttpStatus.CONFLICT, "DOCUMENT_409_PENDING", "심사 중인 서류예요. 결과가 나온 뒤 다시 올릴 수 있어요."),
+	DOCUMENT_ALREADY_REVIEWED(HttpStatus.CONFLICT, "DOCUMENT_409_REVIEWED", "다른 운영자가 먼저 처리했어요. 새로 고침해 주세요.");
 
 	private final HttpStatus status;
 	private final String code;

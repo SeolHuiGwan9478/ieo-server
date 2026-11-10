@@ -1,6 +1,7 @@
 package com.ieo.server.global.config;
 
 import com.ieo.server.domain.user.controller.CarLoginController;
+import com.ieo.server.global.auth.AdminInterceptor;
 import com.ieo.server.global.auth.AuthInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
@@ -21,14 +22,20 @@ public class WebConfig implements WebMvcConfigurer {
 	public static final String WAIT_PROOF_PAGE = "/w";
 
 	private final AuthInterceptor authInterceptor;
+	private final AdminInterceptor adminInterceptor;
 	private final CorsProperties corsProperties;
 
-	/** /api/auth/** (로그인 전에 부르는 API)만 빼고 모두 로그인이 필요하다. */
+	/**
+	 * /api/auth/** (로그인 전에 부르는 API)만 빼고 모두 로그인이 필요하다.
+	 * /api/admin/** 은 그 위에 운영자(ADMIN) 역할까지 확인한다. 주선사·차주 계정은 403을 받는다
+	 */
 	@Override
 	public void addInterceptors(InterceptorRegistry registry) {
 		registry.addInterceptor(authInterceptor)
 				.addPathPatterns("/api/**")
 				.excludePathPatterns("/api/auth/**", "/api/public/**");
+		registry.addInterceptor(adminInterceptor)
+				.addPathPatterns("/api/admin/**");
 	}
 
 	/**
