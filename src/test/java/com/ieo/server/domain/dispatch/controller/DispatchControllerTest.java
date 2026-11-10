@@ -279,6 +279,41 @@ class DispatchControllerTest {
 	}
 
 	@Test
+	void 철회한_오더는_다시_요청할_수_있고_주선사에게는_최근_요청만_보인다() throws Exception {
+		Integer orderId = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
+		Integer first = idOf(request(driver, orderId));
+		mockMvc.perform(post("/api/dispatch-requests/" + first + "/withdraw").header("Authorization", driver))
+				.andExpect(jsonPath("$.status").value("WITHDRAWN"));
+
+		Integer again = idOf(request(driver, orderId)
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.status").value("PENDING")));
+		request(driver, orderId)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("DISPATCH_409_DUPLICATE"));
+
+		mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", driver))
+				.andExpect(jsonPath("$.myRequest.id").value(again))
+				.andExpect(jsonPath("$.myRequest.status").value("PENDING"));
+		mockMvc.perform(get("/api/broker/orders/" + orderId + "/requests").header("Authorization", broker))
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].requestId").value(again));
+	}
+
+	@Test
+	void 확정_뒤_취소한_오더는_다시_요청할_수_없다() throws Exception {
+		Integer orderId = idOf(registerOrder(orderJson("TON_5", "WING", "FIRST", null)));
+		Integer tripId = JsonPath.read(request(driver, orderId).andReturn().getResponse().getContentAsString(), "$.tripId");
+		mockMvc.perform(post("/api/trips/" + tripId + "/cancel").header("Authorization", driver)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"VEHICLE_PROBLEM\"}"))
+				.andExpect(status().isOk());
+
+		request(driver, orderId)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value("배차를 취소한 오더는 다시 요청할 수 없어요."));
+	}
+
+	@Test
 	void 차가_맞지_않거나_남에게_지정된_오더는_요청할_수_없다() throws Exception {
 		Integer cargo = idOf(registerOrder(orderJson("TON_5", "CARGO", "SELECT", null)));
 		request(driver, cargo)
@@ -391,6 +426,10 @@ class DispatchControllerTest {
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("ORDER_409_REPORTED"));
 		report(orderId, "{}").andExpect(status().isBadRequest());
+		mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", driver))
+				.andExpect(jsonPath("$.reportedByMe").value(true));
+		mockMvc.perform(get("/api/orders").header("Authorization", driver))
+				.andExpect(jsonPath("$[0].reportedByMe").value(true));
 	}
 
 	private ResultActions cancelByBroker(Integer orderId, String json) throws Exception {

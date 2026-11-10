@@ -37,7 +37,7 @@ public class DispatchCanceller {
 		}
 		Order order = trip.getOrder();
 		trip.cancel(now);
-		requestRepository.findByOrderIdAndDriverUserId(order.getId(), trip.getDriver().getUserId())
+		requestRepository.findFirstByOrderIdAndDriverUserIdOrderByIdDesc(order.getId(), trip.getDriver().getUserId())
 				.ifPresent(request -> request.cancel());
 		if (reopen) {
 			order.reopen();

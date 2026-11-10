@@ -94,7 +94,7 @@ public class BrokerDocumentService {
 		BusinessInput given = input == null ? new BusinessInput(null, null, null) : input;
 		if (type != BrokerDocumentType.BUSINESS_REGISTRATION) {
 			if (!given.isEmpty()) {
-				throw new BusinessException(ErrorCode.INVALID_INPUT, "사업자 정보는 사업자등록증을 낼 때만 보냅니다.");
+				throw new BusinessException(ErrorCode.INVALID_INPUT, "사업자 정보는 사업자등록증을 낼 때만 보내요.");
 			}
 			return null;
 		}

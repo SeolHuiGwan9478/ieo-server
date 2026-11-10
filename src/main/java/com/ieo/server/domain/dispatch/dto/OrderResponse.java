@@ -21,6 +21,7 @@ import java.time.Instant;
  * billing(거래처·청구운임·수수료)은 주선사가 볼 때만 채운다 (forBroker). 차주에게는 절대 나가지 않는다.
  * distanceM은 차주 목록에서 상차지까지 도로 거리 어림(직선 × 도로 계수)이다. 상세의 실수익 계산(TMAP)과 크게 다르지 않게 맞췄다.
  * routeAverageFare는 같은 노선(상하차 시·구)의 Ieo 완료 운행 평균 운임. 표본이 10건 이상일 때만 채운다 (DSP-044)
+ * reportedByMe는 차주가 이 오더를 이미 신고했는지. 신고는 오더마다 한 번이라 화면이 신고 버튼을 닫는다 (DSP-042)
  */
 public record OrderResponse(
 		Long id,
@@ -59,7 +60,8 @@ public record OrderResponse(
 		Billing billing,
 		/** 서류 심사 전 차주에게 보낸 줄인 오더. 상하차지는 시·구까지, 주선사·화물 내용은 비운다 (forUnverified()) */
 		boolean limited,
-		Integer routeAverageFare) {
+		Integer routeAverageFare,
+		boolean reportedByMe) {
 
 	/**
 	 * 화주 쪽 숫자. 주선사 콘솔만 본다. billedFare는 청구운임, fee는 수수료(청구 − 지급), feeRate는 수수료율(%, 청구운임 기준).
@@ -136,7 +138,8 @@ public record OrderResponse(
 				pendingRequestCount,
 				billing,
 				false,
-				null);
+				null,
+				false);
 	}
 
 	/** 노선 평균 운임을 붙인다 (DSP-044) */
@@ -145,7 +148,7 @@ public record OrderResponse(
 				pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoCategoryLabel, cargoType, weightKg,
 				tonnage, tonnageLabel, bodyType, bodyTypeLabel, loadingMethod, loadingMethodLabel, fare, paymentType,
 				paymentTypeLabel, expectedPaymentDays, consignmentType, confirmMode, targetDriverId, createdAt, distanceM,
-				netProfit, myRequest, pendingRequestCount, billing, limited, average);
+				netProfit, myRequest, pendingRequestCount, billing, limited, average, reportedByMe);
 	}
 
 	/**
@@ -157,6 +160,15 @@ public record OrderResponse(
 				pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoCategoryLabel, cargoCategoryLabel, weightKg,
 				tonnage, tonnageLabel, bodyType, bodyTypeLabel, loadingMethod, loadingMethodLabel, fare, paymentType,
 				paymentTypeLabel, expectedPaymentDays, consignmentType, confirmMode, targetDriverId, createdAt, distanceM,
-				netProfit, myRequest, pendingRequestCount, null, true, routeAverageFare);
+				netProfit, myRequest, pendingRequestCount, null, true, routeAverageFare, reportedByMe);
+	}
+
+	/** 차주가 이미 신고한 오더인지 붙인다 (DSP-042) */
+	public OrderResponse withReportedByMe(boolean reported) {
+		return new OrderResponse(id, status, open, brokerId, brokerName, brokerMetrics, pickup, dropoff,
+				pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoCategoryLabel, cargoType, weightKg,
+				tonnage, tonnageLabel, bodyType, bodyTypeLabel, loadingMethod, loadingMethodLabel, fare, paymentType,
+				paymentTypeLabel, expectedPaymentDays, consignmentType, confirmMode, targetDriverId, createdAt, distanceM,
+				netProfit, myRequest, pendingRequestCount, billing, limited, routeAverageFare, reported);
 	}
 }

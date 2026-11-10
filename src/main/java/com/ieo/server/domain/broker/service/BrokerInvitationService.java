@@ -82,7 +82,7 @@ public class BrokerInvitationService {
 				.filter(found -> found.getStatus() != UserStatus.WITHDRAWN)
 				.orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 		if (user.getRole() != UserRole.BROKER) {
-			throw new BusinessException(ErrorCode.BROKER_NOT_BROKER, "차주로 가입된 번호는 주선사 담당자가 될 수 없습니다.");
+			throw new BusinessException(ErrorCode.BROKER_NOT_BROKER, "차주로 가입된 번호는 주선사 담당자가 될 수 없어요.");
 		}
 		return user;
 	}

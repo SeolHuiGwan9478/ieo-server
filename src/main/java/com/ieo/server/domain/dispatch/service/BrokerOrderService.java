@@ -268,7 +268,12 @@ public class BrokerOrderService {
 	public List<ApplicantResponse> getApplicants(Long userId, Long orderId) {
 		Order order = findMine(requireMember(userId), orderId);
 		Instant now = clock.instant();
-		return requestRepository.findAllByOrderIdOrderByCreatedAtAsc(order.getId()).stream()
+		List<DispatchRequest> requests = requestRepository.findAllByOrderIdOrderByCreatedAtAsc(order.getId());
+		// 철회 뒤 다시 요청한 차주는 최근 요청만 보인다
+		Map<Long, Long> latestByDriver = requests.stream().collect(Collectors.toMap(
+				request -> request.getDriver().getUserId(), DispatchRequest::getId, Math::max));
+		return requests.stream()
+				.filter(request -> request.getId().equals(latestByDriver.get(request.getDriver().getUserId())))
 				.map(request -> ApplicantResponse.of(request, now, driverRecordService.of(request.getDriver().getUserId())))
 				.toList();
 	}

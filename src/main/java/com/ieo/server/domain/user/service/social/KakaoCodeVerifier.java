@@ -53,7 +53,7 @@ public class KakaoCodeVerifier implements SocialIdentityVerifier {
 			throw new BusinessException(ErrorCode.AUTH_SOCIAL_NOT_CONFIGURED);
 		}
 		if (redirectUri == null || redirectUri.isBlank()) {
-			throw new BusinessException(ErrorCode.INVALID_INPUT, "카카오 로그인에는 redirectUri가 필요합니다.");
+			throw new BusinessException(ErrorCode.INVALID_INPUT, "카카오 로그인에는 redirectUri가 필요해요.");
 		}
 		try {
 			MultiValueMap<String, String> form = new LinkedMultiValueMap<>();

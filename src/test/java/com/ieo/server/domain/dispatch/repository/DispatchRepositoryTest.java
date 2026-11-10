@@ -123,7 +123,7 @@ class DispatchRepositoryTest {
 
 		assertThat(requestRepository.countByDriverUserIdAndStatusAndCreatedAtAfter(
 				driver.getUserId(), DispatchRequestStatus.PENDING, since)).isEqualTo(1);
-		assertThat(requestRepository.findByOrderIdAndDriverUserId(order.getId(), driver.getUserId())).isPresent();
+		assertThat(requestRepository.findFirstByOrderIdAndDriverUserIdOrderByIdDesc(order.getId(), driver.getUserId())).isPresent();
 		assertThat(requestRepository.findAllByOrderIdOrderByCreatedAtAsc(order.getId())).hasSize(1);
 
 		request.confirm(Instant.now());
@@ -136,7 +136,7 @@ class DispatchRepositoryTest {
 	}
 
 	@Test
-	void 같은_오더에_두_번_요청할_수_없다() {
+	void 같은_오더에_대기_중_요청은_하나뿐이다() {
 		Order order = orderRepository.save(order(Instant.now().plus(Duration.ofDays(1)), null));
 		requestRepository.saveAndFlush(DispatchRequest.create(order, driver, vehicle));
 

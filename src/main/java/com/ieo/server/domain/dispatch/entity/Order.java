@@ -268,7 +268,7 @@ public class Order extends BaseTimeEntity {
 		}
 		if (pickupFrom == null || pickupUntil == null || dropoffBy == null
 				|| !pickupFrom.isBefore(pickupUntil) || dropoffBy.isBefore(pickupFrom)) {
-			throw new BusinessException(ErrorCode.ORDER_INVALID, "상차 시간은 시작이 끝보다 앞서고, 하차 마감은 상차 시작 뒤여야 합니다.");
+			throw new BusinessException(ErrorCode.ORDER_INVALID, "상차 시간은 시작이 끝보다 앞서고, 하차 마감은 상차 시작 뒤여야 해요.");
 		}
 		if (weightKg == null || weightKg < 1 || weightKg > MAX_WEIGHT_KG
 				|| fare == null || fare < 0 || fare > MAX_FARE

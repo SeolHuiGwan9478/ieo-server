@@ -158,7 +158,7 @@ public class LedgerEntry extends BaseTimeEntity {
 
 	public void changeDistance(Integer distanceKm) {
 		if (distanceKm != null && (distanceKm < 0 || distanceKm > 3000)) {
-			throw new BusinessException(ErrorCode.LEDGER_INVALID, "주행거리는 0km에서 3,000km 사이여야 합니다.");
+			throw new BusinessException(ErrorCode.LEDGER_INVALID, "주행거리는 0km에서 3,000km 사이여야 해요.");
 		}
 		this.distanceKm = distanceKm;
 	}

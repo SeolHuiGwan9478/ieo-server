@@ -18,7 +18,6 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import java.time.Duration;
 import java.time.Instant;
 import lombok.AccessLevel;
@@ -28,14 +27,16 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * 차주가 오더에 보낸 배차 요청 (DSP-020). 같은 오더에 한 번만 요청할 수 있다.
- * 요청 후 10분 안에 확정되지 않으면 만료로 본다(저장하지 않고 createdAt으로 판단, DSP-023).
+ * 차주가 오더에 보낸 배차 요청 (DSP-020). 철회했거나 만료된 오더는 다시 요청할 수 있어, 그때마다 줄이 새로 생긴다.
+ * 같은 오더에 대기 중 요청은 하나뿐이다 (scripts/dispatch-requests-pending-unique.sql).
+ * 요청 후 10분 안에 확정되지 않으면 만료로 본다(createdAt으로 판단, DSP-023). 다시 요청할 때만 EXPIRED로 저장한다
  */
 @Getter
 @Entity
 @Table(name = "dispatch_requests",
-		uniqueConstraints = @UniqueConstraint(name = "uk_dispatch_requests_order_driver", columnNames = {"order_id", "driver_id"}),
-		indexes = @Index(name = "idx_dispatch_requests_driver_status", columnList = "driver_id, status"))
+		indexes = {
+				@Index(name = "idx_dispatch_requests_driver_status", columnList = "driver_id, status"),
+				@Index(name = "idx_dispatch_requests_order_driver", columnList = "order_id, driver_id")})
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class DispatchRequest extends BaseTimeEntity {
 
@@ -111,6 +112,19 @@ public class DispatchRequest extends BaseTimeEntity {
 	public void withdraw(Instant now) {
 		requirePending(now);
 		this.status = DispatchRequestStatus.WITHDRAWN;
+	}
+
+	/** 이 요청이 있어도 같은 오더를 다시 요청할 수 있는지. 철회했거나 만료된 요청만 */
+	public boolean allowsRetry(Instant now) {
+		DispatchRequestStatus current = statusAt(now);
+		return current == DispatchRequestStatus.WITHDRAWN || current == DispatchRequestStatus.EXPIRED;
+	}
+
+	/** 다시 요청하기 전에, 시각으로만 만료였던 요청을 EXPIRED로 남긴다. 대기 중 요청은 오더마다 하나뿐이어야 해서 */
+	public void settleExpiry(Instant now) {
+		if (status == DispatchRequestStatus.PENDING && statusAt(now) == DispatchRequestStatus.EXPIRED) {
+			this.status = DispatchRequestStatus.EXPIRED;
+		}
 	}
 
 	/** 확정된 배차를 취소. 확정된 요청만 */

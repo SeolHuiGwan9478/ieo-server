@@ -1,7 +1,7 @@
 package com.ieo.server.domain.dispatch.enums;
 
 /**
- * 배차 요청 상태. EXPIRED는 저장하지 않고 시각으로 판단한다 (요청 후 10분, DSP-023)
+ * 배차 요청 상태. EXPIRED는 보통 시각으로 판단하고(요청 후 10분, DSP-023), 같은 오더를 다시 요청할 때만 저장한다
  */
 public enum DispatchRequestStatus {
 	/** 주선사 확정을 기다리는 중 */

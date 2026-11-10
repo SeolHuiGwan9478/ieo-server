@@ -32,6 +32,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -111,6 +112,8 @@ public class DispatchService {
 		Map<Long, BrokerMetricsResponse> metrics = metricsService.getAll(
 				orders.stream().map(order -> order.getBroker().getId()).toList());
 		Map<Long, Integer> averages = routeFares.averages(orders);
+		Set<Long> reported = orders.isEmpty() ? Set.of()
+				: reportRepository.findReportedOrderIds(userId, orders.stream().map(Order::getId).toList());
 		return orders.stream()
 				.map(order -> {
 					DispatchRequestResponse myRequest = toResponse(mine.get(order.getId()), now);
@@ -124,7 +127,8 @@ public class DispatchService {
 							profitEstimator.rough(target(order, lat, lng), vehicleFor(order, vehicles)).netProfit(),
 							myRequest, brokerMetrics);
 				})
-				.map(response -> response.withRouteAverageFare(averages.get(response.id())))
+				.map(response -> response.withRouteAverageFare(averages.get(response.id()))
+						.withReportedByMe(reported.contains(response.id())))
 				.map(response -> verified ? response : response.forUnverified())
 				.toList();
 	}
@@ -182,10 +186,11 @@ public class DispatchService {
 		requireDriver(userId);
 		Order order = findVisible(userId, orderId);
 		Instant now = clock.instant();
-		DispatchRequest mine = requestRepository.findByOrderIdAndDriverUserId(orderId, userId).orElse(null);
+		DispatchRequest mine = requestRepository.findFirstByOrderIdAndDriverUserIdOrderByIdDesc(orderId, userId).orElse(null);
 		OrderResponse response = OrderResponse.of(order, now, null, toResponse(mine, now), null,
 				metricsService.getAll(List.of(order.getBroker().getId())).get(order.getBroker().getId()))
-				.withRouteAverageFare(routeFares.averages(List.of(order)).get(order.getId()));
+				.withRouteAverageFare(routeFares.averages(List.of(order)).get(order.getId()))
+				.withReportedByMe(reportRepository.existsByOrderIdAndReporterUserId(orderId, userId));
 		return driverVerification.isVerified(userId) ? response : response.forUnverified();
 	}
 
@@ -201,7 +206,12 @@ public class DispatchService {
 		Instant now = clock.instant();
 
 		order.checkRequestable(driver, vehicle, now);
-		if (requestRepository.findByOrderIdAndDriverUserId(orderId, userId).isPresent()) {
+		// 철회했거나 만료된 요청만 있으면 다시 요청할 수 있다. 확정 뒤 취소한 오더는 다시 받지 않는다
+		List<DispatchRequest> before = requestRepository.findAllByOrderIdAndDriverUserId(orderId, userId);
+		if (before.stream().anyMatch(request -> request.getStatus() == DispatchRequestStatus.CANCELED)) {
+			throw new BusinessException(ErrorCode.DISPATCH_ALREADY_REQUESTED, "배차를 취소한 오더는 다시 요청할 수 없어요.");
+		}
+		if (!before.stream().allMatch(request -> request.allowsRetry(now))) {
 			throw new BusinessException(ErrorCode.DISPATCH_ALREADY_REQUESTED);
 		}
 		long pending = requestRepository.countByDriverUserIdAndStatusAndCreatedAtAfter(
@@ -214,11 +224,12 @@ public class DispatchService {
 			throw new BusinessException(ErrorCode.DISPATCH_TOO_FAST);
 		}
 
+		before.forEach(request -> request.settleExpiry(now));
 		DispatchRequest request;
 		try {
 			request = requestRepository.saveAndFlush(DispatchRequest.create(order, driver, vehicle));
 		} catch (DataIntegrityViolationException e) {
-			// 같은 오더에 동시에 두 번 요청한 경우. (order, driver) 유니크 제약이 하나만 남긴다
+			// 같은 오더에 동시에 두 번 요청한 경우. 대기 중 요청 유니크 인덱스가 하나만 남긴다
 			throw new BusinessException(ErrorCode.DISPATCH_ALREADY_REQUESTED);
 		}
 		Long tripId = null;
@@ -289,7 +300,9 @@ public class DispatchService {
 		}
 		List<Long> orderIds = orders.stream().map(Order::getId).toList();
 		return requestRepository.findAllByDriverUserIdAndOrderIdIn(userId, orderIds).stream()
-				.collect(Collectors.toMap(request -> request.getOrder().getId(), Function.identity()));
+				// 철회 뒤 다시 요청했으면 최근 것
+				.collect(Collectors.toMap(request -> request.getOrder().getId(), Function.identity(),
+						(a, b) -> a.getId() > b.getId() ? a : b));
 	}
 
 	/** 남에게 지정된 오더는 있는지도 알려 주지 않도록 404 */

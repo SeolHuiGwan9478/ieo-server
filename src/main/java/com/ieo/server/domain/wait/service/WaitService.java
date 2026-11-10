@@ -213,7 +213,7 @@ public class WaitService {
 			return now;
 		}
 		if (at.isAfter(now.plus(CLOCK_SKEW))) {
-			throw new BusinessException(ErrorCode.WAIT_INVALID_TIME, "아직 오지 않은 시각은 기록할 수 없습니다.");
+			throw new BusinessException(ErrorCode.WAIT_INVALID_TIME, "아직 오지 않은 시각은 기록할 수 없어요.");
 		}
 		return at;
 	}

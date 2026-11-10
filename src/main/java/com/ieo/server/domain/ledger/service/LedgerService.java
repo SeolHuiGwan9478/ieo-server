@@ -192,7 +192,7 @@ public class LedgerService {
 
 	static void validateRange(LocalDate from, LocalDate to) {
 		if (from.isAfter(to) || ChronoUnit.DAYS.between(from, to) > MAX_RANGE_DAYS) {
-			throw new BusinessException(ErrorCode.LEDGER_INVALID, "기간은 시작일이 끝일보다 앞서고 1년 이내여야 합니다.");
+			throw new BusinessException(ErrorCode.LEDGER_INVALID, "기간은 시작일이 끝일보다 앞서고 1년 이내여야 해요.");
 		}
 	}
 

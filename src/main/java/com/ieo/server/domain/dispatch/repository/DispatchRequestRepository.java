@@ -15,7 +15,10 @@ public interface DispatchRequestRepository extends JpaRepository<DispatchRequest
 	/** 오더에 들어온 요청. 먼저 요청한 순서 */
 	List<DispatchRequest> findAllByOrderIdOrderByCreatedAtAsc(Long orderId);
 
-	Optional<DispatchRequest> findByOrderIdAndDriverUserId(Long orderId, Long userId);
+	/** 이 오더에 낸 내 요청 중 가장 최근 것. 철회 뒤 다시 요청하면 여러 줄이 있다 */
+	Optional<DispatchRequest> findFirstByOrderIdAndDriverUserIdOrderByIdDesc(Long orderId, Long userId);
+
+	List<DispatchRequest> findAllByOrderIdAndDriverUserId(Long orderId, Long userId);
 
 	/** 내 요청. 최근 것 먼저 */
 	List<DispatchRequest> findAllByDriverUserIdOrderByCreatedAtDesc(Long userId);

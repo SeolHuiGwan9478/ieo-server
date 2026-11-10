@@ -113,7 +113,7 @@ public abstract class ReviewDocument extends BaseTimeEntity {
 			throw new BusinessException(ErrorCode.DOCUMENT_REASON_REQUIRED, "이 서류에는 쓸 수 없는 반려 사유예요: " + reason.getLabel());
 		}
 		if (trimmed != null && trimmed.length() > MAX_NOTE_LENGTH) {
-			throw new BusinessException(ErrorCode.DOCUMENT_REASON_REQUIRED, "반려 사유는 " + MAX_NOTE_LENGTH + "자까지 적을 수 있습니다.");
+			throw new BusinessException(ErrorCode.DOCUMENT_REASON_REQUIRED, "반려 사유는 " + MAX_NOTE_LENGTH + "자까지 적을 수 있어요.");
 		}
 		this.status = DocumentStatus.REJECTED;
 		this.reviewedAt = now;
