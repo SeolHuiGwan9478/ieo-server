@@ -159,11 +159,11 @@ class AuthControllerTest {
 		post("/api/auth/phone/verify", verifyBody(phone, wrong))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("AUTH_400_CODE"))
-				.andExpect(jsonPath("$.message").value("인증번호가 맞지 않습니다. 4번 더 틀리면 10분 동안 막힙니다."));
+				.andExpect(jsonPath("$.message").value("인증번호가 달라요 (4번 남음)"));
 
 		// 틀린 횟수가 DB에 남는다
 		post("/api/auth/phone/verify", verifyBody(phone, wrong))
-				.andExpect(jsonPath("$.message").value("인증번호가 맞지 않습니다. 3번 더 틀리면 10분 동안 막힙니다."));
+				.andExpect(jsonPath("$.message").value("인증번호가 달라요 (3번 남음)"));
 	}
 
 	@Test

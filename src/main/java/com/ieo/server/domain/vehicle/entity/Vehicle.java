@@ -38,9 +38,15 @@ import org.hibernate.type.SqlTypes;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Vehicle extends BaseTimeEntity {
 
-	/** 지역(선택) + 숫자 2~3자리 + 한글 한 자 + 숫자 4자리. 예: 경기82사1234, 123바4567 */
+	/**
+	 * 자동차 등록번호 (자동차 등록번호판 등의 기준에 관한 고시). 예: 12가3456, 123가4567, 경기82사1234
+	 * - 숫자 2~3자리 + 용도 글자 + 숫자 4자리. 사업용은 지역명 + 숫자 2자리로 시작할 수 있다
+	 * - 용도 글자: 비사업용 가~마·거~저·고~조·구~주(32자), 사업용 아·바·사·자, 렌터카 하·허·호, 택배 배
+	 * 휴대폰 앱 PlateNumber와 같은 규칙이다
+	 */
 	private static final Pattern PLATE_NUMBER = Pattern.compile(
-			"^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)?\\d{2,3}[가-힣]\\d{4}$");
+			"^(?:(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)\\d{2}|\\d{2,3})"
+					+ "[가나다라마거너더러머버서어저고노도로모보소오조구누두루무부수우주아바사자하허호배]\\d{4}$");
 	private static final BigDecimal MIN_HEIGHT_M = new BigDecimal("1.50");
 	private static final BigDecimal MAX_HEIGHT_M = new BigDecimal("4.20");
 	private static final BigDecimal HUNDRED_KM = new BigDecimal("100");

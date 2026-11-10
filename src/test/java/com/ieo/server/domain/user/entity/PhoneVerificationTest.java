@@ -54,7 +54,7 @@ class PhoneVerificationTest {
 
 		assertThatThrownBy(() -> verification.verify("wrong", now))
 				.isInstanceOf(BusinessException.class)
-				.hasMessage("인증번호가 맞지 않습니다. 4번 더 틀리면 10분 동안 막힙니다.");
+				.hasMessage("인증번호가 달라요 (4번 남음)");
 		for (int i = 0; i < 3; i++) {
 			assertError(() -> verification.verify("wrong", now), ErrorCode.AUTH_CODE_MISMATCH);
 		}

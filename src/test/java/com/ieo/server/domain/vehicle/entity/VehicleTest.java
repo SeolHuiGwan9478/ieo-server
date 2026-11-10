@@ -30,7 +30,7 @@ class VehicleTest {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = {"", "1234", "경기82사123", "ABC1234", "뉴욕82사1234", "82사12345"})
+	@ValueSource(strings = {"", "1234", "경기82사123", "ABC1234", "뉴욕82사1234", "82사12345", "12각3456", "12김3456", "경기123가4567", "1가3456"})
 	void 형식이_틀린_차량_번호는_막는다(String input) {
 		assertError(() -> Vehicle.create(driver, input, Tonnage.TON_5, BodyType.CARGO, null), ErrorCode.VEHICLE_INVALID_PLATE);
 	}

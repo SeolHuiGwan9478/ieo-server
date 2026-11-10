@@ -106,7 +106,7 @@ public class PhoneVerification extends BaseTimeEntity {
 				throw new BusinessException(ErrorCode.AUTH_CODE_LOCKED);
 			}
 			throw new BusinessException(ErrorCode.AUTH_CODE_MISMATCH,
-					"인증번호가 맞지 않습니다. " + remaining + "번 더 틀리면 10분 동안 막힙니다.");
+					"인증번호가 달라요 (" + remaining + "번 남음)");
 		}
 		clearCode();
 	}

@@ -22,11 +22,11 @@ public enum ErrorCode {
 	USER_INVALID_STATUS(HttpStatus.CONFLICT, "USER_409", "지금 계정 상태에서는 할 수 없는 요청입니다."),
 
 	// 인증
-	AUTH_CODE_TOO_SOON(HttpStatus.TOO_MANY_REQUESTS, "AUTH_429_RESEND", "인증번호는 1분에 한 번만 받을 수 있습니다."),
-	AUTH_CODE_DAILY_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "AUTH_429_DAILY", "오늘은 인증번호를 더 받을 수 없습니다."),
-	AUTH_CODE_LOCKED(HttpStatus.TOO_MANY_REQUESTS, "AUTH_429_LOCKED", "인증번호를 여러 번 틀려 잠시 막혔습니다. 10분 뒤에 다시 시도해 주세요."),
-	AUTH_CODE_MISMATCH(HttpStatus.BAD_REQUEST, "AUTH_400_CODE", "인증번호가 맞지 않습니다."),
-	AUTH_CODE_EXPIRED(HttpStatus.GONE, "AUTH_410_CODE", "인증번호가 만료되었습니다. 다시 받아 주세요."),
+	AUTH_CODE_TOO_SOON(HttpStatus.TOO_MANY_REQUESTS, "AUTH_429_RESEND", "1분 뒤에 다시 받아 주세요."),
+	AUTH_CODE_DAILY_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "AUTH_429_DAILY", "오늘은 더 받을 수 없어요."),
+	AUTH_CODE_LOCKED(HttpStatus.TOO_MANY_REQUESTS, "AUTH_429_LOCKED", "10분 뒤에 다시 해 주세요."),
+	AUTH_CODE_MISMATCH(HttpStatus.BAD_REQUEST, "AUTH_400_CODE", "인증번호가 달라요."),
+	AUTH_CODE_EXPIRED(HttpStatus.GONE, "AUTH_410_CODE", "인증 시간이 지났어요."),
 	AUTH_PHONE_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_401_PHONE", "휴대폰 인증이 만료되었습니다. 다시 인증해 주세요."),
 	AUTH_INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_TOKEN", "로그인 정보가 올바르지 않습니다. 다시 로그인해 주세요."),
 	AUTH_PHONE_ALREADY_REGISTERED(HttpStatus.CONFLICT, "AUTH_409_PHONE", "이미 가입된 번호입니다."),
@@ -44,7 +44,7 @@ public enum ErrorCode {
 
 	// 차량
 	VEHICLE_NOT_FOUND(HttpStatus.NOT_FOUND, "VEHICLE_404", "차량을 찾을 수 없습니다."),
-	VEHICLE_INVALID_PLATE(HttpStatus.BAD_REQUEST, "VEHICLE_400_PLATE", "차량 번호 형식이 올바르지 않습니다. 예: 경기82사1234, 123바4567"),
+	VEHICLE_INVALID_PLATE(HttpStatus.BAD_REQUEST, "VEHICLE_400_PLATE", "차량 번호를 확인해 주세요. 예: 12가3456, 경기82사1234"),
 	VEHICLE_INVALID_DIMENSION(HttpStatus.BAD_REQUEST, "VEHICLE_400_DIMENSION", "트럭 폭·길이·중량·축 수가 입력할 수 있는 범위를 벗어났습니다."),
 	VEHICLE_INVALID_HEIGHT(HttpStatus.BAD_REQUEST, "VEHICLE_400_HEIGHT", "차량 높이는 1.5m에서 4.2m 사이로 입력해 주세요."),
 	VEHICLE_DUPLICATE_PLATE(HttpStatus.CONFLICT, "VEHICLE_409_PLATE", "이미 다른 계정에 등록된 차량 번호입니다. 고객센터로 문의해 주세요."),
