@@ -177,7 +177,7 @@ class RecommendationControllerTest {
 				.andReturn().getResponse().getContentAsString();
 
 		int fuelCost = JsonPath.read(body, "$.items[0].fuelCost");
-		assertThat(fuelCost).isEqualTo((int) Math.round(70.0 / 3.5 * 1600));
+		assertThat(fuelCost).isEqualTo((int) Math.round(70.0 / Tonnage.TON_11.getDefaultKmPerLiter() * 1600));
 		assertThat((int) JsonPath.read(body, "$.items[0].netProfit")).isEqualTo(300_000 - fuelCost - 8_000);
 	}
 
@@ -244,7 +244,7 @@ class RecommendationControllerTest {
 		recommend().andExpect(jsonPath("$.items.length()").value(1))
 				.andExpect(jsonPath("$.items[0].order.pickup.name").value("대구 북구 창고"));
 
-		preference("{\"enabled\": true, \"radiusKm\": 30, \"minNetProfit\": 220000}");
+		preference("{\"enabled\": true, \"radiusKm\": 30, \"minNetProfit\": 235000}");
 		recommend().andExpect(jsonPath("$.items.length()").value(1))
 				.andExpect(jsonPath("$.items[0].order.pickup.name").value("칠곡 물류센터"));
 

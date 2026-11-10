@@ -2,6 +2,7 @@ package com.ieo.server.domain.vehicle.controller;
 
 import com.ieo.server.domain.vehicle.dto.CreateVehicleRequest;
 import com.ieo.server.domain.vehicle.dto.FuelEconomyRequest;
+import com.ieo.server.domain.vehicle.dto.ManualFuelEconomyRequest;
 import com.ieo.server.domain.vehicle.dto.PleosResolveResponse;
 import com.ieo.server.domain.vehicle.dto.PleosVinRequest;
 import com.ieo.server.domain.vehicle.dto.UpdateVehicleRequest;
@@ -68,6 +69,15 @@ public class VehicleController {
 			@PathVariable Long vehicleId,
 			@Valid @RequestBody PleosVinRequest request) {
 		return vehicleService.linkPleos(userId, vehicleId, request);
+	}
+
+	/** 휴대폰 앱: 평소 연비(km/L)를 넣는다. null이면 비운다 (VEH-003) */
+	@PutMapping("/{vehicleId}/manual-fuel-economy")
+	public VehicleResponse changeManualFuelEconomy(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
+			@PathVariable Long vehicleId,
+			@RequestBody ManualFuelEconomyRequest request) {
+		return vehicleService.changeManualFuelEconomy(userId, vehicleId, request);
 	}
 
 	/** 차량 앱: Pleos 누적 연비(L/100km)를 올린다 (VEH-003) */

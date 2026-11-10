@@ -164,6 +164,26 @@ class VehicleControllerTest {
 	}
 
 	@Test
+	void 차주가_평소_연비를_넣으면_기준_연비로_쓰고_비우면_기본값으로_돌아간다() throws Exception {
+		Integer id = idOf(register(driverBearer, "경기82사1234", "TON_5", "CARGO", null));
+
+		putManualFuelEconomy(driverBearer, id, "5.5")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.manualKmPerLiter").value(5.5))
+				.andExpect(jsonPath("$.kmPerLiter").value(5.5))
+				.andExpect(jsonPath("$.fuelEconomySource").value("MANUAL"));
+		putManualFuelEconomy(driverBearer, id, "null")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.kmPerLiter").value(5.0))
+				.andExpect(jsonPath("$.fuelEconomySource").value("DEFAULT"));
+		putManualFuelEconomy(driverBearer, id, "30")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("VEHICLE_400_FUEL"));
+		putManualFuelEconomy(bearerOfNewDriver("01090000506"), id, "5")
+				.andExpect(status().isNotFound());
+	}
+
+	@Test
 	void 다른_차주가_쓰는_번호는_409() throws Exception {
 		register(bearerOfNewDriver("01090000502"), "경기82사1234", "TON_5", "CARGO", null);
 
@@ -227,6 +247,12 @@ class VehicleControllerTest {
 		return mockMvc.perform(put("/api/vehicles/" + vehicleId + "/fuel-economy").header("Authorization", bearer)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"litersPer100Km\":" + litersPer100Km + "}"));
+	}
+
+	private ResultActions putManualFuelEconomy(String bearer, Integer vehicleId, String kmPerLiter) throws Exception {
+		return mockMvc.perform(put("/api/vehicles/" + vehicleId + "/manual-fuel-economy").header("Authorization", bearer)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"kmPerLiter\":" + kmPerLiter + "}"));
 	}
 
 	private static Integer idOf(ResultActions result) throws Exception {

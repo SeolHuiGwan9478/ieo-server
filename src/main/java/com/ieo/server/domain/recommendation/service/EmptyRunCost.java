@@ -22,10 +22,8 @@ public class EmptyRunCost {
 		return Math.round(straightMeters * properties.roadFactor());
 	}
 
-	/** 실측 연비가 있으면 그것, 없으면 톤수별 기본값 (REC-011) */
+	/** Pleos 실측 → 차주 입력 → 톤수 기본값 (REC-011) */
 	private static double kmPerLiter(Vehicle vehicle) {
-		return vehicle.getMeasuredKmPerLiter() != null
-				? vehicle.getMeasuredKmPerLiter().doubleValue()
-				: vehicle.getTonnage().getDefaultKmPerLiter();
+		return vehicle.kmPerLiter();
 	}
 }

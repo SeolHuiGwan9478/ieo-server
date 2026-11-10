@@ -7,6 +7,7 @@ import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.vehicle.enums.BodyType;
+import com.ieo.server.domain.vehicle.enums.FuelEconomySource;
 import com.ieo.server.domain.vehicle.enums.Tonnage;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
@@ -68,6 +69,53 @@ class VehicleTest {
 
 		assertThat(vehicle.getMeasuredKmPerLiter()).isEqualByComparingTo("3.80");
 		assertThat(vehicle.getFuelEconomyUpdatedAt()).isEqualTo(now);
+	}
+
+	@Test
+	void Pleos가_km_L로_주면_그대로_쓴다() {
+		Vehicle vehicle = Vehicle.create(driver, "12가3456", Tonnage.TON_25, BodyType.CARGO, null);
+
+		// 100 ÷ 4.2 = 23.8km/L는 25톤 트럭으로 말이 안 되니 값 그대로 km/L로 본다
+		vehicle.updateFuelEconomy(4.2f, now);
+
+		assertThat(vehicle.getMeasuredKmPerLiter()).isEqualByComparingTo("4.20");
+	}
+
+	@Test
+	void 두_단위_모두_말이_되면_톤수_기본값에_가까운_쪽을_고른다() {
+		Vehicle vehicle = Vehicle.create(driver, "12가3456", Tonnage.TON_1, BodyType.CARGO, null);
+
+		// 1톤 기본 8.5: 12를 L/100km로 보면 8.33, km/L로 보면 12. 8.33이 더 가깝다
+		vehicle.updateFuelEconomy(12f, now);
+
+		assertThat(vehicle.getMeasuredKmPerLiter()).isEqualByComparingTo("8.33");
+	}
+
+	@Test
+	void 연비는_Pleos_실측_차주_입력_톤수_기본값_순서로_쓴다() {
+		Vehicle vehicle = Vehicle.create(driver, "12가3456", Tonnage.TON_5, BodyType.CARGO, null);
+		assertThat(vehicle.kmPerLiter()).isEqualTo(Tonnage.TON_5.getDefaultKmPerLiter());
+		assertThat(vehicle.fuelEconomySource()).isEqualTo(FuelEconomySource.DEFAULT);
+
+		vehicle.changeManualFuelEconomy(new BigDecimal("5.5"));
+		assertThat(vehicle.kmPerLiter()).isEqualTo(5.5);
+		assertThat(vehicle.fuelEconomySource()).isEqualTo(FuelEconomySource.MANUAL);
+
+		vehicle.updateFuelEconomy(26.3f, now);
+		assertThat(vehicle.kmPerLiter()).isEqualTo(3.8);
+		assertThat(vehicle.fuelEconomySource()).isEqualTo(FuelEconomySource.PLEOS);
+	}
+
+	@Test
+	void 차주_입력_연비는_비울_수_있고_범위를_벗어나면_막는다() {
+		Vehicle vehicle = Vehicle.create(driver, "12가3456", Tonnage.TON_5, BodyType.CARGO, null);
+		vehicle.changeManualFuelEconomy(new BigDecimal("5.5"));
+
+		vehicle.changeManualFuelEconomy(null);
+
+		assertThat(vehicle.getManualKmPerLiter()).isNull();
+		assertError(() -> vehicle.changeManualFuelEconomy(new BigDecimal("1.4")), ErrorCode.VEHICLE_INVALID_FUEL_ECONOMY);
+		assertError(() -> vehicle.changeManualFuelEconomy(new BigDecimal("15.1")), ErrorCode.VEHICLE_INVALID_FUEL_ECONOMY);
 	}
 
 	@Test

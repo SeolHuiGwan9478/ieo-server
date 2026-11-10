@@ -2,6 +2,7 @@ package com.ieo.server.domain.vehicle.entity;
 
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.vehicle.enums.BodyType;
+import com.ieo.server.domain.vehicle.enums.FuelEconomySource;
 import com.ieo.server.domain.vehicle.enums.Tonnage;
 import com.ieo.server.global.entity.BaseTimeEntity;
 import com.ieo.server.global.error.BusinessException;
@@ -50,6 +51,9 @@ public class Vehicle extends BaseTimeEntity {
 	private static final BigDecimal MIN_HEIGHT_M = new BigDecimal("1.50");
 	private static final BigDecimal MAX_HEIGHT_M = new BigDecimal("4.20");
 	private static final BigDecimal HUNDRED_KM = new BigDecimal("100");
+	/** 화물차 연비로 말이 되는 범위(km/L) */
+	private static final BigDecimal MIN_KM_PER_LITER = new BigDecimal("1.5");
+	private static final BigDecimal MAX_KM_PER_LITER = new BigDecimal("15");
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -92,6 +96,10 @@ public class Vehicle extends BaseTimeEntity {
 	private BigDecimal measuredKmPerLiter;
 
 	private Instant fuelEconomyUpdatedAt;
+
+	/** 차주가 직접 넣은 평소 연비(km/L). Pleos 실측이 없을 때 쓴다 (VEH-003) */
+	@Column(precision = 4, scale = 2)
+	private BigDecimal manualKmPerLiter;
 
 	/** Pleos 차량 VIN의 SHA-256. 원래 VIN은 저장하지 않는다 (VEH-004) */
 	@Column(unique = true, length = 64)
@@ -140,19 +148,67 @@ public class Vehicle extends BaseTimeEntity {
 	}
 
 	/**
-	 * Pleos는 연비를 L/100km로 준다. km/L = 100 ÷ 값.
-	 * 0 이하이거나 말이 안 되는 값(아직 집계 전 등)은 무시한다.
+	 * Pleos 누적 연비를 km/L로 바꿔 저장한다. 문서에 단위가 없어 L/100km(100 ÷ 값)와 km/L(값 그대로)를 둘 다 따져
+	 * 화물차 연비 범위 안에 들고 이 톤수 기본값에 더 가까운 쪽을 고른다. 둘 다 범위 밖(아직 집계 전 등)이면 무시한다.
 	 */
-	public void updateFuelEconomy(float litersPer100Km, Instant now) {
-		if (!(litersPer100Km > 0) || Float.isInfinite(litersPer100Km)) {
+	public void updateFuelEconomy(float reported, Instant now) {
+		if (!(reported > 0) || Float.isInfinite(reported)) {
 			return;
 		}
-		BigDecimal kmPerLiter = HUNDRED_KM.divide(BigDecimal.valueOf(litersPer100Km), 2, RoundingMode.HALF_UP);
-		if (kmPerLiter.compareTo(new BigDecimal("99.99")) > 0) {
+		BigDecimal value = BigDecimal.valueOf(reported);
+		BigDecimal fromPer100Km = HUNDRED_KM.divide(value, 2, RoundingMode.HALF_UP);
+		BigDecimal asKmPerLiter = value.setScale(2, RoundingMode.HALF_UP);
+		BigDecimal picked = closerToDefault(fromPer100Km, asKmPerLiter);
+		if (picked == null) {
 			return;
 		}
-		this.measuredKmPerLiter = kmPerLiter;
+		this.measuredKmPerLiter = picked;
 		this.fuelEconomyUpdatedAt = now;
+	}
+
+	/** 범위 안 후보 중 이 톤수 기본 연비와 비율 차이가 작은 것 */
+	private BigDecimal closerToDefault(BigDecimal first, BigDecimal second) {
+		double base = tonnage.getDefaultKmPerLiter();
+		BigDecimal best = null;
+		double bestGap = Double.MAX_VALUE;
+		for (BigDecimal candidate : new BigDecimal[] {first, second}) {
+			if (!isTruckKmPerLiter(candidate)) {
+				continue;
+			}
+			double gap = Math.abs(Math.log(candidate.doubleValue() / base));
+			if (gap < bestGap) {
+				best = candidate;
+				bestGap = gap;
+			}
+		}
+		return best;
+	}
+
+	/** 차주가 넣은 평소 연비. null이면 비운다 */
+	public void changeManualFuelEconomy(BigDecimal kmPerLiter) {
+		if (kmPerLiter != null && !isTruckKmPerLiter(kmPerLiter)) {
+			throw new BusinessException(ErrorCode.VEHICLE_INVALID_FUEL_ECONOMY);
+		}
+		this.manualKmPerLiter = kmPerLiter == null ? null : kmPerLiter.setScale(1, RoundingMode.HALF_UP);
+	}
+
+	/** 기름값 계산에 쓰는 연비: Pleos 실측 → 차주 입력 → 톤수 기본값 (REC-011) */
+	public double kmPerLiter() {
+		if (measuredKmPerLiter != null) {
+			return measuredKmPerLiter.doubleValue();
+		}
+		return manualKmPerLiter != null ? manualKmPerLiter.doubleValue() : tonnage.getDefaultKmPerLiter();
+	}
+
+	public FuelEconomySource fuelEconomySource() {
+		if (measuredKmPerLiter != null) {
+			return FuelEconomySource.PLEOS;
+		}
+		return manualKmPerLiter != null ? FuelEconomySource.MANUAL : FuelEconomySource.DEFAULT;
+	}
+
+	private static boolean isTruckKmPerLiter(BigDecimal kmPerLiter) {
+		return kmPerLiter.compareTo(MIN_KM_PER_LITER) >= 0 && kmPerLiter.compareTo(MAX_KM_PER_LITER) <= 0;
 	}
 
 	/** Pleos 차량과 연결한다. 이 차에서 다시 로그인하면 이 차량으로 알아본다 */

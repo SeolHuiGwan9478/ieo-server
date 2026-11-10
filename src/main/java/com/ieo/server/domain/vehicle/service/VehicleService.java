@@ -6,6 +6,7 @@ import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.vehicle.dto.CreateVehicleRequest;
 import com.ieo.server.domain.vehicle.dto.FuelEconomyRequest;
+import com.ieo.server.domain.vehicle.dto.ManualFuelEconomyRequest;
 import com.ieo.server.domain.vehicle.dto.PleosResolveResponse;
 import com.ieo.server.domain.vehicle.dto.PleosResolveStatus;
 import com.ieo.server.domain.vehicle.dto.PleosVinRequest;
@@ -138,10 +139,17 @@ public class VehicleService {
 		return vehicle.getPlateNumber() + " " + vehicle.getTonnage().getLabel() + " " + vehicle.getBodyType().getLabel();
 	}
 
-	/** 차량 앱이 운행이 끝나거나 시동을 끌 때 Pleos 누적 연비를 올린다 (VEH-003). 말이 안 되는 값은 무시하고 지금 값을 돌려준다. */
+	/** 차량 앱이 로그인해 이 트럭을 내 차량과 이을 때 Pleos 누적 연비를 올린다 (VEH-003). 말이 안 되는 값은 무시하고 지금 값을 돌려준다. */
 	public VehicleResponse updateFuelEconomy(Long userId, Long vehicleId, FuelEconomyRequest request) {
 		Vehicle vehicle = findMine(userId, vehicleId);
 		vehicle.updateFuelEconomy(request.litersPer100Km(), clock.instant());
+		return VehicleResponse.from(vehicle);
+	}
+
+	/** 휴대폰 앱: 차주가 아는 평소 연비를 넣거나 비운다. Pleos 실측이 없을 때 쓴다 (VEH-003) */
+	public VehicleResponse changeManualFuelEconomy(Long userId, Long vehicleId, ManualFuelEconomyRequest request) {
+		Vehicle vehicle = findMine(userId, vehicleId);
+		vehicle.changeManualFuelEconomy(request.kmPerLiter());
 		return VehicleResponse.from(vehicle);
 	}
 
