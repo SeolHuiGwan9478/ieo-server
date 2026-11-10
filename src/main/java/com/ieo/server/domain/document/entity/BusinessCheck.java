@@ -122,7 +122,15 @@ public class BusinessCheck {
 	}
 
 	public String formattedNumber() {
-		return businessNumber.substring(0, 3) + "-" + businessNumber.substring(3, 5) + "-" + businessNumber.substring(5);
+		return format(businessNumber);
+	}
+
+	/** 숫자 10자리를 123-45-67890 꼴로 */
+	public static String format(String digits) {
+		if (digits == null || digits.length() != 10) {
+			return digits;
+		}
+		return digits.substring(0, 3) + "-" + digits.substring(3, 5) + "-" + digits.substring(5);
 	}
 
 	/** 운영자 화면과 이력에 쓰는 한 줄 요약 */

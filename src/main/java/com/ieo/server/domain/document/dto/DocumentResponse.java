@@ -1,15 +1,14 @@
 package com.ieo.server.domain.document.dto;
 
-import com.ieo.server.domain.document.entity.DriverDocument;
+import com.ieo.server.domain.document.entity.ReviewDocument;
 import com.ieo.server.domain.document.enums.DocumentStatus;
-import com.ieo.server.domain.document.enums.DocumentType;
 import com.ieo.server.domain.document.enums.RejectReason;
 import java.time.Instant;
 
-/** 서류 한 건. rejectMessage는 차주에게 그대로 보이는 문구. businessCheck는 사업자등록증에만 있다 */
+/** 서류 한 건 (차주·주선사 공통). type은 DocumentType 또는 BrokerDocumentType 이름. rejectMessage는 낸 사람에게 그대로 보이는 문구. businessCheck는 사업자등록증에만 있다 */
 public record DocumentResponse(
 		Long id,
-		DocumentType type,
+		String type,
 		String typeLabel,
 		DocumentStatus status,
 		String statusLabel,
@@ -22,12 +21,12 @@ public record DocumentResponse(
 		BusinessCheckResponse businessCheck
 ) {
 
-	public static DocumentResponse from(DriverDocument document) {
+	public static DocumentResponse from(ReviewDocument document) {
 		RejectReason reason = document.getRejectReason();
 		return new DocumentResponse(
 				document.getId(),
-				document.getType(),
-				document.getType().getLabel(),
+				document.kind().name(),
+				document.kind().getLabel(),
 				document.getStatus(),
 				document.getStatus().getLabel(),
 				document.getCreatedAt(),

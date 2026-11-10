@@ -3,7 +3,6 @@ package com.ieo.server.domain.document.dto;
 import com.ieo.server.domain.document.entity.BusinessCheck;
 import com.ieo.server.domain.document.enums.BusinessCheckResult;
 import com.ieo.server.domain.document.enums.BusinessStatus;
-import com.ieo.server.domain.document.enums.DocumentType;
 import com.ieo.server.domain.document.service.DocumentReview;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.vehicle.entity.Vehicle;
@@ -31,14 +30,14 @@ public record AdminReviewRow(
 		boolean businessAttention
 ) {
 
-	public static AdminReviewRow of(User user, Vehicle vehicle, DocumentReview review) {
+	public static AdminReviewRow of(User user, Vehicle vehicle, DocumentReview<?, ?> review) {
 		return new AdminReviewRow(
 				user.getId(),
 				user.getName(),
 				PhoneMask.mask(user.getPhone()),
 				vehicle == null ? null : vehicle.getPlateNumber(),
 				review.approvedRequired(),
-				DocumentType.requiredTypes().size(),
+				review.requiredTotal(),
 				review.pendingCount(),
 				review.rejectedCount(),
 				review.verified(),

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """운영자 서류 심사 시연 데이터: python scripts/seed-documents.py [--psql psql경로] [--reset]
 
-seed-console.py가 만든 [시연] 차주 6명에게 서류 사진(가짜 PNG)을 올리고, 운영자 계정으로 일부를 승인·반려해 둔다.
+seed-console.py가 만든 [시연] 차주 6명과 주선사 [시연] 한빛물류에 서류 사진(가짜 PNG)을 올리고, 운영자 계정으로 일부를 승인·반려해 둔다.
 - 운영자 계정 010-0000-0099 ([시연] 운영자)가 없으면 DB에 직접 만든다. 가입으로는 운영자를 만들 수 없다
 - 이미 서류를 낸 차주는 건너뛴다. [시연] 차주가 없으면 먼저 seed-console.py를 실행한다
 - --reset: [시연] 차주의 서류·이력과 파일을 지우고 처음부터 다시 올린다 (사업자 정보 없이 올린 예전 서류를 바꿀 때)
@@ -34,7 +34,12 @@ DOCS = {
     'VEHICLE_REGISTRATION': ('VEHICLE REGISTRATION', (22, 163, 74)),
     'DRIVER_LICENSE': ('DRIVER LICENSE', (217, 119, 6)),
     'FREIGHT_QUALIFICATION': ('FREIGHT QUALIFICATION', (124, 58, 237)),
+    'BROKER_LICENSE': ('BROKER LICENSE', (8, 145, 178)),
 }
+DRIVER_DOCS = ['BUSINESS_REGISTRATION', 'VEHICLE_REGISTRATION', 'DRIVER_LICENSE', 'FREIGHT_QUALIFICATION']
+# seed-console.py가 만든 [시연] 한빛물류의 대표 담당자. 회사 사업자번호(811-11-00013)는 아홉째 자리가 1이라 스텁 국세청이 계속사업자로 답한다
+BROKER_PHONE = '01098765432'
+BROKER_OPENED = '2018-05-14'
 # 사업자등록증 입력값 (차주 index: 사업자번호 앞 9자리, 개업일). 아홉째 자리가 스텁 국세청의 결과를 정한다. 검증 숫자는 business_number()가 붙인다
 BUSINESS = {
     0: ('301120040', '2017-03-02'),  # 김민수: 계속사업자
@@ -105,15 +110,15 @@ def login(phone):
     return api('POST', '/api/auth/phone/login', {'phoneToken': verified['phoneToken'], 'deviceId': device})['accessToken']
 
 
-def upload(token, doc_type, png_bytes, fields=None):
-    """multipart로 서류를 올린다. fields는 사업자등록증의 businessNumber·openedOn 같은 글자 항목"""
+def upload(token, doc_type, png_bytes, fields=None, path='/api/drivers/me/documents'):
+    """multipart로 서류를 올린다. fields는 사업자등록증의 businessNumber·openedOn 같은 글자 항목. path는 차주/주선사 API"""
     boundary = 'ieo' + uuid.uuid4().hex
     parts = {'type': doc_type, **(fields or {})}
     head = ''.join(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n' for name, value in parts.items())
     head += (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{doc_type.lower()}.png"\r\n'
              f'Content-Type: image/png\r\n\r\n')
     body = head.encode() + png_bytes + f'\r\n--{boundary}--\r\n'.encode()
-    return api('POST', '/api/drivers/me/documents', token=token, data=body, content_type=f'multipart/form-data; boundary={boundary}')
+    return api('POST', path, token=token, data=body, content_type=f'multipart/form-data; boundary={boundary}')
 
 
 # ---------- DB (운영자 계정 만들기) ----------
@@ -163,10 +168,13 @@ def apply_constraints(db):
 
 
 def reset_documents(db):
-    """[시연] 차주의 서류·이력을 지우고 저장 폴더의 파일도 지운다. 다른 차주는 건드리지 않는다"""
+    """[시연] 차주와 [시연] 한빛물류의 서류·이력을 지우고 저장 폴더의 파일도 지운다. 다른 차주·회사는 건드리지 않는다"""
     where = "driver_id IN (SELECT id FROM users WHERE phone LIKE '010880000__')"
+    broker_where = f"broker_id IN (SELECT m.broker_id FROM broker_members m JOIN users u ON u.id = m.user_id WHERE u.phone = '{BROKER_PHONE}')"
     keys = db.run(f"SELECT file_key FROM driver_documents WHERE {where};").split()
+    keys += db.run(f"SELECT file_key FROM broker_documents WHERE {broker_where};").split()
     db.run(f"DELETE FROM driver_document_events WHERE {where}; DELETE FROM driver_documents WHERE {where};")
+    db.run(f"DELETE FROM broker_document_events WHERE {broker_where}; DELETE FROM broker_documents WHERE {broker_where};")
     storage = Path(db.settings.get('IEO_STORAGE_DIR', 'data/files'))
     if not storage.is_absolute():
         storage = ROOT / storage
@@ -176,7 +184,7 @@ def reset_documents(db):
         if path.is_file():
             path.unlink()
             removed += 1
-    print(f'[시연] 차주 서류 초기화: {len(keys)}건 삭제 (파일 {removed}개)')
+    print(f'[시연] 차주·주선사 서류 초기화: {len(keys)}건 삭제 (파일 {removed}개)')
 
 
 # ---------- 가짜 서류 사진 (순수 파이썬 PNG) ----------
@@ -258,22 +266,16 @@ class Canvas:
         return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', header) + chunk(b'IDAT', zlib.compress(raw, 6)) + chunk(b'IEND', b'')
 
 
-def document_png(doc_type, driver_no, plate_digits, attempt, extra=()):
-    """서류처럼 보이는 가짜 사진. 종류별 색 띠, 제목, 몇 줄의 항목(extra는 사업자번호·개업일 같은 추가 줄), SAMPLE 표시"""
+def document_png(doc_type, lines, attempt):
+    """서류처럼 보이는 가짜 사진. 종류별 색 띠, 제목, 몇 줄의 항목(lines: 차주 번호·차량 번호, 사업자번호·개업일, 상호·허가 번호), SAMPLE 표시"""
     title, color = DOCS[doc_type]
     canvas = Canvas(640, 880, (226, 232, 240))
     canvas.rect(40, 40, 560, 800, (255, 255, 255))
     canvas.rect(40, 40, 560, 90, color)
     canvas.text(64, 70, title, (255, 255, 255), 4)
     canvas.text(64, 160, 'IEO DEMO - SAMPLE DOCUMENT', (100, 116, 139), 2)
-    lines = [
-        f'DRIVER NO: {driver_no}',
-        f'PLATE: 80-{plate_digits}',
-        *extra,
-        f'ISSUED: {date.today().isoformat()}',
-        f'COPY: {attempt}',
-    ]
-    for i, line in enumerate(lines):
+    rows = [*lines, f'ISSUED: {date.today().isoformat()}', f'COPY: {attempt}']
+    for i, line in enumerate(rows):
         canvas.text(64, 220 + i * 52, line, (30, 41, 59), 3)
     for i in range(7):
         canvas.rect(64, 548 + i * 34, 380 + (i * 53) % 130, 14, (203, 213, 225))
@@ -298,12 +300,31 @@ def has_documents(token):
 
 def submit(token, index, doc_type, attempt=1):
     plate_digits = 8101 + index
-    fields, extra = None, ()
+    fields, lines = None, [f'DRIVER NO: {index + 1}', f'PLATE: 80-{plate_digits}']
     if doc_type == 'BUSINESS_REGISTRATION':
         number, opened = business_number(BUSINESS[index][0]), BUSINESS[index][1]
         fields = {'businessNumber': number, 'openedOn': opened}
-        extra = (f'BIZ NO: {number}', f'OPENED: {opened}')
-    return upload(token, doc_type, document_png(doc_type, index + 1, plate_digits, attempt, extra), fields)['id']
+        lines += [f'BIZ NO: {number}', f'OPENED: {opened}']
+    return upload(token, doc_type, document_png(doc_type, lines, attempt), fields)['id']
+
+
+# ---------- 주선사 서류 (설정 > 회사 서류) ----------
+
+def has_broker_documents(token):
+    return any(item['latest'] for item in api('GET', '/api/brokers/me/documents', token=token)['documents'])
+
+
+def submit_broker(token, doc_type, attempt=1):
+    """사업자번호·대표자는 회사 등록값을 쓰므로 개업일만 보낸다"""
+    fields, lines = None, ['COMPANY: HANBIT LOGISTICS', 'LICENSE NO: 2026-001']
+    if doc_type == 'BUSINESS_REGISTRATION':
+        fields = {'openedOn': BROKER_OPENED}
+        lines = ['COMPANY: HANBIT LOGISTICS', 'BIZ NO: 811-11-00013', f'OPENED: {BROKER_OPENED}']
+    return upload(token, doc_type, document_png(doc_type, lines, attempt), fields, path='/api/brokers/me/documents')['id']
+
+
+def approve_broker(admin, document_id):
+    api('POST', f'/api/admin/broker-documents/{document_id}/approve', token=admin)
 
 
 def approve(admin, document_id):
@@ -334,7 +355,7 @@ def main():
         raise RuntimeError('운영자 로그인에 실패했어요')
     print('운영자 로그인')
 
-    all_types = list(DOCS)
+    all_types = DRIVER_DOCS
 
     # 이정호: 4종 모두 심사 대기 (가장 오래 기다린 차주가 되도록 먼저 올린다)
     token = driver_token(1)
@@ -384,6 +405,17 @@ def main():
         print(f'{DRIVERS[4]}: 사업자등록증 승인, 자동차등록증 반려')
     elif token:
         print(f'{DRIVERS[4]}: 이미 서류가 있어 건너뜀')
+
+    # [시연] 한빛물류 (주선사): 사업자등록증 승인, 운송주선사업 허가증 심사 대기 → 운영자 페이지의 주선사 심사 탭에 한 건
+    token = login(BROKER_PHONE)
+    if token and not has_broker_documents(token):
+        approve_broker(admin, submit_broker(token, 'BUSINESS_REGISTRATION'))
+        submit_broker(token, 'BROKER_LICENSE')
+        print('[시연] 한빛물류: 사업자등록증 승인, 운송주선사업 허가증 심사 대기')
+    elif token:
+        print('[시연] 한빛물류: 이미 서류가 있어 건너뜀')
+    else:
+        print('[시연] 한빛물류: 대표 담당자 계정이 없어 건너뜀 (seed-console.py 먼저)')
 
     # 한지훈: 사업자등록증만 냈는데 국세청 조회가 폐업자로 나와 눈여겨볼 건 (심사 대기)
     token = driver_token(5)

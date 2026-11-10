@@ -52,7 +52,7 @@ public class DriverDocumentService {
 
 	public DriverDocumentsResponse myDocuments(Long userId) {
 		requireDriver(userId);
-		return DriverDocumentsResponse.of(DocumentReview.of(documentRepository.findAllByDriverUserIdOrderByCreatedAtDescIdDesc(userId)));
+		return DriverDocumentsResponse.of(DocumentReview.ofDriver(documentRepository.findAllByDriverUserIdOrderByCreatedAtDescIdDesc(userId)));
 	}
 
 	@Transactional
@@ -62,7 +62,7 @@ public class DriverDocumentService {
 			throw new BusinessException(ErrorCode.INVALID_INPUT, "서류 종류를 골라 주세요.");
 		}
 		DocumentFiles.Upload upload = DocumentFiles.read(file);
-		DocumentReview review = DocumentReview.of(documentRepository.findAllByDriverUserIdOrderByCreatedAtDescIdDesc(userId));
+		var review = DocumentReview.ofDriver(documentRepository.findAllByDriverUserIdOrderByCreatedAtDescIdDesc(userId));
 		if (review.latest(type).map(DriverDocument::isPending).orElse(false)) {
 			throw new BusinessException(ErrorCode.DOCUMENT_PENDING);
 		}

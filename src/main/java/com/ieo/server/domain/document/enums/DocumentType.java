@@ -12,7 +12,7 @@ import lombok.RequiredArgsConstructor;
  */
 @Getter
 @RequiredArgsConstructor
-public enum DocumentType {
+public enum DocumentType implements DocumentKind {
 	BUSINESS_REGISTRATION("사업자등록증", true, List.of(
 			"글씨가 읽히는가",
 			"상호·사업자번호·대표자가 보이는가",

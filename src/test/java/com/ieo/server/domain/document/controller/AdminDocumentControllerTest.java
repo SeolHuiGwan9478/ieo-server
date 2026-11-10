@@ -3,6 +3,7 @@ package com.ieo.server.domain.document.controller;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -163,7 +164,8 @@ class AdminDocumentControllerTest {
 				.andExpect(jsonPath("$.documents[0].latest.id").value(business))
 				.andExpect(jsonPath("$.documents[0].checks.length()").value(4))
 				.andExpect(jsonPath("$.documents[0].latest.businessCheck.result").value("MATCH"))
-				.andExpect(jsonPath("$.rejectReasons[*].code", hasItem("OTHER")));
+				.andExpect(jsonPath("$.rejectReasons[*].code", hasItem("OTHER")))
+				.andExpect(jsonPath("$.rejectReasons[*].code", not(hasItem("LICENSE_MISMATCH"))));
 		admin("/api/admin/driver-documents/" + business + "/file")
 				.andExpect(content().contentType("image/png"))
 				.andExpect(content().bytes(PNG));
