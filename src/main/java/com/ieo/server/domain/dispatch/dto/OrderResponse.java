@@ -18,7 +18,9 @@ import java.time.Instant;
  * 보는 쪽에 따라 채워지는 값: 차주 목록은 distanceM·myRequest, 주선사 목록은 pendingRequestCount.
  * netProfit(운임 − 공차·운송 구간 기름값의 어림값. 통행료는 상세에서 계산, DSP-011)은 차주가 위치를 보내고 찾았을 때만 채운다.
  * brokerMetrics(주선사 신뢰 지표, BRK-031·DSP-011)는 차주가 볼 때만 채운다.
- * billing(거래처·청구운임·수수료)은 주선사가 볼 때만 채운다 (forBroker). 차주에게는 절대 나가지 않는다
+ * billing(거래처·청구운임·수수료)은 주선사가 볼 때만 채운다 (forBroker). 차주에게는 절대 나가지 않는다.
+ * distanceM은 차주 목록에서 상차지까지 도로 거리 어림(직선 × 도로 계수)이다. 상세의 실수익 계산(TMAP)과 크게 다르지 않게 맞췄다.
+ * routeAverageFare는 같은 노선(상하차 시·구)의 Ieo 완료 운행 평균 운임. 표본이 10건 이상일 때만 채운다 (DSP-044)
  */
 public record OrderResponse(
 		Long id,
@@ -56,7 +58,8 @@ public record OrderResponse(
 		Long pendingRequestCount,
 		Billing billing,
 		/** 서류 심사 전 차주에게 보낸 줄인 오더. 상하차지는 시·구까지, 주선사·화물 내용은 비운다 (forUnverified()) */
-		boolean limited) {
+		boolean limited,
+		Integer routeAverageFare) {
 
 	/**
 	 * 화주 쪽 숫자. 주선사 콘솔만 본다. billedFare는 청구운임, fee는 수수료(청구 − 지급), feeRate는 수수료율(%, 청구운임 기준).
@@ -132,7 +135,17 @@ public record OrderResponse(
 				myRequest,
 				pendingRequestCount,
 				billing,
-				false);
+				false,
+				null);
+	}
+
+	/** 노선 평균 운임을 붙인다 (DSP-044) */
+	public OrderResponse withRouteAverageFare(Integer average) {
+		return new OrderResponse(id, status, open, brokerId, brokerName, brokerMetrics, pickup, dropoff,
+				pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoCategoryLabel, cargoType, weightKg,
+				tonnage, tonnageLabel, bodyType, bodyTypeLabel, loadingMethod, loadingMethodLabel, fare, paymentType,
+				paymentTypeLabel, expectedPaymentDays, consignmentType, confirmMode, targetDriverId, createdAt, distanceM,
+				netProfit, myRequest, pendingRequestCount, billing, limited, average);
 	}
 
 	/**
@@ -144,6 +157,6 @@ public record OrderResponse(
 				pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoCategoryLabel, cargoCategoryLabel, weightKg,
 				tonnage, tonnageLabel, bodyType, bodyTypeLabel, loadingMethod, loadingMethodLabel, fare, paymentType,
 				paymentTypeLabel, expectedPaymentDays, consignmentType, confirmMode, targetDriverId, createdAt, distanceM,
-				netProfit, myRequest, pendingRequestCount, null, true);
+				netProfit, myRequest, pendingRequestCount, null, true, routeAverageFare);
 	}
 }

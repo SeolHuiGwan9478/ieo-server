@@ -70,6 +70,41 @@ public class BrokerOrderService {
 	private final ReviewProperties reviewProperties;
 	private final Clock clock;
 	private final DriverRecordService driverRecordService;
+	private final com.ieo.server.domain.dispatch.repository.OrderTemplateRepository templateRepository;
+
+	/** 회사당 노선은 이만큼까지 */
+	static final int MAX_TEMPLATES = 50;
+
+	/** 자주 쓰는 노선 (DSP-004) */
+	@org.springframework.transaction.annotation.Transactional(readOnly = true)
+	public List<com.ieo.server.domain.dispatch.dto.OrderTemplateResponse> getTemplates(Long userId) {
+		BrokerMember member = requireMember(userId);
+		return templateRepository.findAllByBrokerIdOrderByCreatedAtDesc(member.getBroker().getId()).stream()
+				.map(com.ieo.server.domain.dispatch.dto.OrderTemplateResponse::from)
+				.toList();
+	}
+
+	public com.ieo.server.domain.dispatch.dto.OrderTemplateResponse saveTemplate(Long userId,
+			com.ieo.server.domain.dispatch.dto.OrderTemplateRequest request) {
+		BrokerMember member = requireMember(userId);
+		if (templateRepository.countByBrokerId(member.getBroker().getId()) >= MAX_TEMPLATES) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID, "노선은 " + MAX_TEMPLATES + "개까지 저장할 수 있어요. 안 쓰는 노선을 지워 주세요.");
+		}
+		com.ieo.server.domain.dispatch.entity.OrderTemplate template = com.ieo.server.domain.dispatch.entity.OrderTemplate.of(
+				member.getBroker(), request.name(), resolveSite(request.pickup()), resolveSite(request.dropoff()),
+				request.cargoCategory(), request.cargoType(), request.weightKg(), request.tonnage(), request.bodyType(),
+				request.loadingMethod(), request.fare(), request.paymentType(), request.expectedPaymentDays(),
+				request.consignmentType());
+		return com.ieo.server.domain.dispatch.dto.OrderTemplateResponse.from(templateRepository.save(template));
+	}
+
+	public void deleteTemplate(Long userId, Long templateId) {
+		BrokerMember member = requireMember(userId);
+		com.ieo.server.domain.dispatch.entity.OrderTemplate template = templateRepository.findById(templateId)
+				.filter(found -> found.belongsTo(member.getBroker().getId()))
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+		templateRepository.delete(template);
+	}
 
 	public OrderResponse register(Long userId, CreateOrderRequest request) {
 		BrokerMember member = requireMember(userId);
@@ -101,7 +136,21 @@ public class BrokerOrderService {
 				.confirmMode(request.confirmMode())
 				.targetDriver(target)
 				.create();
-		return OrderResponse.forBroker(orderRepository.save(order), clock.instant(), 0L);
+		Order saved = orderRepository.save(order);
+		markIfReconsigned(saved);
+		return OrderResponse.forBroker(saved, clock.instant(), 0L);
+	}
+
+	/** 상하차지가 이만큼 가깝고 시간대가 겹치면 같은 화물로 본다 (DSP-041) */
+	static final double RECONSIGNMENT_RADIUS_M = 500;
+
+	/** 다른 주선사가 먼저 올린 같은 화물이면 표시만 해 둔다. 막지는 않는다 (직접 받은 화물이 우연히 겹칠 수 있어서) */
+	private void markIfReconsigned(Order order) {
+		orderRepository.flush();
+		orderRepository.findReconsignmentSource(order.getId(), order.getBroker().getId(),
+						order.getPickupSite().getId(), order.getDropoffSite().getId(),
+						order.getPickupFrom(), order.getPickupUntil(), RECONSIGNMENT_RADIUS_M)
+				.ifPresent(order::suspectReconsignmentOf);
 	}
 
 	/**

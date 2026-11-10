@@ -82,6 +82,9 @@ class DispatchControllerTest {
 	@Autowired
 	private TripPositionRepository positionRepository;
 
+	@Autowired
+	private com.ieo.server.domain.dispatch.repository.OrderRepository orderRepository;
+
 	private MockMvc mockMvc;
 	private String broker;
 	private BrokerMember hanbitMember;
@@ -177,7 +180,8 @@ class DispatchControllerTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(1))
 				.andExpect(jsonPath("$[0].id").value(fits))
-				.andExpect(jsonPath("$[0].distanceM").value(11119))
+				// 직선 11,119m × 도로 계수 1.3. 상세의 실제 경로와 크게 다르지 않게 도로 거리 어림을 준다
+				.andExpect(jsonPath("$[0].distanceM").value(14455))
 				.andExpect(jsonPath("$[0].netProfit").isNumber())
 				.andExpect(jsonPath("$[0].myRequest").doesNotExist())
 				// 끝난 운행이 없는 새 회사라 신뢰 지표는 아직 공개 전 (BRK-032)
@@ -495,6 +499,87 @@ class DispatchControllerTest {
 		updateOrder(closedId, broker, original)
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("ORDER_409_CLOSED"));
+	}
+
+	@Test
+	void 목록은_상차_날짜_최소_운임_결제_방식_하차_지역으로_거른다() throws Exception {
+		Instant tomorrow = Instant.now().plus(Duration.ofDays(1));
+		Integer cheap = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null, tomorrow).replace("\"fare\": 450000", "\"fare\": 200000")));
+		Integer prepaid = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null, tomorrow).replace("\"RECEIPT\"", "\"PREPAID\"")));
+		Integer later = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null, tomorrow.plus(Duration.ofDays(2)))));
+		String day = tomorrow.atZone(java.time.ZoneId.of("Asia/Seoul")).toLocalDate().toString();
+
+		mockMvc.perform(get("/api/orders").header("Authorization", driver).param("pickupDate", day))
+				.andExpect(jsonPath("$[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(later))))
+				.andExpect(jsonPath("$[*].id", org.hamcrest.Matchers.hasItems(cheap, prepaid)));
+		mockMvc.perform(get("/api/orders").header("Authorization", driver).param("minFare", "300000"))
+				.andExpect(jsonPath("$[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(cheap))));
+		mockMvc.perform(get("/api/orders").header("Authorization", driver).param("paymentType", "PREPAID"))
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].id").value(prepaid));
+		mockMvc.perform(get("/api/orders").header("Authorization", driver).param("dropoffArea", "대구"))
+				.andExpect(jsonPath("$.length()").value(3));
+		mockMvc.perform(get("/api/orders").header("Authorization", driver).param("dropoffArea", "부산"))
+				.andExpect(jsonPath("$.length()").value(0));
+	}
+
+	@Test
+	void 일분_안에_요청을_몰아_걸면_막는다() throws Exception {
+		for (int i = 0; i < 5; i++) {
+			Integer order = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
+			Integer requestId = idOf(request(driver, order).andExpect(status().isCreated()));
+			mockMvc.perform(post("/api/dispatch-requests/" + requestId + "/withdraw").header("Authorization", driver));
+		}
+		request(driver, idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null))))
+				.andExpect(status().isTooManyRequests())
+				.andExpect(jsonPath("$.code").value("DISPATCH_429_FAST"));
+	}
+
+	@Test
+	void 다른_회사가_같은_화물을_다시_올리면_재위탁_의심으로_표시한다() throws Exception {
+		Integer original = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
+		Broker other = brokerRepository.save(Broker.create("다른물류", "2234567890", "제2026-002호", null));
+		String otherBroker = brokerBearer(other, BrokerMemberPosition.STAFF);
+		Integer copied = idOf(mockMvc.perform(post("/api/broker/orders").header("Authorization", otherBroker)
+				.contentType(MediaType.APPLICATION_JSON).content(orderJson("TON_5", "WING", "SELECT", null))));
+		// 시간대가 겹치지 않으면 같은 노선이라도 다른 화물로 본다
+		Integer otherDay = idOf(mockMvc.perform(post("/api/broker/orders").header("Authorization", otherBroker)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(orderJson("TON_5", "WING", "SELECT", null, Instant.now().plus(Duration.ofDays(3))))));
+
+		assertThat(orderRepository.findById(copied.longValue()).orElseThrow().getReconsignmentSuspectOf())
+				.isEqualTo(original.longValue());
+		assertThat(orderRepository.findById(otherDay.longValue()).orElseThrow().getReconsignmentSuspectOf()).isNull();
+	}
+
+	@Test
+	void 주선사는_자주_쓰는_노선을_저장하고_불러와_지운다() throws Exception {
+		String template = """
+				{"name": "평택→대구 음료", "pickup": {"siteId": %d},
+				 "dropoff": {"site": {"name": "대구 성서 공단", "address": "대구 달서구", "lat": 35.84, "lng": 128.49}},
+				 "cargoCategory": "GENERAL", "cargoType": "음료 파레트", "weightKg": 4500, "tonnage": "TON_5",
+				 "bodyType": "WING", "fare": 450000, "paymentType": "RECEIPT"}
+				""".formatted(pyeongtaek.getId());
+		Integer id = idOf(mockMvc.perform(post("/api/broker/order-templates").header("Authorization", broker)
+						.contentType(MediaType.APPLICATION_JSON).content(template))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.pickup.id").value(pyeongtaek.getId()))
+				.andExpect(jsonPath("$.dropoff.name").value("대구 성서 공단")));
+
+		mockMvc.perform(get("/api/broker/order-templates").header("Authorization", broker))
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].name").value("평택→대구 음료"))
+				.andExpect(jsonPath("$[0].fare").value(450000));
+		mockMvc.perform(post("/api/broker/order-templates").header("Authorization", broker)
+						.contentType(MediaType.APPLICATION_JSON).content(template.replace("평택→대구 음료", " ")))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(get("/api/broker/order-templates").header("Authorization", driver))
+				.andExpect(status().isForbidden());
+		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+						.delete("/api/broker/order-templates/" + id).header("Authorization", broker))
+				.andExpect(status().isNoContent());
+		mockMvc.perform(get("/api/broker/order-templates").header("Authorization", broker))
+				.andExpect(jsonPath("$.length()").value(0));
 	}
 
 	private ResultActions updateOrder(Integer orderId, String bearer, String json) throws Exception {

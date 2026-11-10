@@ -45,4 +45,7 @@ public interface DispatchRequestRepository extends JpaRepository<DispatchRequest
 
 		long getCount();
 	}
+
+	/** 짧은 시간에 요청을 반복하는지 (DSP-025). 상태는 따지지 않는다 */
+	long countByDriverUserIdAndCreatedAtAfter(Long userId, java.time.Instant after);
 }

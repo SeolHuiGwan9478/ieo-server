@@ -43,7 +43,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 차주의 오더 탐색과 배차 요청 (DSP-010, 020, 023, 024). 차주 계정만 쓸 수 있다.
+ * 차주의 오더 탐색과 배차 요청 (DSP-010, 020, 023, 024, 025, 044). 차주 계정만 쓸 수 있다.
  * 목록에는 내 차량 중 하나라도 맡을 수 있는 오더만 보인다(차종 같고 톤수가 오더 이상).
  */
 @Service
@@ -55,6 +55,8 @@ public class DispatchService {
 	static final int MAX_PENDING_REQUESTS = 3;
 	static final int DEFAULT_RADIUS_M = 50_000;
 	static final int MAX_RADIUS_M = 300_000;
+	/** 1분 안에 만들 수 있는 요청 수. 넘으면 매크로로 보고 막는다 (DSP-025) */
+	static final int MAX_REQUESTS_PER_MINUTE = 5;
 	/** 거리·차량 조건으로 거르기 전에 DB에서 읽는 최대 수 */
 	private static final int CANDIDATE_LIMIT = 500;
 
@@ -70,10 +72,16 @@ public class DispatchService {
 	private final Clock clock;
 	private final ApplicationEventPublisher events;
 	private final DriverVerification driverVerification;
+	private final RouteFares routeFares;
+	private final com.ieo.server.domain.recommendation.service.EmptyRunCost emptyRunCost;
 
-	/** 모집 중 오더. 상차가 빠른 순서. 좌표를 주면 상차지까지 직선거리로 거르고 distanceM을 붙인다 */
+	/**
+	 * 모집 중 오더 (DSP-010). 상차가 빠른 순서. 좌표를 주면 상차지까지 직선거리로 거르고, 도로 거리 어림(distanceM)과 실수익 어림을 붙인다.
+	 * [filter]: 상차 날짜(한국 시각), 최소 운임, 결제 방식, 하차 지역(주소 앞부분, 예: "부산", "경기 평택시")
+	 */
 	@Transactional(readOnly = true)
-	public List<OrderResponse> getOpenOrders(Long userId, Double lat, Double lng, Integer radiusM, Integer size) {
+	public List<OrderResponse> getOpenOrders(Long userId, Double lat, Double lng, Integer radiusM, Integer size,
+			OrderFilter filter) {
 		requireDriver(userId);
 		if ((lat == null) != (lng == null)) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT, "위치는 위도와 경도를 함께 보내 주세요.");
@@ -92,12 +100,14 @@ public class DispatchService {
 		List<Order> orders = orderRepository.findOpenFor(userId, now, Pageable.ofSize(CANDIDATE_LIMIT)).stream()
 				.filter(order -> vehicles.stream().anyMatch(order::fits))
 				.filter(order -> lat == null || order.getPickupSite().isWithin(lat, lng, radius))
+				.filter(filter::matches)
 				.limit(limit)
 				.toList();
 		Map<Long, DispatchRequest> mine = myRequestsByOrder(userId, orders);
 		boolean verified = driverVerification.isVerified(userId);
 		Map<Long, BrokerMetricsResponse> metrics = metricsService.getAll(
 				orders.stream().map(order -> order.getBroker().getId()).toList());
+		Map<Long, Integer> averages = routeFares.averages(orders);
 		return orders.stream()
 				.map(order -> {
 					DispatchRequestResponse myRequest = toResponse(mine.get(order.getId()), now);
@@ -105,12 +115,40 @@ public class DispatchService {
 					if (lat == null) {
 						return OrderResponse.of(order, now, null, myRequest, null, brokerMetrics);
 					}
-					return OrderResponse.near(order, now, Math.round(order.getPickupSite().distanceMeters(lat, lng)),
+					// 상세(TMAP 실제 경로)와 숫자가 크게 갈리지 않게 목록도 도로 거리 어림을 준다
+					long roadMeters = emptyRunCost.roadMeters(order.getPickupSite().distanceMeters(lat, lng));
+					return OrderResponse.near(order, now, roadMeters,
 							profitEstimator.rough(target(order, lat, lng), vehicleFor(order, vehicles)).netProfit(),
 							myRequest, brokerMetrics);
 				})
+				.map(response -> response.withRouteAverageFare(averages.get(response.id())))
 				.map(response -> verified ? response : response.forUnverified())
 				.toList();
+	}
+
+	/** 목록 거르기 조건. 비운 값은 거르지 않는다 */
+	public record OrderFilter(java.time.LocalDate pickupDate, Integer minFare,
+			com.ieo.server.domain.trip.enums.PaymentType paymentType, String dropoffArea) {
+
+		public static final OrderFilter NONE = new OrderFilter(null, null, null, null);
+		private static final java.time.ZoneId KOREA = java.time.ZoneId.of("Asia/Seoul");
+
+		boolean matches(Order order) {
+			if (pickupDate != null && !order.getPickupFrom().atZone(KOREA).toLocalDate().equals(pickupDate)) {
+				return false;
+			}
+			if (minFare != null && order.getFare() < minFare) {
+				return false;
+			}
+			if (paymentType != null && order.getPaymentType() != paymentType) {
+				return false;
+			}
+			if (dropoffArea != null && !dropoffArea.isBlank()) {
+				String address = order.getDropoffSite().getAddress();
+				return address != null && address.replace(" ", "").startsWith(dropoffArea.replace(" ", ""));
+			}
+			return true;
+		}
 	}
 
 	/** 오더 상세의 실수익 내역 (DSP-011). 지금 위치에서 출발한다고 치고 실제 경로로 계산한다 */
@@ -143,7 +181,8 @@ public class DispatchService {
 		Instant now = clock.instant();
 		DispatchRequest mine = requestRepository.findByOrderIdAndDriverUserId(orderId, userId).orElse(null);
 		OrderResponse response = OrderResponse.of(order, now, null, toResponse(mine, now), null,
-				metricsService.getAll(List.of(order.getBroker().getId())).get(order.getBroker().getId()));
+				metricsService.getAll(List.of(order.getBroker().getId())).get(order.getBroker().getId()))
+				.withRouteAverageFare(routeFares.averages(List.of(order)).get(order.getId()));
 		return driverVerification.isVerified(userId) ? response : response.forUnverified();
 	}
 
@@ -166,6 +205,10 @@ public class DispatchService {
 				userId, DispatchRequestStatus.PENDING, now.minus(DispatchRequest.TTL));
 		if (pending >= MAX_PENDING_REQUESTS) {
 			throw new BusinessException(ErrorCode.DISPATCH_REQUEST_LIMIT);
+		}
+		// 철회하고 다시 거는 식으로 짧은 시간에 요청을 몰아 거는 매크로를 막는다 (DSP-025)
+		if (requestRepository.countByDriverUserIdAndCreatedAtAfter(userId, now.minusSeconds(60)) >= MAX_REQUESTS_PER_MINUTE) {
+			throw new BusinessException(ErrorCode.DISPATCH_TOO_FAST);
 		}
 
 		DispatchRequest request;

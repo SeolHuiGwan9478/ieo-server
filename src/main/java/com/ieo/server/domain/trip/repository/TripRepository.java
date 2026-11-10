@@ -14,6 +14,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TripRepository extends JpaRepository<Trip, Long> {
 
+	/** 노선 평균 운임용 (DSP-044): Ieo 배차로 생겨 since 뒤에 끝난 운행. 오더·상하차지를 함께 읽는다 */
+	@org.springframework.data.jpa.repository.Query("""
+			select t from Trip t join fetch t.order o join fetch o.pickupSite join fetch o.dropoffSite
+			where t.source = com.ieo.server.domain.trip.enums.TripSource.IEO_DISPATCH
+			  and t.status = com.ieo.server.domain.trip.enums.TripStatus.COMPLETED
+			  and t.completedAt > :since
+			""")
+	List<Trip> findCompletedDispatchSince(@org.springframework.data.repository.query.Param("since") Instant since);
+
 	/** 내 운행 목록. 최근 등록한 순서 */
 	List<Trip> findAllByDriverUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 

@@ -167,6 +167,9 @@ public class Order extends BaseTimeEntity {
 	@Column(nullable = false, length = 10)
 	private OrderStatus status;
 
+	/** 다른 주선사가 같은 상하차지·시간대로 먼저 올린 오더 id. 재위탁 의심으로 운영자가 본다 (DSP-041) */
+	private Long reconsignmentSuspectOf;
+
 	/** 담당자 여러 명이 동시에 확정하지 못하게 막는다. 늦게 저장한 쪽이 실패한다 */
 	@Version
 	private Long version;
@@ -401,6 +404,11 @@ public class Order extends BaseTimeEntity {
 		if (status != OrderStatus.ASSIGNED) {
 			throw new BusinessException(ErrorCode.ORDER_NOT_ASSIGNED);
 		}
+	}
+
+	/** 재위탁 의심 표시 (DSP-041). 오더를 막지는 않고 운영자가 확인한다 */
+	public void suspectReconsignmentOf(Long otherOrderId) {
+		this.reconsignmentSuspectOf = otherOrderId;
 	}
 
 	public boolean belongsTo(Long brokerId) {

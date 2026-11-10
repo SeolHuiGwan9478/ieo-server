@@ -28,15 +28,23 @@ public class OrderController {
 
 	private final DispatchService dispatchService;
 
-	/** 모집 중 오더. 내 차량으로 맡을 수 있는 것만, 상차가 빠른 순서. 반경 기본 50km, 1~300km */
+	/**
+	 * 모집 중 오더. 내 차량으로 맡을 수 있는 것만, 상차가 빠른 순서. 반경 기본 50km, 1~300km.
+	 * 거르기(모두 선택): pickupDate(yyyy-MM-dd, 한국 날짜), minFare(원), paymentType, dropoffArea(하차 주소 앞부분, 예: 부산)
+	 */
 	@GetMapping("/api/orders")
 	public List<OrderResponse> getOpenOrders(
 			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
 			@RequestParam(required = false) Double lat,
 			@RequestParam(required = false) Double lng,
 			@RequestParam(required = false) Integer radiusM,
-			@RequestParam(required = false) Integer size) {
-		return dispatchService.getOpenOrders(userId, lat, lng, radiusM, size);
+			@RequestParam(required = false) Integer size,
+			@RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate pickupDate,
+			@RequestParam(required = false) Integer minFare,
+			@RequestParam(required = false) com.ieo.server.domain.trip.enums.PaymentType paymentType,
+			@RequestParam(required = false) String dropoffArea) {
+		return dispatchService.getOpenOrders(userId, lat, lng, radiusM, size,
+				new DispatchService.OrderFilter(pickupDate, minFare, paymentType, dropoffArea));
 	}
 
 	/** 지금 위치에서 이 오더를 맡을 때의 실수익 내역 */
