@@ -112,11 +112,16 @@ public class Vehicle extends BaseTimeEntity {
 		return new Vehicle(driver, normalizePlateNumber(plateNumber), tonnage, bodyType, validateHeight(heightM));
 	}
 
-	/** 톤수·차종·높이를 고친다. 번호는 바꾸지 않는다 (번호가 바뀌면 다른 차로 등록) */
+	/** 톤수·차종·높이를 고친다 */
 	public void changeSpec(Tonnage tonnage, BodyType bodyType, BigDecimal heightM) {
 		this.tonnage = tonnage;
 		this.bodyType = bodyType;
 		this.heightM = validateHeight(heightM);
+	}
+
+	/** 번호를 바꾼다 (오타 수정·번호 변경). 자동차등록증 재확인은 서비스가 맡는다 */
+	public void changePlate(String plateNumber) {
+		this.plateNumber = normalizePlateNumber(plateNumber);
 	}
 
 	/** 폭·길이·총중량·축 수를 바꾼다. null이면 비운다. 범위는 TMAP이 받는 값에 맞췄다 */

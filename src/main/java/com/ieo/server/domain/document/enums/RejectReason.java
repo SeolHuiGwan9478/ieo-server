@@ -25,6 +25,8 @@ public enum RejectReason {
 	LICENSE_MISMATCH("허가 번호 불일치", "등록한 운송주선사업 허가 번호와 서류의 번호가 달라요. 설정의 회사 정보를 확인해 주세요", ReviewSubject.BROKER),
 	EXPIRED("유효 기간 지남", "유효 기간이 지났어요. 최신 서류를 올려 주세요", ReviewSubject.DRIVER, ReviewSubject.BROKER),
 	CONTRACT_REQUIRED("지입 계약서 필요", "명의가 달라요. 위·수탁 계약서를 함께 올려 주세요", ReviewSubject.DRIVER),
+	/** 차주가 차량 번호·톤수·차종을 바꾸면 서버가 자동차등록증을 이 사유로 반려한다 (VEH-001) */
+	VEHICLE_CHANGED("차량 정보 변경", "차량 정보를 바꿔서 자동차등록증을 다시 확인해야 해요. 지금 차의 등록증을 올려 주세요", ReviewSubject.DRIVER),
 	OTHER("기타", null, ReviewSubject.DRIVER, ReviewSubject.BROKER);
 
 	private final String label;

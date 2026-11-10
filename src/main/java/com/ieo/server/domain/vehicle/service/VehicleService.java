@@ -1,5 +1,6 @@
 package com.ieo.server.domain.vehicle.service;
 
+import com.ieo.server.domain.document.service.DriverDocumentService;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.trip.repository.TripRepository;
@@ -38,6 +39,7 @@ public class VehicleService {
 	private final TripRepository tripRepository;
 	private final VinHasher vinHasher;
 	private final Clock clock;
+	private final DriverDocumentService driverDocumentService;
 
 	@Transactional(readOnly = true)
 	public List<VehicleResponse> getMyVehicles(Long userId) {
@@ -49,6 +51,10 @@ public class VehicleService {
 
 	public VehicleResponse register(Long userId, CreateVehicleRequest request) {
 		Driver driver = requireDriver(userId);
+		// 차주 한 명에 차 한 대 (서류도 한 벌). 차가 바뀌면 내 차량에서 번호부터 고친다
+		if (vehicleRepository.countByDriverUserId(userId) > 0) {
+			throw new BusinessException(ErrorCode.VEHICLE_LIMIT);
+		}
 		Vehicle vehicle = Vehicle.create(driver, request.plateNumber(), request.tonnage(), request.bodyType(), request.heightM());
 		vehicle.changeDimensions(request.widthCm(), request.lengthCm(), request.totalWeightKg(), request.axleCount());
 		if (vehicleRepository.existsByPlateNumber(vehicle.getPlateNumber())) {
@@ -111,9 +117,27 @@ public class VehicleService {
 
 	public VehicleResponse update(Long userId, Long vehicleId, UpdateVehicleRequest request) {
 		Vehicle vehicle = findMine(userId, vehicleId);
+		String before = identity(vehicle);
+		if (request.plateNumber() != null && !request.plateNumber().isBlank()) {
+			String plate = Vehicle.normalizePlateNumber(request.plateNumber());
+			if (!plate.equals(vehicle.getPlateNumber()) && vehicleRepository.existsByPlateNumber(plate)) {
+				throw new BusinessException(ErrorCode.VEHICLE_DUPLICATE_PLATE);
+			}
+			vehicle.changePlate(plate);
+		}
 		vehicle.changeSpec(request.tonnage(), request.bodyType(), request.heightM());
 		vehicle.changeDimensions(request.widthCm(), request.lengthCm(), request.totalWeightKg(), request.axleCount());
+		String after = identity(vehicle);
+		// 자동차등록증에 적힌 값(번호·톤수·차종)이 바뀌면 다시 확인받는다. 제원은 자유롭게 고친다
+		if (!before.equals(after)) {
+			driverDocumentService.vehicleChanged(userId, "차량 정보 변경: " + before + " → " + after);
+		}
 		return VehicleResponse.from(vehicle);
+	}
+
+	/** "80가4822 5톤 카고" */
+	private static String identity(Vehicle vehicle) {
+		return vehicle.getPlateNumber() + " " + vehicle.getTonnage().getLabel() + " " + vehicle.getBodyType().getLabel();
 	}
 
 	/** 차량 앱이 운행이 끝나거나 시동을 끌 때 Pleos 누적 연비를 올린다 (VEH-003). 말이 안 되는 값은 무시하고 지금 값을 돌려준다. */

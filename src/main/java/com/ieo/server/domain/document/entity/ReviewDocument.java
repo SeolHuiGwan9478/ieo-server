@@ -122,6 +122,21 @@ public abstract class ReviewDocument extends BaseTimeEntity {
 		this.rejectNote = trimmed;
 	}
 
+	/**
+	 * 서류 내용이 더는 맞지 않게 됐을 때 서버가 반려한다 (예: 차량 정보를 바꿈). 심사 대기나 승인 상태만.
+	 * 운영자가 처리한 것이 아니라 reviewerId는 비운다
+	 */
+	public void invalidate(RejectReason reason, Instant now) {
+		if (status == DocumentStatus.REJECTED) {
+			return;
+		}
+		this.status = DocumentStatus.REJECTED;
+		this.reviewedAt = now;
+		this.reviewerId = null;
+		this.rejectReason = reason;
+		this.rejectNote = null;
+	}
+
 	/** 낸 사람에게 보이는 반려 문구. 기타는 운영자가 적은 글이 그대로 보인다 */
 	public String rejectMessage() {
 		if (rejectReason == null) {

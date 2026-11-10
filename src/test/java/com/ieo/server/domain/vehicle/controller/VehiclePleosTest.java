@@ -6,6 +6,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ieo.server.domain.driver.entity.Driver;
+import com.ieo.server.domain.vehicle.repository.VehicleRepository;
+import com.ieo.server.domain.vehicle.enums.Tonnage;
+import com.ieo.server.domain.vehicle.enums.BodyType;
+import com.ieo.server.domain.vehicle.entity.Vehicle;
 import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
@@ -44,13 +48,18 @@ class VehiclePleosTest {
 	@Autowired
 	private JwtProvider jwtProvider;
 
+	@Autowired
+	private VehicleRepository vehicleRepository;
+
 	private MockMvc mockMvc;
 	private String bearer;
+	private Long userId;
 
 	@BeforeEach
 	void setUp() {
 		mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
 		bearer = bearerOfNewDriver("01090000601");
+		userId = userRepository.findByPhone("01090000601").orElseThrow().getId();
 	}
 
 	@Test
@@ -88,9 +97,9 @@ class VehiclePleosTest {
 	}
 
 	@Test
-	void 차량이_여러_대면_고르게_하고_고른_차량이_기본이_된다() throws Exception {
+	void 예전에_여러_대를_등록한_차주면_고르게_하고_고른_차량이_기본이_된다() throws Exception {
 		register(bearer, "경기82사1234", null);
-		Integer secondId = idOf(register(bearer, "123바4567", null));
+		Integer secondId = legacyVehicle("123바4567");
 
 		resolve(bearer, VIN)
 				.andExpect(jsonPath("$.status").value("SELECT"))
@@ -110,8 +119,6 @@ class VehiclePleosTest {
 
 	@Test
 	void 차량_앱에서_등록하면서_바로_연결한다() throws Exception {
-		register(bearer, "경기82사1234", null);
-
 		register(bearer, "123바4567", VIN)
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.pleosLinked").value(true))
@@ -119,9 +126,9 @@ class VehiclePleosTest {
 	}
 
 	@Test
-	void 같은_트럭을_내_다른_차량으로_옮겨_연결할_수_있다() throws Exception {
+	void 예전에_여러_대를_등록한_차주는_같은_트럭을_다른_차량으로_옮겨_연결할_수_있다() throws Exception {
 		Integer firstId = idOf(register(bearer, "경기82사1234", VIN));
-		Integer secondId = idOf(register(bearer, "123바4567", null));
+		Integer secondId = legacyVehicle("123바4567");
 
 		link(bearer, secondId, VIN).andExpect(status().isOk());
 
@@ -172,6 +179,15 @@ class VehiclePleosTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"plateNumber\":\"%s\",\"tonnage\":\"TON_5\",\"bodyType\":\"CARGO\",\"vin\":%s}"
 						.formatted(plate, vinJson)));
+	}
+
+	/**
+	 * 차량 1대 규칙(VEH-001) 전에 두 대 이상 등록한 차주. 지금은 API로 못 만들어 저장소에 바로 넣는다.
+	 * 그런 차주가 남아 있어도 Pleos 연결은 고르는 흐름으로 동작해야 한다
+	 */
+	private Integer legacyVehicle(String plate) {
+		Driver driver = driverRepository.findById(userId).orElseThrow();
+		return Math.toIntExact(vehicleRepository.save(Vehicle.create(driver, plate, Tonnage.TON_5, BodyType.CARGO, null)).getId());
 	}
 
 	private static Integer idOf(ResultActions result) throws Exception {

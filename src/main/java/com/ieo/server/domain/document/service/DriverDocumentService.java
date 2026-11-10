@@ -1,5 +1,6 @@
 package com.ieo.server.domain.document.service;
 
+import com.ieo.server.domain.document.enums.RejectReason;
 import com.ieo.server.domain.document.business.BusinessLookupClient;
 import com.ieo.server.domain.document.dto.BusinessInput;
 import com.ieo.server.domain.document.dto.DocumentResponse;
@@ -53,6 +54,21 @@ public class DriverDocumentService {
 	public DriverDocumentsResponse myDocuments(Long userId) {
 		requireDriver(userId);
 		return DriverDocumentsResponse.of(DocumentReview.ofDriver(documentRepository.findAllByDriverUserIdOrderByCreatedAtDescIdDesc(userId)));
+	}
+
+	/**
+	 * 차주가 차량 번호·톤수·차종을 바꿨다. 지금 자동차등록증(승인·심사 대기)을 반려해 다시 받는다.
+	 * 인증은 저장하지 않고 서류로 계산하므로 이것만으로 미인증이 된다. 이력에는 무엇이 바뀌었는지 남긴다
+	 */
+	@Transactional
+	public void vehicleChanged(Long userId, String detail) {
+		List<DriverDocument> documents = documentRepository.findAllByDriverUserIdOrderByCreatedAtDescIdDesc(userId);
+		DocumentReview.ofDriver(documents).latest(DocumentType.VEHICLE_REGISTRATION)
+				.filter(document -> document.isPending() || document.isApproved())
+				.ifPresent(document -> {
+					document.invalidate(RejectReason.VEHICLE_CHANGED, clock.instant());
+					eventRepository.save(DriverDocumentEvent.of(document, DocumentEventType.REJECTED, userId, detail));
+				});
 	}
 
 	/** 필수 서류 4종이 모두 승인됐는지. 배차 요청 게이트가 쓴다 */
