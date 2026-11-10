@@ -96,7 +96,6 @@ class TripRepositoryTest {
 		assertThat(tripRepository.findFirstByDriverUserIdAndStatusInOrderByCreatedAtDesc(userId, TripStatus.IN_PROGRESS))
 				.get().extracting(Trip::getId).isEqualTo(moving.getId());
 		assertThat(tripRepository.existsByVehicleIdAndStatusIn(vehicle.getId(), TripStatus.ACTIVE)).isTrue();
-		assertThat(tripRepository.existsByVehicleId(vehicle.getId())).isTrue();
 		assertThat(tripRepository.findAllByDriverUserIdOrderByCreatedAtDesc(userId, Pageable.ofSize(10)))
 				.extracting(Trip::getId)
 				.containsExactlyInAnyOrder(scheduled.getId(), moving.getId());

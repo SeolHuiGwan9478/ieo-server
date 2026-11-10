@@ -3,7 +3,6 @@ package com.ieo.server.domain.vehicle.service;
 import com.ieo.server.domain.document.service.DriverDocumentService;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
-import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.vehicle.dto.CreateVehicleRequest;
 import com.ieo.server.domain.vehicle.dto.FuelEconomyRequest;
@@ -36,7 +35,6 @@ public class VehicleService {
 
 	private final VehicleRepository vehicleRepository;
 	private final DriverRepository driverRepository;
-	private final TripRepository tripRepository;
 	private final VinHasher vinHasher;
 	private final Clock clock;
 	private final DriverDocumentService driverDocumentService;
@@ -145,28 +143,6 @@ public class VehicleService {
 		Vehicle vehicle = findMine(userId, vehicleId);
 		vehicle.updateFuelEconomy(request.litersPer100Km(), clock.instant());
 		return VehicleResponse.from(vehicle);
-	}
-
-	public VehicleResponse changeDefault(Long userId, Long vehicleId) {
-		Vehicle vehicle = findMine(userId, vehicleId);
-		makeDefault(userId, vehicle);
-		return VehicleResponse.from(vehicle);
-	}
-
-	/** 운행 기록이 있는 차량은 지우면 운행·장부 기록이 깨지므로 막는다 */
-	public void delete(Long userId, Long vehicleId) {
-		Vehicle vehicle = findMine(userId, vehicleId);
-		if (tripRepository.existsByVehicleId(vehicleId)) {
-			throw new BusinessException(ErrorCode.VEHICLE_IN_USE);
-		}
-		boolean wasDefault = vehicle.isDefaultVehicle();
-		vehicleRepository.delete(vehicle);
-		vehicleRepository.flush();
-		if (wasDefault) {
-			vehicleRepository.findAllByDriverUserIdOrderByCreatedAtAsc(userId).stream()
-					.findFirst()
-					.ifPresent(Vehicle::markDefault);
-		}
 	}
 
 	/**

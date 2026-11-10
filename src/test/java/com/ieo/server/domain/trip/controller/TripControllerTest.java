@@ -1,6 +1,5 @@
 package com.ieo.server.domain.trip.controller;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -223,15 +222,6 @@ class TripControllerTest {
 				.andExpect(jsonPath("$.code").value("TRIP_404"));
 		mockMvc.perform(post("/api/trips/" + second + "/cancel").header("Authorization", otherBearer))
 				.andExpect(status().isNotFound());
-	}
-
-	@Test
-	void 운행_기록이_있는_차량은_지울_수_없다() throws Exception {
-		registerSimple();
-
-		mockMvc.perform(delete("/api/vehicles/" + vehicle.getId()).header("Authorization", bearer))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("VEHICLE_409_IN_USE"));
 	}
 
 	private ResultActions registerSimple() throws Exception {

@@ -1,6 +1,5 @@
 package com.ieo.server.domain.vehicle.controller;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -76,16 +75,6 @@ class VehicleControllerTest {
 		mockMvc.perform(get("/api/vehicles").header("Authorization", driverBearer))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(1));
-	}
-
-	@Test
-	void 차량을_지우면_다시_등록할_수_있다() throws Exception {
-		Integer id = idOf(register(driverBearer, "경기82사1234", "TON_5", "CARGO", null));
-		mockMvc.perform(delete("/api/vehicles/" + id).header("Authorization", driverBearer))
-				.andExpect(status().isNoContent());
-		register(driverBearer, "123바4567", "TON_11", "WING", null)
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.defaultVehicle").value(true));
 	}
 
 	@Test
@@ -187,11 +176,10 @@ class VehicleControllerTest {
 	void 남의_차량은_없는_것처럼_404() throws Exception {
 		Integer othersId = idOf(register(bearerOfNewDriver("01090000503"), "경기82사1234", "TON_5", "CARGO", null));
 
-		mockMvc.perform(delete("/api/vehicles/" + othersId).header("Authorization", driverBearer))
+		mockMvc.perform(patch("/api/vehicles/" + othersId).header("Authorization", driverBearer)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"tonnage\":\"TON_5\",\"bodyType\":\"CARGO\"}"))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.code").value("VEHICLE_404"));
-		mockMvc.perform(post("/api/vehicles/" + othersId + "/default").header("Authorization", driverBearer))
-				.andExpect(status().isNotFound());
 	}
 
 	@Test

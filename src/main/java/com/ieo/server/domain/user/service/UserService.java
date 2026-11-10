@@ -1,5 +1,6 @@
 package com.ieo.server.domain.user.service;
 
+import com.ieo.server.domain.user.dto.ChangePhoneRequest;
 import com.ieo.server.domain.broker.repository.BrokerDriverLinkRepository;
 import com.ieo.server.domain.broker.repository.BrokerInvitationRepository;
 import com.ieo.server.domain.broker.service.BrokerMemberService;
@@ -44,6 +45,7 @@ public class UserService {
 	private final CarSessionService carSessionService;
 	private final DriverDocumentService driverDocumentService;
 	private final Clock clock;
+	private final PhoneAuthService phoneAuthService;
 
 	public UserResponse getUser(Long userId) {
 		return UserResponse.from(findUser(userId));
@@ -53,6 +55,25 @@ public class UserService {
 	public UserResponse updateUser(Long userId, UpdateUserRequest request) {
 		User user = findUser(userId);
 		user.changeName(request.name());
+		return UserResponse.from(user);
+	}
+
+	/**
+	 * 휴대폰 번호 바꾸기 (ACC-008). 새 번호로 인증해 받은 phoneToken을 쓴다.
+	 * 다른 계정이 쓰는 번호면 막는다. 다음 로그인부터 새 번호로 들어온다
+	 */
+	@Transactional
+	public UserResponse changePhone(Long userId, ChangePhoneRequest request) {
+		User user = findUser(userId);
+		String phone = phoneAuthService.consumePhoneToken(request.phoneToken(), request.deviceId());
+		if (!phone.equals(user.getPhone())) {
+			userRepository.findByPhone(phone)
+					.filter(other -> !other.getId().equals(userId))
+					.ifPresent(other -> {
+						throw new BusinessException(ErrorCode.AUTH_PHONE_ALREADY_REGISTERED, "다른 계정이 쓰는 번호예요.");
+					});
+			user.changePhone(phone);
+		}
 		return UserResponse.from(user);
 	}
 

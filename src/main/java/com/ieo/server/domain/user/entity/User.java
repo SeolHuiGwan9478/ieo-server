@@ -73,6 +73,11 @@ public class User extends BaseTimeEntity {
 		return status == UserStatus.ACTIVE;
 	}
 
+	/** 새 번호로 인증한 뒤 바꾼다 (ACC-008). 같은 번호를 쓰는 다른 계정이 없는지는 서비스가 확인한다 */
+	public void changePhone(String phone) {
+		this.phone = phone;
+	}
+
 	public void changeName(String name) {
 		requireNotWithdrawn();
 		this.name = name;

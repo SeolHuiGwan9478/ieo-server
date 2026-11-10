@@ -25,9 +25,6 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
 	/** 끝나지 않은 운행에 쓰는 차량은 지우지 못하게 막을 때 쓴다 */
 	boolean existsByVehicleIdAndStatusIn(Long vehicleId, Collection<TripStatus> statuses);
 
-	/** 운행 기록이 있는 차량은 삭제하면 기록이 깨진다 */
-	boolean existsByVehicleId(Long vehicleId);
-
 	boolean existsByOrderId(Long orderId);
 
 	/** 확정된 요청으로 생긴 운행 (그 차주의 가장 최근 것) */
