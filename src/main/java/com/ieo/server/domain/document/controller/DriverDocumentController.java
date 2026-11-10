@@ -39,7 +39,7 @@ public class DriverDocumentController {
 
 	/**
 	 * multipart: type(서류 종류), file(JPG·PNG 5MB 이하). 새 건이 심사 대기로 생긴다.
-	 * 사업자등록증은 businessNumber(123-45-67890)·openedOn(2020-01-31)이 필수, ownerName은 가입자 이름과 다를 때만.
+	 * 사업자등록증은 openedOn(2020-01-31)이 필수. businessNumber(123-45-67890)·ownerName을 비우면 계정의 사업자 정보(ACC-003)를 쓴다.
 	 * 서버가 국세청 진위확인을 바로 돌려 응답의 businessCheck에 결과를 준다
 	 */
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

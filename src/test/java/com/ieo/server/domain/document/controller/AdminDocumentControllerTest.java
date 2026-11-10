@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -257,6 +258,16 @@ class AdminDocumentControllerTest {
 				.andExpect(jsonPath("$.documents[0].history.length()").value(2));
 		recheck(submit("DRIVER_LICENSE")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("COMMON_400"));
 		reject(closed, "{\"reasonCode\": \"BUSINESS_CLOSED\"}").andExpect(status().isOk());
+
+		// 계정에 사업자 정보(ACC-003)를 적어 두면 번호·대표자를 비워도 그 값으로 조회한다
+		mockMvc.perform(put("/api/users/me/business").header(HttpHeaders.AUTHORIZATION, driverBearer)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"businessName\": \"김기사운수\", \"businessNumber\": \"123-45-67800\", \"representativeName\": \"김기사\"}"))
+				.andExpect(status().is2xxSuccessful());
+		uploadBusiness(null, "2020-01-31")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.businessCheck.businessNumber").value("123-45-67800"))
+				.andExpect(jsonPath("$.businessCheck.ownerName").value("김기사"))
+				.andExpect(jsonPath("$.businessCheck.result").value("MATCH"));
 	}
 
 	@Test
@@ -283,7 +294,10 @@ class AdminDocumentControllerTest {
 	private ResultActions upload(String bearer, String type, MockMultipartFile file, String businessNumber, String openedOn) throws Exception {
 		MockMultipartHttpServletRequestBuilder request = multipart("/api/drivers/me/documents").file(file).param("type", type);
 		if (businessNumber != null) {
-			request.param("businessNumber", businessNumber).param("openedOn", openedOn);
+			request.param("businessNumber", businessNumber);
+		}
+		if (openedOn != null) {
+			request.param("openedOn", openedOn);
 		}
 		return mockMvc.perform(request.header(HttpHeaders.AUTHORIZATION, bearer));
 	}

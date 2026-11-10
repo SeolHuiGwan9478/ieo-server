@@ -81,20 +81,30 @@ public class DriverDocumentService {
 		return DocumentResponse.from(document);
 	}
 
-	/** 사업자등록증은 사업자번호·개업일이 필수고 다른 서류는 받지 않는다. 대표자를 안 적으면 가입자 이름으로 조회한다 */
+	/**
+	 * 사업자등록증은 개업일이 필수고 다른 서류는 사업자 정보를 받지 않는다.
+	 * 번호·대표자를 비우면 계정에 적어 둔 사업자 정보(ACC-003, Driver.businessNumber·representativeName)를, 그것도 없으면 가입자 이름을 쓴다
+	 */
 	private static BusinessCheck businessCheckOf(DocumentType type, Driver driver, BusinessInput input) {
-		boolean empty = input == null || input.isEmpty();
+		BusinessInput given = input == null ? new BusinessInput(null, null, null) : input;
 		if (type != DocumentType.BUSINESS_REGISTRATION) {
-			if (!empty) {
+			if (!given.isEmpty()) {
 				throw new BusinessException(ErrorCode.INVALID_INPUT, "사업자 정보는 사업자등록증을 낼 때만 보냅니다.");
 			}
 			return null;
 		}
-		if (empty) {
-			throw new BusinessException(ErrorCode.DOCUMENT_BUSINESS_INFO);
+		String number = firstNonBlank(given.businessNumber(), driver.getBusinessNumber());
+		String ownerName = firstNonBlank(given.ownerName(), driver.getRepresentativeName(), driver.getUser().getName());
+		return BusinessCheck.of(number, given.openedOnDate(), ownerName);
+	}
+
+	private static String firstNonBlank(String... values) {
+		for (String value : values) {
+			if (value != null && !value.isBlank()) {
+				return value;
+			}
 		}
-		String ownerName = input.ownerName() == null || input.ownerName().isBlank() ? driver.getUser().getName() : input.ownerName();
-		return BusinessCheck.of(input.businessNumber(), input.openedOnDate(), ownerName);
+		return null;
 	}
 
 	/** 내가 올린 서류 사진 */
