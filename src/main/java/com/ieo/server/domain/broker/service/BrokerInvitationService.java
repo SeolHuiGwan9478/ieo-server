@@ -8,6 +8,7 @@ import com.ieo.server.domain.broker.enums.BrokerInvitationStatus;
 import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
 import com.ieo.server.domain.broker.repository.BrokerInvitationRepository;
 import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
+import com.ieo.server.domain.document.service.BrokerDocumentService;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.enums.UserStatus;
@@ -34,6 +35,7 @@ public class BrokerInvitationService {
 	private final BrokerMemberRepository memberRepository;
 	private final UserRepository userRepository;
 	private final BrokerPlanService planService;
+	private final BrokerDocumentService brokerDocumentService;
 	private final Clock clock;
 
 	@Transactional(readOnly = true)
@@ -59,7 +61,8 @@ public class BrokerInvitationService {
 		invitation.accept(clock.instant());
 		BrokerMember member = memberRepository.save(
 				BrokerMember.of(user, invitation.getBroker(), BrokerMemberPosition.STAFF));
-		return MyBrokerResponse.from(member, planService.getPlan(member.getBroker().getId()));
+		Long brokerId = member.getBroker().getId();
+		return MyBrokerResponse.from(member, planService.getPlan(brokerId), brokerDocumentService.isVerified(brokerId));
 	}
 
 	public void decline(Long userId, Long invitationId) {

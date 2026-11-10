@@ -5,6 +5,7 @@
 로컬 시연 인증과 localhost:5432/ieo DB가 필요하다. 인증정보는 출력/저장하지 않는다.
 """
 import argparse
+import importlib.util
 import base64
 import json
 import os
@@ -47,6 +48,14 @@ def api(method, path, body=None, token=None):
         except (ValueError, UnicodeError):
             message = 'API error'
         raise RuntimeError(f'{method} {path}: HTTP {error.code}: {message}') from None
+
+def load_documents_seed():
+    """scripts/seed-documents.py를 모듈로 읽는다 (운영자 계정 만들기, 회사 서류 올리기·승인)"""
+    spec = importlib.util.spec_from_file_location('seed_documents', ROOT / 'scripts' / 'seed-documents.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 
 class Database:
 
@@ -132,8 +141,34 @@ class Seed:
             self.bid = api('POST', '/api/brokers', {'name': COMPANY, 'businessNumber': prefix + str((10 - total % 10) % 10), 'licenseNumber': '시연-2026-001', 'representativeName': '시연 대표', 'settlementDays': 30, 'defaultFeeRate': 10}, self.owner)['id']
         api('PUT', '/api/brokers/me/plan', {'plan': 'PRO_PLUS'}, self.owner)
         api('PUT', '/api/brokers/me/wait-policy', {'freeMinutes': 60, 'unitMinutes': 30, 'unitAmount': 10000, 'maxAmount': 60000, 'rounding': 'UP'}, self.owner)
+        self.verify_company(db)
+        self.second_broker(db)
         self.existing = {r['cargo_type']: r['id'] for r in db.rows(f'SELECT id,cargo_type FROM orders WHERE broker_id={self.bid}')}
         self.drivers = []
+
+    def verify_company(self, db):
+        """회사 서류(사업자등록증·운송주선사업 허가증)가 승인돼야 오더를 올릴 수 있다 (07 운영자 서류심사 인계 13장).
+        seed-documents.py의 함수로 운영자 계정을 만들고 서류 2종을 올려 승인한다"""
+        docs = load_documents_seed()
+        docs_db = docs.Database(db.cmd[0])
+        docs.ensure_admin(docs_db)
+        docs.apply_constraints(docs_db)
+        admin = docs.login(docs.ADMIN_PHONE)
+        if admin is None:
+            raise RuntimeError('운영자 로그인에 실패했어요')
+        if docs.ensure_broker_verified(self.owner, admin):
+            print(f'{COMPANY} 회사 서류 2종 승인 (인증된 주선사)')
+
+    def second_broker(self, db):
+        """두 번째 주선사 [시연] 두리운송. 서류 심사 대기 시연용이라 서류는 seed-documents.py가 올리고 오더는 없다"""
+        phone = '01098765433'
+        owner = login(db, phone, 'BROKER', '[시연] 김주선')
+        if db.rows(f'SELECT b.id FROM brokers b JOIN broker_members m ON m.broker_id=b.id JOIN users u ON u.id=m.user_id WHERE u.phone={q(phone)}'):
+            return
+        prefix = '812110002'
+        total = sum((int(d) * w for d, w in zip(prefix, [1, 3, 7, 1, 3, 7, 1, 3, 5]))) + int(prefix[-1]) * 5 // 10
+        api('POST', '/api/brokers', {'name': '[시연] 두리운송', 'businessNumber': prefix + str((10 - total % 10) % 10), 'licenseNumber': '시연-2026-002', 'representativeName': '김주선', 'settlementDays': 30, 'defaultFeeRate': 10}, owner)
+        print('[시연] 두리운송 회사 등록 (서류 심사 대기 시연용)')
 
     def people(self):
         for i, name in enumerate(['김민수', '이정호', '박성진', '최동욱', '정우석', '한지훈']):

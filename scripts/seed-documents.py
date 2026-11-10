@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """운영자 서류 심사 시연 데이터: python scripts/seed-documents.py [--psql psql경로] [--reset]
 
-seed-console.py가 만든 [시연] 차주 6명과 주선사 [시연] 한빛물류에 서류 사진(가짜 PNG)을 올리고, 운영자 계정으로 일부를 승인·반려해 둔다.
+seed-console.py가 만든 [시연] 차주 6명과 주선사 두 곳([시연] 한빛물류·두리운송)에 서류 사진(가짜 PNG)을 올리고, 운영자 계정으로 일부를 승인·반려해 둔다.
+- 한빛물류는 서류 2종을 승인해 인증된 주선사로 둔다 (승인 전에는 오더를 못 올린다). 두리운송은 심사 대기로 둔다
 - 운영자 계정 010-0000-0099 ([시연] 운영자)가 없으면 DB에 직접 만든다. 가입으로는 운영자를 만들 수 없다
 - 이미 서류를 낸 차주는 건너뛴다. [시연] 차주가 없으면 먼저 seed-console.py를 실행한다
 - --reset: [시연] 차주의 서류·이력과 파일을 지우고 처음부터 다시 올린다 (사업자 정보 없이 올린 예전 서류를 바꿀 때)
@@ -37,8 +38,9 @@ DOCS = {
     'BROKER_LICENSE': ('BROKER LICENSE', (8, 145, 178)),
 }
 DRIVER_DOCS = ['BUSINESS_REGISTRATION', 'VEHICLE_REGISTRATION', 'DRIVER_LICENSE', 'FREIGHT_QUALIFICATION']
-# seed-console.py가 만든 [시연] 한빛물류의 대표 담당자. 회사 사업자번호(811-11-00013)는 아홉째 자리가 1이라 스텁 국세청이 계속사업자로 답한다
-BROKER_PHONE = '01098765432'
+# seed-console.py가 만든 주선사의 대표 담당자. 사업자번호 아홉째 자리가 1·2라 스텁 국세청이 계속사업자로 답한다
+BROKER_PHONE = '01098765432'    # [시연] 한빛물류 (811-11-00013). 서류 2종 승인 → 인증된 주선사
+BROKER2_PHONE = '01098765433'   # [시연] 두리운송 (812-11-00020). 서류 2종 심사 대기
 BROKER_OPENED = '2018-05-14'
 # 사업자등록증 입력값 (차주 index: 사업자번호 앞 9자리, 개업일). 아홉째 자리가 스텁 국세청의 결과를 정한다. 검증 숫자는 business_number()가 붙인다
 BUSINESS = {
@@ -170,7 +172,8 @@ def apply_constraints(db):
 def reset_documents(db):
     """[시연] 차주와 [시연] 한빛물류의 서류·이력을 지우고 저장 폴더의 파일도 지운다. 다른 차주·회사는 건드리지 않는다"""
     where = "driver_id IN (SELECT id FROM users WHERE phone LIKE '010880000__')"
-    broker_where = f"broker_id IN (SELECT m.broker_id FROM broker_members m JOIN users u ON u.id = m.user_id WHERE u.phone = '{BROKER_PHONE}')"
+    broker_where = (f"broker_id IN (SELECT m.broker_id FROM broker_members m JOIN users u ON u.id = m.user_id "
+                    f"WHERE u.phone IN ('{BROKER_PHONE}', '{BROKER2_PHONE}'))")
     keys = db.run(f"SELECT file_key FROM driver_documents WHERE {where};").split()
     keys += db.run(f"SELECT file_key FROM broker_documents WHERE {broker_where};").split()
     db.run(f"DELETE FROM driver_document_events WHERE {where}; DELETE FROM driver_documents WHERE {where};")
@@ -314,17 +317,32 @@ def has_broker_documents(token):
     return any(item['latest'] for item in api('GET', '/api/brokers/me/documents', token=token)['documents'])
 
 
-def submit_broker(token, doc_type, attempt=1):
-    """사업자번호·대표자는 회사 등록값을 쓰므로 개업일만 보낸다"""
-    fields, lines = None, ['COMPANY: HANBIT LOGISTICS', 'LICENSE NO: 2026-001']
+def submit_broker(token, doc_type, attempt=1, company='HANBIT LOGISTICS', biz='811-11-00013', license='2026-001', opened=BROKER_OPENED):
+    """사업자번호·대표자는 회사 등록값을 쓰므로 개업일만 보낸다. 나머지 인자는 가짜 사진에 적히는 글자"""
+    fields, lines = None, [f'COMPANY: {company}', f'LICENSE NO: {license}']
     if doc_type == 'BUSINESS_REGISTRATION':
-        fields = {'openedOn': BROKER_OPENED}
-        lines = ['COMPANY: HANBIT LOGISTICS', 'BIZ NO: 811-11-00013', f'OPENED: {BROKER_OPENED}']
+        fields = {'openedOn': opened}
+        lines = [f'COMPANY: {company}', f'BIZ NO: {biz}', f'OPENED: {opened}']
     return upload(token, doc_type, document_png(doc_type, lines, attempt), fields, path='/api/brokers/me/documents')['id']
 
 
 def approve_broker(admin, document_id):
     api('POST', f'/api/admin/broker-documents/{document_id}/approve', token=admin)
+
+
+def ensure_broker_verified(broker_token, admin_token, **company):
+    """회사 서류 2종이 모두 승인되게 한다 (승인 전에는 오더를 못 올린다). 없으면 올리고, 심사 대기면 승인한다.
+    몇 번 불러도 되고, 바뀐 게 있으면 True. seed-console.py와 seed-demo.py가 오더를 만들기 전에 부른다"""
+    status = api('GET', '/api/brokers/me/documents', token=broker_token)
+    if status['verified']:
+        return False
+    for item in status['documents']:
+        latest = item['latest']
+        if latest and latest['status'] == 'APPROVED':
+            continue
+        document_id = latest['id'] if latest and latest['status'] == 'PENDING' else submit_broker(broker_token, item['type'], **company)
+        approve_broker(admin_token, document_id)
+    return True
 
 
 def approve(admin, document_id):
@@ -406,16 +424,23 @@ def main():
     elif token:
         print(f'{DRIVERS[4]}: 이미 서류가 있어 건너뜀')
 
-    # [시연] 한빛물류 (주선사): 사업자등록증 승인, 운송주선사업 허가증 심사 대기 → 운영자 페이지의 주선사 심사 탭에 한 건
+    # [시연] 한빛물류 (주선사): 서류 2종 승인 → 인증된 주선사. 승인 전에는 오더를 못 올려서 seed-console.py도 같은 함수로 먼저 인증한다
     token = login(BROKER_PHONE)
-    if token and not has_broker_documents(token):
-        approve_broker(admin, submit_broker(token, 'BUSINESS_REGISTRATION'))
-        submit_broker(token, 'BROKER_LICENSE')
-        print('[시연] 한빛물류: 사업자등록증 승인, 운송주선사업 허가증 심사 대기')
-    elif token:
-        print('[시연] 한빛물류: 이미 서류가 있어 건너뜀')
+    if token:
+        print('[시연] 한빛물류: ' + ('서류 2종 올리고 승인 (인증됨)' if ensure_broker_verified(token, admin) else '이미 인증됨'))
     else:
         print('[시연] 한빛물류: 대표 담당자 계정이 없어 건너뜀 (seed-console.py 먼저)')
+
+    # [시연] 두리운송 (주선사): 서류 2종 심사 대기 → 운영자 페이지의 주선사 심사 탭에 한 건
+    token = login(BROKER2_PHONE)
+    if token and not has_broker_documents(token):
+        for doc_type in ('BUSINESS_REGISTRATION', 'BROKER_LICENSE'):
+            submit_broker(token, doc_type, company='DURI TRANSPORT', biz='812-11-00020', license='2026-002', opened='2021-09-01')
+        print('[시연] 두리운송: 서류 2종 제출, 심사 대기')
+    elif token:
+        print('[시연] 두리운송: 이미 서류가 있어 건너뜀')
+    else:
+        print('[시연] 두리운송: 대표 담당자 계정이 없어 건너뜀 (seed-console.py 먼저)')
 
     # 한지훈: 사업자등록증만 냈는데 국세청 조회가 폐업자로 나와 눈여겨볼 건 (심사 대기)
     token = driver_token(5)

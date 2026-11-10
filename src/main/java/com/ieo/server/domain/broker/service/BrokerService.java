@@ -9,6 +9,7 @@ import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
 import com.ieo.server.domain.broker.enums.BrokerPlan;
 import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
 import com.ieo.server.domain.broker.repository.BrokerRepository;
+import com.ieo.server.domain.document.service.BrokerDocumentService;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.enums.UserStatus;
@@ -34,6 +35,7 @@ public class BrokerService {
 	private final BrokerMemberRepository memberRepository;
 	private final UserRepository userRepository;
 	private final BrokerPlanService planService;
+	private final BrokerDocumentService brokerDocumentService;
 
 	public MyBrokerResponse register(Long userId, CreateBrokerRequest request) {
 		User user = requireBrokerUser(userId);
@@ -104,7 +106,8 @@ public class BrokerService {
 	}
 
 	private MyBrokerResponse toResponse(BrokerMember member) {
-		return MyBrokerResponse.from(member, planService.getPlan(member.getBroker().getId()));
+		Long brokerId = member.getBroker().getId();
+		return MyBrokerResponse.from(member, planService.getPlan(brokerId), brokerDocumentService.isVerified(brokerId));
 	}
 
 	private BrokerMember requireActiveMember(Long userId) {

@@ -4,6 +4,8 @@ import com.ieo.server.domain.broker.entity.BrokerMember;
 import com.ieo.server.domain.broker.enums.DriverLinkStatus;
 import com.ieo.server.domain.broker.repository.BrokerDriverLinkRepository;
 import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
+import com.ieo.server.domain.document.business.ReviewProperties;
+import com.ieo.server.domain.document.service.BrokerDocumentService;
 import com.ieo.server.domain.dispatch.dto.ApplicantResponse;
 import com.ieo.server.domain.dispatch.dto.CancelOrderRequest;
 import com.ieo.server.domain.dispatch.dto.CreateOrderRequest;
@@ -64,10 +66,13 @@ public class BrokerOrderService {
 	private final DispatchCanceller canceller;
 	private final CancellationRepository cancellationRepository;
 	private final BrokerDriverLinkRepository linkRepository;
+	private final BrokerDocumentService brokerDocumentService;
+	private final ReviewProperties reviewProperties;
 	private final Clock clock;
 
 	public OrderResponse register(Long userId, CreateOrderRequest request) {
 		BrokerMember member = requireMember(userId);
+		requireVerified(member);
 		Driver target = request.targetDriverId() == null ? null : requireLinkedDriver(member, request.targetDriverId());
 
 		Order order = Order.draft()
@@ -166,6 +171,13 @@ public class BrokerOrderService {
 	 * 지정 배차는 우리 회사 단골 차주에게만 (BRK-002). 없는 차주와 단골 아닌 차주를 구분하지 않는다.
 	 * 이미 등록된 지정 오더는 해제해도 그대로 둔다
 	 */
+	/** 회사 서류(사업자등록증·운송주선사업 허가증)가 모두 승인된 회사만 오더를 올린다 (07 인계서 13장). 고치기·확정·취소는 막지 않는다 */
+	private void requireVerified(BrokerMember member) {
+		if (reviewProperties.gateBrokerOrders() && !brokerDocumentService.isVerified(member.getBroker().getId())) {
+			throw new BusinessException(ErrorCode.BROKER_NOT_VERIFIED);
+		}
+	}
+
 	private Driver requireLinkedDriver(BrokerMember member, Long driverUserId) {
 		if (!linkRepository.existsByBrokerIdAndDriverUserIdAndStatus(
 				member.getBroker().getId(), driverUserId, DriverLinkStatus.LINKED)) {

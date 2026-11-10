@@ -50,6 +50,11 @@ public class BrokerDocumentService {
 	private final BusinessLookupClient businessLookupClient;
 	private final Clock clock;
 
+	/** 회사 서류가 모두 승인됐는지. 오더 등록 게이트와 /api/brokers/me의 verified가 쓴다 */
+	public boolean isVerified(Long brokerId) {
+		return DocumentReview.ofBroker(documentRepository.findAllByBrokerIdOrderByCreatedAtDescIdDesc(brokerId)).verified();
+	}
+
 	public BrokerDocumentsResponse myDocuments(Long userId) {
 		Broker broker = requireMember(userId).getBroker();
 		return BrokerDocumentsResponse.of(DocumentReview.ofBroker(documentRepository.findAllByBrokerIdOrderByCreatedAtDescIdDesc(broker.getId())));

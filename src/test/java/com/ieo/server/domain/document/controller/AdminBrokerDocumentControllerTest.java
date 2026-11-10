@@ -21,6 +21,8 @@ import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.repository.UserRepository;
 import com.ieo.server.global.auth.JwtProvider;
 import com.jayway.jsonpath.JsonPath;
+import java.time.Duration;
+import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,10 +39,20 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
 /** 주선사 회사 서류 제출과 운영자 심사 (07 인계서 13장). 국세청은 스텁(application-test.yml)이라 회사 사업자번호 123-45-67800은 계속사업자로 나온다 */
-@SpringBootTest
+@SpringBootTest(properties = "ieo.review.gate-broker-orders=true")
 @ActiveProfiles("test")
 @Transactional
 class AdminBrokerDocumentControllerTest {
+
+	/** 오더 등록 요청. 상하차지는 새 주소로 만든다 */
+	private static final String ORDER_JSON = """
+			{"pickup": {"site": {"name": "평택 물류센터", "address": "경기 평택시", "lat": 36.96, "lng": 126.83}},
+			 "dropoff": {"site": {"name": "대구 성서 공단", "address": "대구 달서구", "lat": 35.84, "lng": 128.49}},
+			 "pickupFrom": "%s", "pickupUntil": "%s", "dropoffBy": "%s",
+			 "cargoCategory": "GENERAL", "cargoType": "음료 파레트",
+			 "weightKg": 4500, "tonnage": "TON_5", "bodyType": "CARGO", "loadingMethod": "FORKLIFT",
+			 "fare": 450000, "paymentType": "RECEIPT", "expectedPaymentDays": 15, "consignmentType": "DIRECT"}
+			""";
 
 	private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0};
 	private static final String BUSINESS_NUMBER = "123-45-67800";
@@ -177,12 +189,21 @@ class AdminBrokerDocumentControllerTest {
 				.andExpect(jsonPath("$.documents[1].latest.status").value("REJECTED"))
 				.andExpect(jsonPath("$.documents[1].latest.rejectMessage").value(containsString("허가 번호")));
 
-		// 다시 내고 둘 다 승인되면 인증됨
+		// 서류가 모두 승인되기 전에는 오더를 올릴 수 없다 (ieo.review.gate-broker-orders). /api/brokers/me 도 verified=false
+		registerOrder(ownerBearer).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("BROKER_403_UNVERIFIED"));
+		mockMvc.perform(get("/api/brokers/me").header(HttpHeaders.AUTHORIZATION, ownerBearer))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.verified").value(false));
+
+		// 다시 내고 둘 다 승인되면 인증됨. 그 뒤에는 오더를 올릴 수 있다
 		long licenseAgain = submit(ownerBearer, "BROKER_LICENSE", null);
 		approve(business).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("APPROVED"));
 		approve(licenseAgain).andExpect(status().isOk());
 		approve(licenseAgain).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DOCUMENT_409_REVIEWED"));
 		myDocuments(ownerBearer).andExpect(jsonPath("$.verified").value(true)).andExpect(jsonPath("$.approvedRequired").value(2));
+		mockMvc.perform(get("/api/brokers/me").header(HttpHeaders.AUTHORIZATION, ownerBearer))
+				.andExpect(jsonPath("$.verified").value(true));
+		registerOrder(staffBearer).andExpect(status().isCreated());
 		admin("/api/admin/broker-documents?status=APPROVED").andExpect(jsonPath("$.items[0].verified").value(true));
 		admin("/api/admin/broker-documents?status=PENDING").andExpect(jsonPath("$.items.length()").value(0));
 		admin("/api/admin/brokers/" + brokerId + "/documents")
@@ -214,6 +235,12 @@ class AdminBrokerDocumentControllerTest {
 				.andExpect(jsonPath("$.status").value("PENDING"))
 				.andReturn().getResponse().getContentAsString();
 		return ((Number) JsonPath.read(body, "$.id")).longValue();
+	}
+
+	private ResultActions registerOrder(String bearer) throws Exception {
+		Instant pickupFrom = Instant.now().plus(Duration.ofDays(1));
+		String json = ORDER_JSON.formatted(pickupFrom, pickupFrom.plus(Duration.ofHours(2)), pickupFrom.plus(Duration.ofHours(8)));
+		return mockMvc.perform(post("/api/broker/orders").header(HttpHeaders.AUTHORIZATION, bearer).contentType(MediaType.APPLICATION_JSON).content(json));
 	}
 
 	private ResultActions myDocuments(String bearer) throws Exception {

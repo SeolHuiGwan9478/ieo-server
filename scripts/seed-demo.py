@@ -6,6 +6,8 @@
   IEO_API_BASE=https://ieo-server-....run.app python3 scripts/seed-demo.py
 
 - 시연 차주(010-0000-0001, 5톤 카고)와 시연 주선사(010-0000-0002, [시연] 한빛물류, 대기비 정책)를 만든다. 이미 있으면 로그인한다
+- 시연 주선사의 회사 서류 2종이 승인돼 있지 않으면 운영자(IEO_ADMIN_PHONE, DB에 ADMIN으로 넣어 둔 계정)로 로그인해 올리고 승인한다.
+  승인 전에는 오더를 올릴 수 없다 (07 운영자 서류심사 인계 13장)
 - 모집 중인 시연 오더가 없으면 오늘·내일 상차로 4건 올린다 (상차 시간이 지나면 마감되니 시연 전날 다시 돌린다)
 - 시연 차주에게 예약된 운행이 없으면 오더 하나를 요청하고 시연 주선사가 확정한다
 - 지급일 지난 장부가 없으면 지난 운행 2줄을 넣는다
@@ -33,6 +35,27 @@ DRIVER_PHONE = "01000000001"
 BROKER_PHONE = "01000000002"
 ACCOUNT = os.environ.get("IEO_GCLOUD_ACCOUNT", "shg0102kr@artiwealth.com")
 PROJECT = os.environ.get("IEO_GCLOUD_PROJECT", "ieo-server-prod")
+ADMIN_PHONE = os.environ.get("IEO_ADMIN_PHONE")
+
+
+def verify_company(broker):
+    """회사 서류 2종(사업자등록증·운송주선사업 허가증)이 승인돼야 오더를 올릴 수 있다. 운영자 번호가 있으면 서류를 올리고 승인한다"""
+    if call("GET", "/api/brokers/me/documents", token=broker)["verified"]:
+        return
+    if not ADMIN_PHONE:
+        sys.exit("시연 주선사의 회사 서류가 승인되지 않아 오더를 올릴 수 없어요. 운영자 번호를 IEO_ADMIN_PHONE로 주면 서류를 올리고 승인해요 "
+                 "(운영자 계정은 scripts/users-role-admin.sql 적용 뒤 users에 role=ADMIN으로 넣는다)")
+    device_id = f"seed-demo-admin-{uuid.uuid4()}"
+    verified = phone_token(ADMIN_PHONE, device_id)
+    if not verified["accountExists"]:
+        sys.exit("IEO_ADMIN_PHONE 계정이 없어요. 운영자는 가입으로 못 만들고 DB에 role=ADMIN으로 넣어요")
+    admin = call("POST", "/api/auth/phone/login", {"phoneToken": verified["phoneToken"], "deviceId": device_id})["accessToken"]
+    docs_spec = importlib.util.spec_from_file_location("seed_documents", pathlib.Path(__file__).with_name("seed-documents.py"))
+    docs = importlib.util.module_from_spec(docs_spec)
+    docs_spec.loader.exec_module(docs)
+    docs.BASE = base.BASE
+    if docs.ensure_broker_verified(broker, admin, company="HANBIT LOGISTICS", biz="999-99-9990", license="0000", opened="2018-05-14"):
+        print("시연 주선사 회사 서류 2종 올리고 승인 (인증된 주선사)")
 
 
 def code_from_cloud_logging(phone, since):
@@ -98,6 +121,7 @@ def main():
         call("PUT", "/api/brokers/me/wait-policy",
              {"freeMinutes": 120, "unitMinutes": 30, "unitAmount": 10000, "maxAmount": 50000, "rounding": "UP"}, token=broker)
         print("시연 주선사 회사 등록:", TAG + "한빛물류")
+    verify_company(broker)
 
     today = datetime.now(KST).date()
     tomorrow = today + timedelta(days=1)
