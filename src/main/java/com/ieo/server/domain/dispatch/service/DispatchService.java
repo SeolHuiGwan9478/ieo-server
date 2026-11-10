@@ -76,7 +76,8 @@ public class DispatchService {
 	private final com.ieo.server.domain.recommendation.service.EmptyRunCost emptyRunCost;
 
 	/**
-	 * 모집 중 오더 (DSP-010). 상차가 빠른 순서. 좌표를 주면 상차지까지 직선거리로 거르고, 도로 거리 어림(distanceM)과 실수익 어림을 붙인다.
+	 * 모집 중 오더 (DSP-010). 상차가 빠른 순서. 좌표를 주면 상차지까지 도로 거리 어림(직선 × 도로 계수)으로 반경을 거르고,
+	 * 같은 값(distanceM)과 실수익 어림을 붙인다. 화면의 "상차지까지 약 N km"가 고른 반경을 넘지 않게 하려는 것이다.
 	 * [filter]: 상차 날짜(한국 시각), 최소 운임, 결제 방식, 하차 지역(주소 앞부분, 예: "부산", "경기 평택시")
 	 */
 	@Transactional(readOnly = true)
@@ -99,7 +100,9 @@ public class DispatchService {
 
 		List<Order> orders = orderRepository.findOpenFor(userId, now, Pageable.ofSize(CANDIDATE_LIMIT)).stream()
 				.filter(order -> vehicles.stream().anyMatch(order::fits))
-				.filter(order -> lat == null || order.getPickupSite().isWithin(lat, lng, radius))
+				// 화면에 보이는 "상차지까지 약 N km"(도로 거리 어림)와 같은 기준으로 반경을 거른다
+				.filter(order -> lat == null
+						|| emptyRunCost.roadMeters(order.getPickupSite().distanceMeters(lat, lng)) <= radius)
 				.filter(filter::matches)
 				.limit(limit)
 				.toList();

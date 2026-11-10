@@ -524,6 +524,21 @@ class DispatchControllerTest {
 	}
 
 	@Test
+	void 반경은_화면에_보이는_도로_거리_어림으로_거른다() throws Exception {
+		Integer order = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
+		// 평택에서 위로 0.17도 ≈ 직선 18.9km, 도로 어림 24.6km
+		String lat = String.valueOf(LAT + 0.17);
+
+		mockMvc.perform(get("/api/orders").header("Authorization", driver)
+						.param("lat", lat).param("lng", String.valueOf(LNG)).param("radiusM", "20000"))
+				.andExpect(jsonPath("$[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(order))));
+		mockMvc.perform(get("/api/orders").header("Authorization", driver)
+						.param("lat", lat).param("lng", String.valueOf(LNG)).param("radiusM", "25000"))
+				.andExpect(jsonPath("$[*].id", org.hamcrest.Matchers.hasItem(order)))
+				.andExpect(jsonPath("$[0].distanceM", org.hamcrest.Matchers.lessThanOrEqualTo(25000)));
+	}
+
+	@Test
 	void 일분_안에_요청을_몰아_걸면_막는다() throws Exception {
 		for (int i = 0; i < 5; i++) {
 			Integer order = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
