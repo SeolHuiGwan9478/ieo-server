@@ -49,6 +49,11 @@ ieo:
   # 리포트에서 노선·상하차지를 보여 주는 최소 건수 (BRK-044). 로컬·테스트는 낮춰 둔다
   report:
     min-samples: 10
+  # 상차 가능 시간이 끝난 모집 중 오더를 자동으로 마감한다 (OrderExpireScheduler). 테스트는 끈다
+  dispatch:
+    auto-expire: true
+    expire-interval: PT5M
+    expire-initial-delay: PT30S
   # 소셜 로그인. 키가 비어 있으면 그 공급자는 503(AUTH_503_SOCIAL)을 돌려주고 콘솔은 "준비 중"으로 보여 준다
   social:
     google:

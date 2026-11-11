@@ -48,6 +48,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 			@Param("lat") double lat, @Param("lng") double lng, @Param("meters") double meters,
 			@Param("limit") int limit);
 
+	/** 자동 마감: 상차 가능 시간이 끝났는데 아직 모집 중인 오더 (OrderExpirer). idx_orders_status_pickup을 탄다 */
+	List<Order> findAllByStatusAndPickupUntilLessThanEqual(OrderStatus status, Instant now);
+
 	/** 리포트: 기간 안에 등록한 오더 수 (BRK-042) */
 	long countByBrokerIdAndCreatedAtBetween(Long brokerId, Instant from, Instant to);
 

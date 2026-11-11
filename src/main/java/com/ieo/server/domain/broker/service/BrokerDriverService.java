@@ -78,6 +78,12 @@ public class BrokerDriverService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.BROKER_NOT_FOUND));
 		Instant now = clock.instant();
 
+		// 가입된 번호인데 차주가 아니면(주선사 담당자·운영자) 요청해 봐야 수락할 수 없으니 바로 막는다. 아직 가입 안 한 번호는 받는다
+		userRepository.findByPhone(phone)
+				.filter(user -> user.getRole() != UserRole.DRIVER)
+				.ifPresent(user -> {
+					throw new BusinessException(ErrorCode.DRIVER_LINK_NOT_DRIVER_PHONE);
+				});
 		boolean alreadyLinked = userRepository.findByPhone(phone)
 				.filter(user -> user.getRole() == UserRole.DRIVER)
 				.filter(user -> linkRepository.existsByBrokerIdAndDriverUserIdAndStatus(

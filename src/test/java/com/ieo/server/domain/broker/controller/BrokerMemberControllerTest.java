@@ -121,6 +121,20 @@ class BrokerMemberControllerTest {
 	}
 
 	@Test
+	void 다른_회사에_소속된_번호나_차주_번호는_초대_단계에서_막는다() throws Exception {
+		User otherOwner = brokerUser("01090005009", "박대표");
+		brokerService.register(otherOwner.getId(), new CreateBrokerRequest("두리운송", "2234567890", "제2026-009호", null));
+		inviteRequest("01090005009")
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("BROKER_INVITATION_409_OTHER_COMPANY"));
+
+		userRepository.save(User.create("01090005008", UserRole.DRIVER));
+		inviteRequest("01090005008")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("BROKER_INVITATION_400_ROLE"));
+	}
+
+	@Test
 	void 다른_번호로_온_초대는_보이지_않는다() throws Exception {
 		long invitationId = invite("01090005009");
 
@@ -148,9 +162,10 @@ class BrokerMemberControllerTest {
 	}
 
 	@Test
-	void 차주로_가입된_번호는_초대를_수락할_수_없다() throws Exception {
-		User driver = userRepository.save(User.create("01090005003", UserRole.DRIVER));
+	void 초대받은_뒤_차주로_가입한_번호는_초대를_수락할_수_없다() throws Exception {
+		// 이미 차주로 가입된 번호는 초대 자체가 400(ROLE)이라, 미가입 번호를 초대한 뒤 차주로 가입한 경우만 수락 단계에서 걸린다
 		long invitationId = invite("01090005003");
+		User driver = userRepository.save(User.create("01090005003", UserRole.DRIVER));
 
 		perform(post("/api/broker-invitations/{id}/accept", invitationId), driver)
 				.andExpect(status().isForbidden())
@@ -159,9 +174,10 @@ class BrokerMemberControllerTest {
 	}
 
 	@Test
-	void 다른_회사_소속이면_수락할_수_없다() throws Exception {
-		brokerService.register(staff.getId(), new CreateBrokerRequest("경쟁물류", "9876543215", "제2026-002호", null));
+	void 초대받은_뒤_다른_회사에_들어갔으면_수락할_수_없다() throws Exception {
+		// 이미 다른 회사 소속이면 초대 자체가 409(OTHER_COMPANY)라, 초대 뒤에 회사를 차린 경우만 수락 단계에서 걸린다
 		long invitationId = invite(STAFF_PHONE);
+		brokerService.register(staff.getId(), new CreateBrokerRequest("경쟁물류", "9876543215", "제2026-002호", null));
 
 		perform(post("/api/broker-invitations/{id}/accept", invitationId), staff)
 				.andExpect(status().isConflict())

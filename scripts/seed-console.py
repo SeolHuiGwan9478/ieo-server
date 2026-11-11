@@ -100,7 +100,8 @@ def login(db, phone, role, name, vehicle=None):
     body = {'phoneToken': verified['phoneToken'], 'deviceId': device}
     if verified['accountExists']:
         return api('POST', '/api/auth/phone/login', body)['accessToken']
-    body.update(role=role, name=name, consents=[{'type': t, 'version': '2026-11', 'agreed': True} for t in (['TERMS', 'PRIVACY', 'LOCATION'] if role == 'DRIVER' else ['TERMS', 'PRIVACY'])])
+    # 차주는 주선사 공유 동의(BROKER_SHARE)까지 켜 둔다. 없으면 콘솔 운행 화면에서 위치·ETA가 전부 "위치 비공개"로 나온다
+    body.update(role=role, name=name, consents=[{'type': t, 'version': '2026-11', 'agreed': True} for t in (['TERMS', 'PRIVACY', 'LOCATION', 'BROKER_SHARE'] if role == 'DRIVER' else ['TERMS', 'PRIVACY'])])
     if vehicle:
         body['vehicle'] = vehicle
     return api('POST', '/api/auth/signup', body)['accessToken']

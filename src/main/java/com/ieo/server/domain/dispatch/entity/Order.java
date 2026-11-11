@@ -6,6 +6,7 @@ import com.ieo.server.domain.dispatch.enums.CargoCategory;
 import com.ieo.server.domain.dispatch.enums.ConfirmMode;
 import com.ieo.server.domain.dispatch.enums.ConsignmentType;
 import com.ieo.server.domain.dispatch.enums.LoadingMethod;
+import com.ieo.server.domain.dispatch.enums.OrderCloseReason;
 import com.ieo.server.domain.dispatch.enums.OrderStatus;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.site.entity.Site;
@@ -169,6 +170,12 @@ public class Order extends BaseTimeEntity {
 
 	/** 다른 주선사가 같은 상하차지·시간대로 먼저 올린 오더 id. 재위탁 의심으로 운영자가 본다 (DSP-041) */
 	private Long reconsignmentSuspectOf;
+
+	/** 마감된 이유. CLOSED일 때만 값이 있다. 이 칸이 생기기 전에 마감된 오더는 null(주선사가 내린 것으로 본다) */
+	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.VARCHAR)
+	@Column(length = 10)
+	private OrderCloseReason closeReason;
 
 	/** 담당자 여러 명이 동시에 확정하지 못하게 막는다. 늦게 저장한 쪽이 실패한다 */
 	@Version
@@ -386,18 +393,35 @@ public class Order extends BaseTimeEntity {
 			throw new BusinessException(ErrorCode.ORDER_NOT_OPEN);
 		}
 		this.status = OrderStatus.CLOSED;
+		this.closeReason = OrderCloseReason.BROKER;
 	}
 
-	/** 확정된 배차가 취소되어 다시 모집한다. 상차 시간이 이미 지났으면 모집 중으로 보이지 않는다 */
+	/**
+	 * 상차 가능 시간이 끝났는데 아직 모집 중이면 자동으로 마감한다 (OrderExpirer가 주기적으로 부른다).
+	 * 차주 마켓은 이미 안 보여 주지만, 주선사 콘솔의 "모집 중"과 홈 숫자에 계속 남는 것을 정리한다.
+	 * 마감했으면 true, 아직 시간이 남았거나 모집 중이 아니면 false
+	 */
+	public boolean expire(Instant now) {
+		if (status != OrderStatus.OPEN || now.isBefore(pickupUntil)) {
+			return false;
+		}
+		this.status = OrderStatus.CLOSED;
+		this.closeReason = OrderCloseReason.EXPIRED;
+		return true;
+	}
+
+	/** 확정된 배차가 취소되어 다시 모집한다. 상차 시간이 이미 지났으면 모집 중으로 보이지 않고 곧 자동 마감된다 */
 	public void reopen() {
 		requireAssigned();
 		this.status = OrderStatus.OPEN;
+		this.closeReason = null;
 	}
 
 	/** 확정된 배차가 취소되고 오더도 내린다 */
 	public void closeAfterCancel() {
 		requireAssigned();
 		this.status = OrderStatus.CLOSED;
+		this.closeReason = OrderCloseReason.CANCELED;
 	}
 
 	private void requireAssigned() {

@@ -37,3 +37,6 @@ ieo:
   review:
     gate-broker-orders: false
     gate-driver-requests: false
+  # 상차 시간 지난 오더 자동 마감은 테스트 중에 돌면 과거 날짜 오더를 쓰는 다른 테스트가 흔들린다. OrderExpirerTest가 직접 부른다
+  dispatch:
+    auto-expire: false

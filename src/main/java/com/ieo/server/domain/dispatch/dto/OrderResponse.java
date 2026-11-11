@@ -6,6 +6,7 @@ import com.ieo.server.domain.dispatch.enums.CargoCategory;
 import com.ieo.server.domain.dispatch.enums.ConfirmMode;
 import com.ieo.server.domain.dispatch.enums.ConsignmentType;
 import com.ieo.server.domain.dispatch.enums.LoadingMethod;
+import com.ieo.server.domain.dispatch.enums.OrderCloseReason;
 import com.ieo.server.domain.dispatch.enums.OrderStatus;
 import com.ieo.server.domain.trip.enums.PaymentType;
 import com.ieo.server.domain.vehicle.enums.BodyType;
@@ -27,6 +28,9 @@ public record OrderResponse(
 		Long id,
 		OrderStatus status,
 		boolean open,
+		/** 마감 이유. CLOSED일 때만. 상차 시간이 지나 자동 마감된 오더는 EXPIRED */
+		OrderCloseReason closeReason,
+		String closeReasonLabel,
 		Long brokerId,
 		String brokerName,
 		BrokerMetricsResponse brokerMetrics,
@@ -106,6 +110,8 @@ public record OrderResponse(
 				order.getId(),
 				order.getStatus(),
 				order.isOpenAt(now),
+				order.getCloseReason(),
+				order.getCloseReason() == null ? null : order.getCloseReason().getLabel(),
 				order.getBroker().getId(),
 				order.getBroker().getName(),
 				brokerMetrics,
@@ -144,7 +150,7 @@ public record OrderResponse(
 
 	/** 노선 평균 운임을 붙인다 (DSP-044) */
 	public OrderResponse withRouteAverageFare(Integer average) {
-		return new OrderResponse(id, status, open, brokerId, brokerName, brokerMetrics, pickup, dropoff,
+		return new OrderResponse(id, status, open, closeReason, closeReasonLabel, brokerId, brokerName, brokerMetrics, pickup, dropoff,
 				pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoCategoryLabel, cargoType, weightKg,
 				tonnage, tonnageLabel, bodyType, bodyTypeLabel, loadingMethod, loadingMethodLabel, fare, paymentType,
 				paymentTypeLabel, expectedPaymentDays, consignmentType, confirmMode, targetDriverId, createdAt, distanceM,
@@ -156,7 +162,7 @@ public record OrderResponse(
 	 * 정확한 상하차 주소·주선사·화물 내용은 가린다. 가입만 하고 오더를 긁어 가지 못하게 하려는 것이다
 	 */
 	public OrderResponse forUnverified() {
-		return new OrderResponse(id, status, open, null, null, brokerMetrics, pickup.coarse(), dropoff.coarse(),
+		return new OrderResponse(id, status, open, closeReason, closeReasonLabel, null, null, brokerMetrics, pickup.coarse(), dropoff.coarse(),
 				pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoCategoryLabel, cargoCategoryLabel, weightKg,
 				tonnage, tonnageLabel, bodyType, bodyTypeLabel, loadingMethod, loadingMethodLabel, fare, paymentType,
 				paymentTypeLabel, expectedPaymentDays, consignmentType, confirmMode, targetDriverId, createdAt, distanceM,
@@ -165,7 +171,7 @@ public record OrderResponse(
 
 	/** 차주가 이미 신고한 오더인지 붙인다 (DSP-042) */
 	public OrderResponse withReportedByMe(boolean reported) {
-		return new OrderResponse(id, status, open, brokerId, brokerName, brokerMetrics, pickup, dropoff,
+		return new OrderResponse(id, status, open, closeReason, closeReasonLabel, brokerId, brokerName, brokerMetrics, pickup, dropoff,
 				pickupFrom, pickupUntil, dropoffBy, cargoCategory, cargoCategoryLabel, cargoType, weightKg,
 				tonnage, tonnageLabel, bodyType, bodyTypeLabel, loadingMethod, loadingMethodLabel, fare, paymentType,
 				paymentTypeLabel, expectedPaymentDays, consignmentType, confirmMode, targetDriverId, createdAt, distanceM,

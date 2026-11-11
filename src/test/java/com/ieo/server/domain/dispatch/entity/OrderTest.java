@@ -166,6 +166,39 @@ class OrderTest {
 		assertThat(generalInFridge.getCargoCategory()).isEqualTo(CargoCategory.GENERAL);
 	}
 
+	@Test
+	void 상차_가능_시간이_끝난_모집_중_오더는_자동_마감되고_이유가_남는다() {
+		Order order = draft().create();
+		Instant pickupUntil = PICKUP_FROM.plusSeconds(2 * 3600);
+
+		assertThat(order.expire(pickupUntil.minusSeconds(1))).isFalse();
+		assertThat(order.getStatus()).isEqualTo(OrderStatus.OPEN);
+		assertThat(order.getCloseReason()).isNull();
+
+		assertThat(order.expire(pickupUntil)).isTrue();
+		assertThat(order.getStatus()).isEqualTo(OrderStatus.CLOSED);
+		assertThat(order.getCloseReason()).isEqualTo(com.ieo.server.domain.dispatch.enums.OrderCloseReason.EXPIRED);
+		assertThat(order.expire(pickupUntil.plusSeconds(60))).isFalse();
+	}
+
+	@Test
+	void 마감_이유는_내린_쪽에_따라_다르고_다시_모집하면_지워진다() {
+		Order closed = draft().create();
+		closed.close();
+		assertThat(closed.getCloseReason()).isEqualTo(com.ieo.server.domain.dispatch.enums.OrderCloseReason.BROKER);
+
+		Order assigned = draft().create();
+		assigned.assign(NOW);
+		assigned.closeAfterCancel();
+		assertThat(assigned.getCloseReason()).isEqualTo(com.ieo.server.domain.dispatch.enums.OrderCloseReason.CANCELED);
+
+		Order reopened = draft().create();
+		reopened.assign(NOW);
+		reopened.reopen();
+		assertThat(reopened.getStatus()).isEqualTo(OrderStatus.OPEN);
+		assertThat(reopened.getCloseReason()).isNull();
+	}
+
 	private Order.OrderBuilder draft() {
 		return Order.draft()
 				.createdBy(member)

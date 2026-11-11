@@ -130,6 +130,14 @@ class BrokerDriverControllerTest {
 	}
 
 	@Test
+	void 차주가_아닌_가입_번호로는_단골_요청을_보낼_수_없다() throws Exception {
+		user("01090006009", UserRole.BROKER, "박대표");
+		inviteRequest("01090006009")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("DRIVER_LINK_400_ROLE"));
+	}
+
+	@Test
 	void 거절_취소_만료된_요청은_수락할_수_없다() throws Exception {
 		long declined = invite(DRIVER_PHONE);
 		perform(post("/api/driver-links/invitations/{id}/decline", declined), driver)

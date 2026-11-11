@@ -4,6 +4,7 @@ import com.ieo.server.domain.broker.dto.BrokerMemberResponse;
 import com.ieo.server.domain.broker.dto.SentInvitationResponse;
 import com.ieo.server.domain.broker.entity.BrokerInvitation;
 import com.ieo.server.domain.broker.entity.BrokerMember;
+import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.broker.enums.BrokerInvitationStatus;
 import com.ieo.server.domain.broker.enums.BrokerMemberPosition;
 import com.ieo.server.domain.broker.repository.BrokerInvitationRepository;
@@ -100,13 +101,17 @@ public class BrokerMemberService {
 		BrokerMember owner = requireOwnerAndLock(userId);
 		Long brokerId = owner.getBroker().getId();
 		Instant now = clock.instant();
-		boolean alreadyColleague = userRepository.findByPhone(phone)
-				.flatMap(user -> memberRepository.findById(user.getId()))
-				.filter(member -> member.isActive() && member.getBroker().getId().equals(brokerId))
-				.isPresent();
-		if (alreadyColleague) {
-			throw new BusinessException(ErrorCode.BROKER_INVITATION_ALREADY_MEMBER);
-		}
+		// 가입된 번호면 역할과 소속을 먼저 본다: 차주 계정은 담당자가 될 수 없고, 다른 회사에 소속돼 있으면 수락할 수 없으니 초대 단계에서 막는다
+		userRepository.findByPhone(phone).ifPresent(user -> {
+			if (user.getRole() != UserRole.BROKER) {
+				throw new BusinessException(ErrorCode.BROKER_INVITATION_NOT_BROKER);
+			}
+			memberRepository.findById(user.getId()).filter(BrokerMember::isActive).ifPresent(member -> {
+				throw new BusinessException(member.getBroker().getId().equals(brokerId)
+						? ErrorCode.BROKER_INVITATION_ALREADY_MEMBER
+						: ErrorCode.BROKER_INVITATION_OTHER_COMPANY);
+			});
+		});
 		boolean alreadyInvited = invitationRepository
 				.findAllByBrokerIdAndPhoneAndStatus(brokerId, phone, BrokerInvitationStatus.PENDING).stream()
 				.anyMatch(invitation -> invitation.isPendingAt(now));

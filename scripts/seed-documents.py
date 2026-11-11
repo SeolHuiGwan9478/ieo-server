@@ -93,7 +93,8 @@ def send_code(phone):
         try:
             return api('POST', '/api/auth/phone/code', {'phone': phone})
         except ApiError as error:
-            if error.status != 429:
+            if error.status != 429 or error.code == 'AUTH_429_DAILY':
+                # 하루 한도(5번)는 기다려도 안 풀린다. scripts/reset-sms-limit.sh 로 되돌린 뒤 다시 돌린다
                 raise
             print(f'  {phone}: 인증번호는 1분에 한 번만 받을 수 있어 1분 기다려요', flush=True)
             time.sleep(61)
@@ -172,8 +173,9 @@ def apply_constraints(db):
 def reset_documents(db):
     """[시연] 차주와 [시연] 한빛물류의 서류·이력을 지우고 저장 폴더의 파일도 지운다. 다른 차주·회사는 건드리지 않는다"""
     where = "driver_id IN (SELECT id FROM users WHERE phone LIKE '010880000__')"
+    phones = ', '.join(f"'{p}'" for p in [BROKER_PHONE, BROKER2_PHONE, *EXTRA_PHONES])
     broker_where = (f"broker_id IN (SELECT m.broker_id FROM broker_members m JOIN users u ON u.id = m.user_id "
-                    f"WHERE u.phone IN ('{BROKER_PHONE}', '{BROKER2_PHONE}'))")
+                    f"WHERE u.phone IN ({phones}))")
     keys = db.run(f"SELECT file_key FROM driver_documents WHERE {where};").split()
     keys += db.run(f"SELECT file_key FROM broker_documents WHERE {broker_where};").split()
     db.run(f"DELETE FROM driver_document_events WHERE {where}; DELETE FROM driver_documents WHERE {where};")
@@ -370,6 +372,84 @@ def ensure_driver_verified(driver_token, admin_token, biz_prefix='309120040', op
     return True
 
 
+def reject_broker(admin, document_id, reason, note=None):
+    api('POST', f'/api/admin/broker-documents/{document_id}/reject', {'reasonCode': reason, 'note': note}, token=admin)
+
+
+# 운영자 심사 화면을 채우는 추가 주선사 (2026-11-10). 전화번호·회사는 없으면 만든다 (가입 → 회사 등록).
+# 사업자번호 아홉째 자리가 스텁 국세청 결과를 정한다: 7 휴업, 8 폐업, 9 불일치, 나머지 계속사업자
+EXTRA_BROKERS = [
+    # phone, 회사, 대표, 사업자번호 앞 9자리, 허가번호, 개업일, 사진 글자(영문), 상태
+    ('01098765434', '[시연] 세종화물주선', '정세종', '813110003', '시연-2026-003', '2019-04-01', 'SEJONG FREIGHT', 'RESUBMITTED'),  # 사업자등록증 반려 뒤 재제출 → 심사 대기 + 재제출 꼬리표
+    ('01098765435', '[시연] 남부운송', '남기준', '814110007', '시연-2026-004', '2016-10-10', 'NAMBU TRANSPORT', 'PENDING'),  # 국세청 휴업 → 빨간 꼬리표
+    ('01098765436', '[시연] 동해로지스', '이동해', '815110009', '시연-2026-005', '2022-02-02', 'DONGHAE LOGIS', 'HALF'),  # 사업자등록증만 제출, 국세청 불일치
+    ('01098765437', '[시연] 한강익스프레스', '강한수', '816110004', '시연-2026-006', '2013-07-07', 'HANGANG EXPRESS', 'REJECTED'),  # 허가증 반려, 아직 다시 안 냄 → 반려 탭
+    ('01098765438', '[시연] 호남물류', '호남진', '817110005', '시연-2026-007', '2011-03-15', 'HONAM LOGIS', 'APPROVED'),  # 둘 다 승인 → 승인 탭
+]
+EXTRA_PHONES = [row[0] for row in EXTRA_BROKERS]
+
+
+def signup_or_login(phone, name):
+    """주선사 담당자 번호로 로그인하고, 계정이 없으면 가입한다 (seed-console.py의 login과 같은 흐름)"""
+    sent = send_code(phone)
+    device = 'document-seed-' + str(uuid.uuid4())
+    verified = api('POST', '/api/auth/phone/verify', {'phone': phone, 'code': sent['demoCode'], 'deviceId': device})
+    body = {'phoneToken': verified['phoneToken'], 'deviceId': device}
+    if verified['accountExists']:
+        if verified['existingAccount']['role'] != 'BROKER' or not verified['existingAccount']['name'].startswith('[시연]'):
+            raise RuntimeError(f'{phone}: 시연 번호가 기존 계정과 겹쳐 건너뜁니다.')
+        return api('POST', '/api/auth/phone/login', body)['accessToken']
+    body.update(role='BROKER', name=name, consents=[{'type': t, 'version': '2026-11', 'agreed': True} for t in ('TERMS', 'PRIVACY')])
+    return api('POST', '/api/auth/signup', body)['accessToken']
+
+
+def ensure_company(token, name, representative, biz9, license_no):
+    """소속 회사가 없으면 등록한다. 등록한 계정이 대표가 된다"""
+    try:
+        api('GET', '/api/brokers/me', token=token)
+        return False
+    except ApiError as error:
+        if error.code != 'BROKER_404_MEMBER':
+            raise
+    api('POST', '/api/brokers', {'name': name, 'businessNumber': business_number(biz9), 'licenseNumber': license_no,
+                                 'representativeName': representative, 'settlementDays': 30, 'defaultFeeRate': 10}, token)
+    return True
+
+
+def seed_extra_brokers(admin):
+    for phone, name, representative, biz9, license_no, opened, label, state in EXTRA_BROKERS:
+        try:
+            # 계정 이름은 담당자(대표) 이름. 상호를 넣으면 운영자 화면의 "대표 담당자"에 상호가 보인다
+            token = signup_or_login(phone, f'[시연] {representative}')
+        except RuntimeError as error:
+            print(f'{name}: {error}')
+            continue
+        created = ensure_company(token, name, representative, biz9, license_no)
+        if has_broker_documents(token):
+            print(f'{name}: 이미 서류가 있어 건너뜀')
+            continue
+        company = dict(company=label, biz=business_number(biz9), license=license_no.replace('시연-', ''), opened=opened)
+        biz_id = submit_broker(token, 'BUSINESS_REGISTRATION', **company)
+        if state == 'HALF':
+            print(f'{name}: 사업자등록증만 제출 (국세청 불일치, 1/2 심사 대기)' + (' · 회사 등록' if created else ''))
+            continue
+        lic_id = submit_broker(token, 'BROKER_LICENSE', **company)
+        if state == 'RESUBMITTED':
+            reject_broker(admin, biz_id, 'COMPANY_MISMATCH', '사진의 상호가 등록한 상호와 달라요')
+            submit_broker(token, 'BUSINESS_REGISTRATION', attempt=2, **company)
+            print(f'{name}: 사업자등록증 반려 → 재제출, 허가증 심사 대기')
+        elif state == 'REJECTED':
+            approve_broker(admin, biz_id)
+            reject_broker(admin, lic_id, 'LICENSE_MISMATCH', '허가증의 번호가 등록한 허가 번호와 달라요')
+            print(f'{name}: 사업자등록증 승인, 허가증 반려 (아직 다시 안 냄)')
+        elif state == 'APPROVED':
+            approve_broker(admin, biz_id)
+            approve_broker(admin, lic_id)
+            print(f'{name}: 서류 2종 승인 (인증된 주선사)')
+        else:
+            print(f'{name}: 서류 2종 제출, 심사 대기 (국세청 휴업)')
+
+
 def approve(admin, document_id):
     api('POST', f'/api/admin/driver-documents/{document_id}/approve', token=admin)
 
@@ -452,7 +532,11 @@ def main():
     # [시연] 한빛물류 (주선사): 서류 2종 승인 → 인증된 주선사. 승인 전에는 오더를 못 올려서 seed-console.py도 같은 함수로 먼저 인증한다
     token = login(BROKER_PHONE)
     if token:
-        print('[시연] 한빛물류: ' + ('서류 2종 올리고 승인 (인증됨)' if ensure_broker_verified(token, admin) else '이미 인증됨'))
+        try:
+            print('[시연] 한빛물류: ' + ('서류 2종 올리고 승인 (인증됨)' if ensure_broker_verified(token, admin) else '이미 인증됨'))
+        except ApiError as error:
+            # QA 중에 대표가 회사를 나갔거나 내보내진 경우(BROKER_403_REMOVED 등). 다른 시연 데이터는 계속 넣는다
+            print(f'[시연] 한빛물류: 건너뜀 ({error.code} {error})')
     else:
         print('[시연] 한빛물류: 대표 담당자 계정이 없어 건너뜀 (seed-console.py 먼저)')
 
@@ -474,6 +558,8 @@ def main():
         print(f'{DRIVERS[5]}: 사업자등록증 제출, 국세청 조회 폐업자 (심사 대기)')
     elif token:
         print(f'{DRIVERS[5]}: 이미 서류가 있어 건너뜀')
+    # 운영자 심사 화면을 채우는 추가 주선사 5곳: 재제출·휴업·불일치·반려·승인이 하나씩
+    seed_extra_brokers(admin)
     print(f'\n운영자 페이지: 콘솔 /admin/login 에서 {ADMIN_PHONE[:3]}-{ADMIN_PHONE[3:7]}-{ADMIN_PHONE[7:]} 로 로그인')
 
 

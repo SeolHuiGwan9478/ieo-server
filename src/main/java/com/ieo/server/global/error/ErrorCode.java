@@ -72,6 +72,8 @@ public enum ErrorCode {
 	BROKER_INVITATION_DUPLICATE(HttpStatus.CONFLICT, "BROKER_INVITATION_409_DUPLICATE", "이미 초대한 번호입니다. 초대를 취소한 뒤 다시 보내 주세요."),
 	BROKER_INVITATION_ALREADY_MEMBER(HttpStatus.CONFLICT, "BROKER_INVITATION_409_MEMBER", "이미 우리 회사 담당자인 번호예요."),
 	BROKER_INVITATION_CLOSED(HttpStatus.CONFLICT, "BROKER_INVITATION_409_CLOSED", "만료됐거나 이미 처리된 초대예요."),
+	BROKER_INVITATION_OTHER_COMPANY(HttpStatus.CONFLICT, "BROKER_INVITATION_409_OTHER_COMPANY", "이미 다른 회사에 소속된 번호예요. 그 회사에서 나온 뒤에 초대할 수 있어요."),
+	BROKER_INVITATION_NOT_BROKER(HttpStatus.BAD_REQUEST, "BROKER_INVITATION_400_ROLE", "차주로 가입된 번호예요. 담당자는 주선사 계정만 될 수 있어요."),
 	PLAN_INVALID(HttpStatus.BAD_REQUEST, "PLAN_400", "플랜을 골라 주세요."),
 	PLAN_UPGRADE_REQUIRED(HttpStatus.FORBIDDEN, "PLAN_403_UPGRADE", "지금 플랜에서는 쓸 수 없는 기능입니다. 플랜을 올려 주세요."),
 	PLAN_MEMBER_LIMIT(HttpStatus.FORBIDDEN, "PLAN_403_MEMBER_LIMIT", "지금 플랜의 담당자 수 한도에 도달했어요."),
@@ -79,6 +81,7 @@ public enum ErrorCode {
 	DRIVER_LINK_NOT_DRIVER(HttpStatus.FORBIDDEN, "DRIVER_LINK_403_ROLE", "차주 계정만 단골 연결을 수락할 수 있어요."),
 	DRIVER_LINK_DUPLICATE(HttpStatus.CONFLICT, "DRIVER_LINK_409_DUPLICATE", "이미 연결을 요청한 번호입니다. 요청을 취소한 뒤 다시 보내 주세요."),
 	DRIVER_LINK_ALREADY_LINKED(HttpStatus.CONFLICT, "DRIVER_LINK_409_LINKED", "이미 단골로 연결된 차주예요."),
+	DRIVER_LINK_NOT_DRIVER_PHONE(HttpStatus.BAD_REQUEST, "DRIVER_LINK_400_ROLE", "차주 계정이 아닌 번호예요. 차주 앱에 가입한 번호로 요청해 주세요."),
 	DRIVER_LINK_CLOSED(HttpStatus.CONFLICT, "DRIVER_LINK_409_CLOSED", "만료됐거나 이미 처리된 요청이에요."),
 
 	// 배차
