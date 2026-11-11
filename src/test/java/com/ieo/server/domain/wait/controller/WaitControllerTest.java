@@ -216,7 +216,7 @@ class WaitControllerTest {
 		String token = path.substring(path.lastIndexOf('/') + 1);
 		mockMvc.perform(get("/api/public/wait-proofs/" + token))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.record.status").value("WAITING"));
+				.andExpect(jsonPath("$.stops[0].record.status").value("WAITING"));
 
 		event("PICKUP", "work-start", PLANNED.plusSeconds(3 * 3600));
 		event("PICKUP", "depart", PLANNED.plusSeconds(4 * 3600));
@@ -230,9 +230,9 @@ class WaitControllerTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.plateNumber").value("경기82사1234"))
 				.andExpect(jsonPath("$.brokerName").value("한빛로지스"))
-				.andExpect(jsonPath("$.siteAddress").value("경기 평택시 포승읍"))
-				.andExpect(jsonPath("$.record.siteName").value("평택 포승 물류센터"))
-				.andExpect(jsonPath("$.record.waitMinutes").value(180));
+				.andExpect(jsonPath("$.stops[0].siteAddress").value("경기 평택시 포승읍"))
+				.andExpect(jsonPath("$.stops[0].record.siteName").value("평택 포승 물류센터"))
+				.andExpect(jsonPath("$.stops[0].record.waitMinutes").value(180));
 		mockMvc.perform(get("/api/public/wait-proofs/없는토큰"))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.code").value("WAIT_404_PROOF"));
@@ -295,6 +295,40 @@ class WaitControllerTest {
 		mockMvc.perform(post(url).header("Authorization", bearer)).andExpect(status().isOk());
 
 		verify(smsSender, times(1)).send(eq("01090001002"), contains("대기 증빙"));
+	}
+
+	@Test
+	void 확인하거나_누른_순간을_위치와_방법과_함께_남기고_증빙은_운행에_하나다() throws Exception {
+		// 상차지(36.98, 126.84)에서 약 110m 북쪽
+		mockMvc.perform(post("/api/trips/" + trip.getId() + "/stops/PICKUP/wait/arrive").header("Authorization", bearer)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"at\":\"%s\",\"latitude\":36.981,\"longitude\":126.84,\"source\":\"CONFIRM_VOICE\"}".formatted(PLANNED)))
+				.andExpect(status().isCreated());
+		// 위치·방법 없이 보내면 버튼으로 남는다
+		event("PICKUP", "work-start", PLANNED.plusSeconds(3600));
+		event("PICKUP", "depart", PLANNED.plusSeconds(7200));
+		event("DROPOFF", "arrive", PLANNED.plusSeconds(4 * 3600));
+
+		String path = JsonPath.read(mockMvc.perform(post("/api/trips/" + trip.getId() + "/wait-proof").header("Authorization", bearer))
+				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.path");
+		// 예전 상하차지별 주소도 같은 링크
+		proof().andExpect(jsonPath("$.path").value(path));
+		mockMvc.perform(post("/api/trips/" + trip.getId() + "/stops/DROPOFF/wait/proof").header("Authorization", bearer))
+				.andExpect(jsonPath("$.path").value(path));
+
+		mockMvc.perform(get("/api/public/wait-proofs/" + path.substring(path.lastIndexOf('/') + 1)))
+				.andExpect(jsonPath("$.stops.length()").value(2))
+				.andExpect(jsonPath("$.stops[0].record.stopType").value("PICKUP"))
+				.andExpect(jsonPath("$.stops[0].events.length()").value(3))
+				.andExpect(jsonPath("$.stops[0].events[0].type").value("ARRIVED"))
+				.andExpect(jsonPath("$.stops[0].events[0].source").value("CONFIRM_VOICE"))
+				.andExpect(jsonPath("$.stops[0].events[0].distanceMeters").value(111))
+				.andExpect(jsonPath("$.stops[0].events[0].latitude").doesNotExist())
+				.andExpect(jsonPath("$.stops[0].events[1].type").value("WORK_STARTED"))
+				.andExpect(jsonPath("$.stops[0].events[1].source").value("BUTTON"))
+				.andExpect(jsonPath("$.stops[0].events[1].distanceMeters").doesNotExist())
+				.andExpect(jsonPath("$.stops[1].record.stopType").value("DROPOFF"))
+				.andExpect(jsonPath("$.stops[1].events[0].type").value("ARRIVED"));
 	}
 
 	private ResultActions proof() throws Exception {

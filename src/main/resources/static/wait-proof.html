@@ -6,9 +6,10 @@
 <meta name="robots" content="noindex">
 <title>대기 증빙 · 이에오</title>
 <!--
-  주선사가 보는 대기 증빙 페이지 (WAIT-020). 차주가 보낸 링크로 열린다: /w/{token}
-  로그인 없이 상하차지 진입·작업 시작·이탈 시각과 대기비를 보여 준다. 데이터는 /api/public/wait-proofs/{token}.
-  아직 대기 중이면 1분마다 새로 받는다.
+  주선사가 보는 대기 증빙 페이지 (WAIT-020, 025). 차주가 보낸 링크로 열린다: /w/{token}
+  운행 하나에 링크 하나: 상차지·하차지 대기 기록을 함께 보여 준다. 로그인 없이 열리고 데이터는 /api/public/wait-proofs/{token}.
+  기사님이 확인하거나 누른 순간만 시각·상하차지와의 거리·방법으로 보여 준다. 누르지 않은 순간은 비어 있다.
+  아직 끝나지 않은 곳이 있으면 1분마다 새로 받는다.
 -->
 <style>
 :root {
@@ -57,6 +58,14 @@ h2 { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
 .edited { background: var(--canvas); border-radius: 12px; padding: 12px 14px; margin-top: 12px; color: var(--mid); font-size: 14px; }
 .center { text-align: center; padding: 48px 20px; }
 .muted { color: var(--sub); font-size: 14px; }
+.ev { list-style: none; margin-top: 4px; }
+.ev li { display: flex; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.ev li:first-child { border-top: 0; }
+.ev .at { width: 92px; flex-shrink: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ev .what { font-weight: 600; }
+.ev .how { color: var(--mid); font-size: 14px; }
+.ev .late { color: var(--wait); font-size: 13px; }
+.empty { color: var(--sub); font-size: 14px; padding: 6px 0; }
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -73,40 +82,39 @@ h2 { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
 
   <div id="content" hidden>
     <section>
-      <span id="status-tag" class="tag wait">대기 중</span>
-      <h1 id="site-name"></h1>
-      <p class="lead" id="site-address"></p>
-      <dl class="big">
-        <div><dt id="wait-label">대기 시간</dt><dd id="wait-minutes">-</dd></div>
-        <div><dt id="fee-label">청구 대기비</dt><dd id="fee" class="money">-</dd></div>
-      </dl>
-      <p class="note" id="fee-note"></p>
-    </section>
-
-    <section>
-      <h2>시각</h2>
-      <ol class="timeline">
-        <li id="t-planned"><span class="label">예정 시각</span><span class="time"></span></li>
-        <li id="t-arrived"><span class="label">진입</span><span class="time"></span></li>
-        <li id="t-work"><span class="label" id="t-work-label">작업 시작</span><span class="time"></span></li>
-        <li id="t-departed"><span class="label">이탈</span><span class="time"></span></li>
-      </ol>
-      <p class="note" id="planned-note" hidden>예정 시각이 없어 진입 시각부터 대기비를 계산했어요.</p>
-      <div class="edited" id="edited" hidden></div>
-    </section>
-
-    <section>
       <h2>운행</h2>
       <dl>
         <div class="row"><dt>차량</dt><dd id="plate"></dd></div>
         <div class="row"><dt>운송사</dt><dd id="broker"></dd></div>
-        <div class="row"><dt>대기비 기준</dt><dd id="policy"></dd></div>
-        <div class="row"><dt>작업 시간</dt><dd id="work-minutes"></dd></div>
       </dl>
       <p class="note" id="issued"></p>
     </section>
+    <div id="stops"></div>
+    <p class="note">기사님이 확인하거나 누른 순간만 기록해요. 위치는 그 순간 차와 상하차지 사이 거리예요.</p>
   </div>
 </main>
+
+<template id="stop-template">
+  <section>
+    <span class="tag"></span>
+    <h1 class="site-name"></h1>
+    <p class="lead site-address"></p>
+    <dl class="big">
+      <div><dt class="wait-label">대기 시간</dt><dd class="wait-minutes">-</dd></div>
+      <div><dt class="fee-label">청구 대기비</dt><dd class="fee money">-</dd></div>
+    </dl>
+    <p class="note fee-note"></p>
+    <h2 style="margin-top:20px">기록</h2>
+    <ul class="ev"></ul>
+    <p class="note planned-note" hidden>예정 시각이 없어 대기 시작부터 대기비를 계산했어요.</p>
+    <div class="edited" hidden></div>
+    <dl style="margin-top:8px">
+      <div class="row"><dt>예정 시각</dt><dd class="planned">-</dd></div>
+      <div class="row"><dt>대기비 기준</dt><dd class="policy">-</dd></div>
+      <div class="row"><dt>작업 시간</dt><dd class="work-minutes">-</dd></div>
+    </dl>
+  </section>
+</template>
 
 <script>
 (() => {
@@ -118,7 +126,12 @@ h2 { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
   const dayTime = new Intl.DateTimeFormat('ko-KR', {
     timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
   });
+  const time = new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false });
   const won = (n) => n.toLocaleString('ko-KR') + '원';
+  const SOURCE = {
+    CONFIRM_TOUCH: '앱이 묻고 화면으로 확인', CONFIRM_VOICE: '앱이 묻고 말로 확인',
+    BUTTON: '버튼을 직접 누름', VOICE: '음성 명령', AUTO: '자동 기록',
+  };
 
   function minutesText(minutes) {
     if (minutes == null) return '-';
@@ -140,74 +153,118 @@ h2 { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
     return Math.min(units * policy.unitAmount, policy.maxAmount);
   }
 
-  function setTime(id, at) {
-    const li = $(id);
-    li.className = at ? 'on' : 'off';
-    li.querySelector('.time').textContent = at ? dayTime.format(new Date(at)) : '아직';
+  function eventLabel(type, work) {
+    if (type === 'ARRIVED') return '대기 시작';
+    if (type === 'WORK_STARTED') return `${work} 시작`;
+    return '떠남';
   }
 
-  function render(proof) {
-    const r = proof.record;
-    const pickup = r.stopType === 'PICKUP';
-    const work = pickup ? '상차' : '하차';
-    $('loading').hidden = true;
-    $('content').hidden = false;
+  function renderStop(stop) {
+    const r = stop.record;
+    const work = r.stopType === 'PICKUP' ? '상차' : '하차';
+    const el = $('stop-template').content.firstElementChild.cloneNode(true);
+    const q = (sel) => el.querySelector(sel);
 
-    const tag = $('status-tag');
+    const tag = q('.tag');
     if (r.status === 'WAITING') { tag.className = 'tag wait'; tag.textContent = `${work}지 대기 중`; }
     else if (r.status === 'WORKING') { tag.className = 'tag work'; tag.textContent = `${work} 중`; }
-    else { tag.className = 'tag done'; tag.textContent = `${work} 끝`; }
-
-    $('site-name').textContent = r.siteName;
-    $('site-address').textContent = proof.siteAddress || '';
-    $('t-work-label').textContent = `${work} 시작`;
-    setTime('t-planned', r.plannedAt);
-    if (!r.plannedAt) $('t-planned').hidden = true;
-    setTime('t-arrived', r.arrivedAt);
-    setTime('t-work', r.workStartedAt);
-    setTime('t-departed', r.departedAt);
-    $('planned-note').hidden = !r.plannedAtMissing;
+    else { tag.className = 'tag done'; tag.textContent = `${work}지 끝`; }
+    q('.site-name').textContent = r.siteName;
+    q('.site-address').textContent = stop.siteAddress || '';
 
     // 작업 전이면 대기가 아직 이어지고 있어 지금 시각까지로 센다
     const live = r.status === 'WAITING';
-    const waitMinutes = live ? minutesBetween(r.arrivedAt, Date.now()) : r.waitMinutes;
-    $('wait-label').textContent = live ? '지금까지 대기' : '대기 시간';
-    $('wait-minutes').textContent = minutesText(waitMinutes);
-
+    q('.wait-label').textContent = live ? '지금까지 대기' : '대기 시간';
+    q('.wait-minutes').textContent = minutesText(live ? minutesBetween(r.arrivedAt, Date.now()) : r.waitMinutes);
     const policy = r.policy;
     if (!policy) {
-      $('fee-label').textContent = '대기비';
-      $('fee').textContent = '-';
-      $('fee-note').textContent = '대기비 기준이 정해지지 않아 시간만 기록했어요.';
-      $('policy').textContent = '없음';
+      q('.fee-label').textContent = '대기비';
+      q('.fee-note').textContent = '대기비 기준이 정해지지 않아 시간만 기록했어요.';
+      q('.policy').textContent = '없음';
     } else {
       const amount = live ? estimate(policy, minutesBetween(r.chargeableFrom, Date.now())) : r.chargeableAmount;
-      $('fee-label').textContent = live ? '지금까지 대기비' : '청구 대기비';
-      $('fee').textContent = amount == null ? '-' : won(amount);
-      $('fee-note').textContent = live ? '작업을 시작하면 금액이 정해져요.' : '';
-      $('policy').textContent =
+      q('.fee-label').textContent = live ? '지금까지 대기비' : '청구 대기비';
+      q('.fee').textContent = amount == null ? '-' : won(amount);
+      q('.fee-note').textContent = live ? `${work}을 시작하면 금액이 정해져요.`
+        : (r.workStartedAt ? '' : `${work} 시작 기록이 없어 대기와 작업을 나눌 수 없었어요.`);
+      q('.policy').textContent =
         `무료 ${minutesText(policy.freeMinutes)}, ${policy.unitMinutes}분마다 ${won(policy.unitAmount)} (최대 ${won(policy.maxAmount)})`;
     }
 
-    $('plate').textContent = proof.plateNumber;
-    $('broker').textContent = proof.brokerName || '-';
-    $('work-minutes').textContent = minutesText(r.workMinutes);
-    $('issued').textContent = `증빙 발급 ${dayTime.format(new Date(proof.issuedAt))}`;
+    const list = q('.ev');
+    if (!stop.events.length) {
+      // 이 기능 전에 만든 기록은 순간 목록이 없다. 시각만 보여 준다
+      [['ARRIVED', r.arrivedAt], ['WORK_STARTED', r.workStartedAt], ['DEPARTED', r.departedAt]]
+        .filter(([, at]) => at)
+        .forEach(([type, at]) => list.appendChild(eventItem({ type, at, distanceMeters: null, source: null, sentLate: false }, work)));
+    } else {
+      // 이 기능 전에 시작한 대기는 대기 시작 순간이 목록에 없다. 기록된 시각으로 채운다
+      if (!stop.events.some((event) => event.type === 'ARRIVED')) {
+        list.appendChild(eventItem({ type: 'ARRIVED', at: r.arrivedAt, distanceMeters: null, source: null, sentLate: false }, work));
+      }
+      stop.events.forEach((event) => list.appendChild(eventItem(event, work)));
+    }
+    if (!list.children.length) list.innerHTML = '<li class="empty">아직 기록이 없어요</li>';
 
-    // 고친 기록은 숨기지 않고 처음 값을 같이 보여 준다
-    const edited = $('edited');
+    q('.planned').textContent = r.plannedAt ? dayTime.format(new Date(r.plannedAt)) : '없음';
+    q('.planned-note').hidden = !r.plannedAtMissing;
+    q('.work-minutes').textContent = minutesText(r.workMinutes);
+
+    // 고친 시각은 숨기지 않고 처음 값을 같이 보여 준다. 위 기록은 고치기 전 그대로다
+    const edited = q('.edited');
     edited.hidden = !r.edited;
     if (r.edited && r.original) {
       const o = r.original;
       const parts = [
-        o.arrivedAt && `진입 ${dayTime.format(new Date(o.arrivedAt))}`,
+        o.arrivedAt && `대기 시작 ${dayTime.format(new Date(o.arrivedAt))}`,
         o.workStartedAt && `${work} 시작 ${dayTime.format(new Date(o.workStartedAt))}`,
-        o.departedAt && `이탈 ${dayTime.format(new Date(o.departedAt))}`,
+        o.departedAt && `떠남 ${dayTime.format(new Date(o.departedAt))}`,
       ].filter(Boolean);
-      edited.textContent = `기사님이 ${r.editedAt ? dayTime.format(new Date(r.editedAt)) : ''}에 시각을 고쳤어요. 처음 기록: ${parts.join(', ')}`;
+      const now = [
+        `대기 시작 ${dayTime.format(new Date(r.arrivedAt))}`,
+        r.workStartedAt && `${work} 시작 ${dayTime.format(new Date(r.workStartedAt))}`,
+        r.departedAt && `떠남 ${dayTime.format(new Date(r.departedAt))}`,
+      ].filter(Boolean);
+      edited.textContent = `기사님이 ${r.editedAt ? dayTime.format(new Date(r.editedAt)) : ''}에 시각을 고쳤어요. 고친 시각: ${now.join(', ')} · 처음 기록: ${parts.join(', ')}`;
     }
+    return el;
+  }
 
-    if (r.status !== 'DONE') setTimeout(load, REFRESH_MILLIS);
+  function eventItem(event, work) {
+    const li = document.createElement('li');
+    const at = document.createElement('span');
+    at.className = 'at';
+    at.textContent = time.format(new Date(event.at));
+    const body = document.createElement('div');
+    const what = document.createElement('div');
+    what.className = 'what';
+    what.textContent = eventLabel(event.type, work) + (event.distanceMeters != null ? ` · ${work}지에서 ${event.distanceMeters.toLocaleString('ko-KR')}m` : '');
+    body.appendChild(what);
+    if (event.source) {
+      const how = document.createElement('div');
+      how.className = 'how';
+      how.textContent = SOURCE[event.source] || '';
+      body.appendChild(how);
+    }
+    if (event.sentLate) {
+      const late = document.createElement('div');
+      late.className = 'late';
+      late.textContent = '통신이 끊겨 나중에 보낸 기록';
+      body.appendChild(late);
+    }
+    li.append(at, body);
+    return li;
+  }
+
+  function render(proof) {
+    $('loading').hidden = true;
+    $('content').hidden = false;
+    $('plate').textContent = proof.plateNumber;
+    $('broker').textContent = proof.brokerName || '-';
+    $('issued').textContent = `증빙 발급 ${dayTime.format(new Date(proof.issuedAt))}`;
+    const stops = $('stops');
+    stops.replaceChildren(...proof.stops.map(renderStop));
+    if (proof.stops.some((stop) => stop.record.status !== 'DONE')) setTimeout(load, REFRESH_MILLIS);
   }
 
   function fail(message) {

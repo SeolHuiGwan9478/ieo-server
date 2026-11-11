@@ -105,9 +105,12 @@ public class BrokerTripService {
 		List<WaitRecord> records = waitRecordRepository.findAllByTripStopTripIdIn(tripIds);
 		Map<Long, WaitRecord> recordByStop = records.stream()
 				.collect(Collectors.toMap(record -> record.getTripStop().getId(), Function.identity()));
-		Map<Long, WaitProof> proofByRecord = records.isEmpty() ? Map.of()
-				: waitProofRepository.findAllByWaitRecordIdIn(records.stream().map(WaitRecord::getId).toList()).stream()
-						.collect(Collectors.toMap(proof -> proof.getWaitRecord().getId(), Function.identity()));
+		// 증빙은 운행 하나에 하나다. 상차지·하차지가 같은 링크를 보여 준다
+		Map<Long, WaitProof> proofByTrip = waitProofRepository.findAllByTripIdIn(tripIds).stream()
+				.collect(Collectors.toMap(proof -> proof.getTrip().getId(), Function.identity()));
+		Map<Long, WaitProof> proofByRecord = records.stream()
+				.filter(record -> proofByTrip.containsKey(record.getTripStop().getTrip().getId()))
+				.collect(Collectors.toMap(WaitRecord::getId, record -> proofByTrip.get(record.getTripStop().getTrip().getId())));
 
 		Map<Long, DeliveryProof> receiptByTrip = deliveryProofRepository.findAllByTripIdIn(tripIds).stream()
 				.collect(Collectors.toMap(proof -> proof.getTrip().getId(), Function.identity()));

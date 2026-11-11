@@ -221,7 +221,7 @@ class BrokerTripControllerTest {
 				.andExpect(jsonPath("$.pickup.waitProof").doesNotExist())
 				.andExpect(jsonPath("$.dropoff.waitStatus").doesNotExist());
 
-		WaitProof proof = waitProofRepository.save(WaitProof.create(record, T0.plusSeconds(86400 * 30)));
+		WaitProof proof = waitProofRepository.save(WaitProof.create(trip, T0.plusSeconds(86400 * 30)));
 		perform(get("/api/brokers/me/trips"), owner)
 				.andExpect(jsonPath("$.items[0].pickup.waitProof.path").value("/w/" + proof.getShareToken()))
 				.andExpect(jsonPath("$.items[0].pickup.waitProof.waitMinutes").value(120))

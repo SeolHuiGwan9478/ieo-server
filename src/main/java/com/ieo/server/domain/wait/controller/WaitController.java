@@ -8,7 +8,6 @@ import com.ieo.server.domain.wait.dto.WaitTimeRequest;
 import com.ieo.server.domain.wait.service.WaitService;
 import com.ieo.server.global.auth.AuthInterceptor;
 import jakarta.validation.Valid;
-import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -47,7 +46,7 @@ public class WaitController {
 			@PathVariable Long tripId,
 			@PathVariable StopType stopType,
 			@RequestBody(required = false) WaitTimeRequest request) {
-		WaitService.Arrival arrival = waitService.arrive(userId, tripId, stopType, at(request));
+		WaitService.Arrival arrival = waitService.arrive(userId, tripId, stopType, orEmpty(request));
 		return ResponseEntity.status(arrival.created() ? HttpStatus.CREATED : HttpStatus.OK).body(arrival.record());
 	}
 
@@ -58,7 +57,7 @@ public class WaitController {
 			@PathVariable Long tripId,
 			@PathVariable StopType stopType,
 			@RequestBody(required = false) WaitTimeRequest request) {
-		return waitService.startWork(userId, tripId, stopType, at(request));
+		return waitService.startWork(userId, tripId, stopType, orEmpty(request));
 	}
 
 	/** 이탈: 상차지면 운송 중, 하차지면 운행 완료 */
@@ -68,7 +67,7 @@ public class WaitController {
 			@PathVariable Long tripId,
 			@PathVariable StopType stopType,
 			@RequestBody(required = false) WaitTimeRequest request) {
-		return waitService.depart(userId, tripId, stopType, at(request));
+		return waitService.depart(userId, tripId, stopType, orEmpty(request));
 	}
 
 	/** 시각 고치기 */
@@ -81,7 +80,19 @@ public class WaitController {
 		return waitService.edit(userId, tripId, stopType, request);
 	}
 
-	/** 증빙 링크 만들기. 이미 있으면 같은 링크 */
+	/** 운행의 대기 증빙 링크 만들기 (상차지·하차지 함께). 이미 있으면 같은 링크 */
+	@PostMapping("/wait-proof")
+	public WaitProofLinkResponse createTripProof(@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @PathVariable Long tripId) {
+		return waitService.createProof(userId, tripId);
+	}
+
+	/** 운행의 대기 증빙 링크를 주선사에게 보내기 (WAIT-022) */
+	@PostMapping("/wait-proof/send")
+	public WaitProofLinkResponse sendTripProof(@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @PathVariable Long tripId) {
+		return waitService.sendProof(userId, tripId);
+	}
+
+	/** 예전 앱용: 운행의 링크와 같다 */
 	@PostMapping("/stops/{stopType}/wait/proof")
 	public WaitProofLinkResponse createProof(
 			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
@@ -90,7 +101,7 @@ public class WaitController {
 		return waitService.createProof(userId, tripId, stopType);
 	}
 
-	/** 증빙 링크를 주선사에게 보내기 (WAIT-022) */
+	/** 예전 앱용: 운행의 링크를 보낸다 */
 	@PostMapping("/stops/{stopType}/wait/proof/send")
 	public WaitProofLinkResponse sendProof(
 			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
@@ -99,7 +110,7 @@ public class WaitController {
 		return waitService.sendProof(userId, tripId, stopType);
 	}
 
-	private static Instant at(WaitTimeRequest request) {
-		return request == null ? null : request.at();
+	private static WaitTimeRequest orEmpty(WaitTimeRequest request) {
+		return request == null ? WaitTimeRequest.at(null) : request;
 	}
 }

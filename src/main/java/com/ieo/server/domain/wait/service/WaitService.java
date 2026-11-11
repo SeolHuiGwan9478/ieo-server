@@ -15,6 +15,10 @@ import com.ieo.server.domain.notification.service.BrokerNotifier;
 import com.ieo.server.domain.wait.dto.WaitProofLinkResponse;
 import com.ieo.server.domain.wait.dto.WaitProofResponse;
 import com.ieo.server.domain.wait.dto.WaitRecordResponse;
+import com.ieo.server.domain.wait.dto.WaitTimeRequest;
+import com.ieo.server.domain.wait.entity.WaitEvent;
+import com.ieo.server.domain.wait.enums.WaitEventSource;
+import com.ieo.server.domain.wait.enums.WaitEventType;
 import com.ieo.server.domain.wait.entity.WaitPolicy;
 import com.ieo.server.domain.wait.entity.WaitProof;
 import com.ieo.server.domain.wait.entity.WaitRecord;
@@ -73,9 +77,14 @@ public class WaitService {
 	 * 통신이 끊겨 다시 보내도 기록이 둘이 되지 않도록, 이미 진입했으면 그 기록을 돌려준다
 	 */
 	public Arrival arrive(Long userId, Long tripId, StopType type, Instant at) {
+		return arrive(userId, tripId, type, WaitTimeRequest.at(at));
+	}
+
+	/** [request]의 위치와 방법을 대기 시작 기록으로 남긴다 (WAIT-025) */
+	public Arrival arrive(Long userId, Long tripId, StopType type, WaitTimeRequest request) {
 		Trip trip = findMine(userId, tripId);
 		TripStop stop = stopOf(trip, type);
-		Instant arrivedAt = resolveTime(at);
+		Instant arrivedAt = resolveTime(request.at());
 		Optional<WaitRecord> existing = recordRepository.findByTripStopId(stop.getId());
 		if (existing.isPresent()) {
 			return new Arrival(WaitRecordResponse.from(existing.get()), false);
@@ -88,7 +97,9 @@ public class WaitService {
 		}
 		WaitPolicy policy = trip.getBroker() == null ? null
 				: policyRepository.findFirstByBrokerIdAndActiveTrue(trip.getBroker().getId()).orElse(null);
-		WaitRecord record = recordRepository.save(WaitRecord.start(stop, arrivedAt, policy));
+		WaitRecord record = WaitRecord.start(stop, arrivedAt, policy);
+		record.record(event(WaitEventType.ARRIVED, arrivedAt, request));
+		record = recordRepository.save(record);
 		if (type == StopType.DROPOFF && trip.getBroker() != null && trip.isEtaNoticeEnabled()) {
 			brokerNotifier.send(trip.getBroker(), "[이에오] " + trip.getVehicle().getPlateNumber() + " 차량이 "
 					+ stop.getSite().getName() + "에 도착했어요.");
@@ -98,8 +109,14 @@ public class WaitService {
 
 	/** 작업 시작 ("상차 시작"·"하차 시작", WAIT-004) */
 	public WaitRecordResponse startWork(Long userId, Long tripId, StopType type, Instant at) {
+		return startWork(userId, tripId, type, WaitTimeRequest.at(at));
+	}
+
+	public WaitRecordResponse startWork(Long userId, Long tripId, StopType type, WaitTimeRequest request) {
 		WaitRecord record = findRecord(userId, tripId, type);
-		record.startWork(resolveTime(at));
+		Instant startedAt = resolveTime(request.at());
+		record.startWork(startedAt);
+		record.record(event(WaitEventType.WORK_STARTED, startedAt, request));
 		siteStatsCalculator.recalculate(record.getTripStop().getSite());
 		metricsCalculator.recalculate(record.getTripStop().getTrip());
 		return WaitRecordResponse.from(record);
@@ -107,12 +124,17 @@ public class WaitService {
 
 	/** 이탈 (WAIT-005). 상차지면 운송 중으로, 하차지면 운행 완료로 바꾸고 장부 한 줄을 만든다 */
 	public WaitRecordResponse depart(Long userId, Long tripId, StopType type, Instant at) {
+		return depart(userId, tripId, type, WaitTimeRequest.at(at));
+	}
+
+	public WaitRecordResponse depart(Long userId, Long tripId, StopType type, WaitTimeRequest request) {
 		Trip trip = findMine(userId, tripId);
 		WaitRecord record = recordRepository.findByTripStopId(stopOf(trip, type).getId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.WAIT_NOT_FOUND));
-		Instant departedAt = resolveTime(at);
+		Instant departedAt = resolveTime(request.at());
 
 		record.depart(departedAt);
+		record.record(event(WaitEventType.DEPARTED, departedAt, request));
 		if (type == StopType.PICKUP) {
 			trip.departPickup();
 		} else {
@@ -150,26 +172,33 @@ public class WaitService {
 	}
 
 	/**
-	 * 증빙 링크를 만든다 (WAIT-020). 이미 있으면 같은 링크를 돌려준다.
+	 * 증빙 링크를 만든다 (WAIT-020). 운행 하나에 하나이고, 이미 있으면 같은 링크를 돌려준다.
+	 * 대기 중에도, 운행이 끝난 뒤(장부)에도 만든다. 주선사는 링크에서 지금까지의 기록을 본다
 	 */
+	public WaitProofLinkResponse createProof(Long userId, Long tripId) {
+		Trip trip = findMine(userId, tripId);
+		requireAnyWait(trip);
+		return WaitProofLinkResponse.from(proofOf(trip), canSend(trip));
+	}
+
+	/** 예전 앱이 부르는 상하차지별 주소. 운행의 링크 하나를 돌려준다 */
 	public WaitProofLinkResponse createProof(Long userId, Long tripId, StopType type) {
-		// 대기 중에도 만든다. 주선사는 링크에서 지금까지의 대기 시간을 보고, 이탈하면 같은 링크에 최종 기록이 남는다
-		WaitRecord record = findRecord(userId, tripId, type);
-		return WaitProofLinkResponse.from(proofOf(record), canSend(record));
+		findRecord(userId, tripId, type);
+		return createProof(userId, tripId);
 	}
 
 	/**
 	 * 증빙 링크를 주선사에게 문자로 보낸다 (WAIT-022). 이미 보냈으면 다시 보내지 않는다 (NOTI-003).
 	 * 차주가 이름만 적은 주선사는 연락처를 모르므로 보낼 수 없다
 	 */
-	public WaitProofLinkResponse sendProof(Long userId, Long tripId, StopType type) {
-		WaitRecord record = findRecord(userId, tripId, type);
-		if (!canSend(record)) {
+	public WaitProofLinkResponse sendProof(Long userId, Long tripId) {
+		Trip trip = findMine(userId, tripId);
+		requireAnyWait(trip);
+		if (!canSend(trip)) {
 			throw new BusinessException(ErrorCode.WAIT_PROOF_NO_BROKER);
 		}
-		WaitProof proof = proofOf(record);
+		WaitProof proof = proofOf(trip);
 		if (proof.getSentAt() == null) {
-			Trip trip = findMine(userId, tripId);
 			brokerNotifier.send(trip.getBroker(), "[이에오] " + trip.getVehicle().getPlateNumber()
 					+ " 차량의 대기 증빙이 도착했어요. " + publicBaseUrl.replaceAll("/+$", "")
 					+ WaitProofLinkResponse.from(proof, true).path());
@@ -178,13 +207,25 @@ public class WaitService {
 		return WaitProofLinkResponse.from(proof, true);
 	}
 
-	private WaitProof proofOf(WaitRecord record) {
-		return proofRepository.findByWaitRecordId(record.getId())
-				.orElseGet(() -> proofRepository.save(WaitProof.create(record, clock.instant().plus(PROOF_TTL))));
+	/** 예전 앱이 부르는 상하차지별 주소 */
+	public WaitProofLinkResponse sendProof(Long userId, Long tripId, StopType type) {
+		findRecord(userId, tripId, type);
+		return sendProof(userId, tripId);
 	}
 
-	private static boolean canSend(WaitRecord record) {
-		return record.getTripStop().getTrip().getBroker() != null;
+	private void requireAnyWait(Trip trip) {
+		if (recordRepository.findAllByTripStopTripId(trip.getId()).isEmpty()) {
+			throw new BusinessException(ErrorCode.WAIT_NOT_FOUND);
+		}
+	}
+
+	private WaitProof proofOf(Trip trip) {
+		return proofRepository.findByTripId(trip.getId())
+				.orElseGet(() -> proofRepository.save(WaitProof.create(trip, clock.instant().plus(PROOF_TTL))));
+	}
+
+	private static boolean canSend(Trip trip) {
+		return trip.getBroker() != null;
 	}
 
 	/** 주선사가 링크로 보는 증빙. 로그인 없이 열린다. 없거나 만료되면 404 */
@@ -193,7 +234,8 @@ public class WaitService {
 		WaitProof proof = proofRepository.findByShareToken(shareToken)
 				.filter(found -> !found.isExpired(clock.instant()))
 				.orElseThrow(() -> new BusinessException(ErrorCode.WAIT_PROOF_NOT_FOUND));
-		return WaitProofResponse.of(proof.getWaitRecord(), proof.getCreatedAt());
+		Trip trip = proof.getTrip();
+		return WaitProofResponse.of(trip, recordRepository.findAllByTripStopTripId(trip.getId()), proof.getCreatedAt());
 	}
 
 	/** 하차지에서 대기 기록이 남아 있는데 운행을 직접 완료하면 그 기록도 이탈로 끝낸다 */
@@ -202,8 +244,19 @@ public class WaitService {
 				.filter(record -> record.status() != WaitStatus.DONE)
 				.ifPresent(record -> {
 					record.depart(now);
+					record.record(new WaitEvent(WaitEventType.DEPARTED, now, null, null, WaitEventSource.AUTO, clock.instant()));
 					siteStatsCalculator.recalculate(record.getTripStop().getSite());
 				});
+	}
+
+	/** 기사님이 알린 순간. 위치가 반쯤만 오면 버린다 */
+	private WaitEvent event(WaitEventType type, Instant at, WaitTimeRequest request) {
+		boolean located = request.latitude() != null && request.longitude() != null;
+		return new WaitEvent(type, at,
+				located ? request.latitude() : null,
+				located ? request.longitude() : null,
+				request.source() == null ? WaitEventSource.BUTTON : request.source(),
+				clock.instant());
 	}
 
 	/** 비우면 지금. 앱 시계가 앞서 있어도 1분까지는 받는다 */

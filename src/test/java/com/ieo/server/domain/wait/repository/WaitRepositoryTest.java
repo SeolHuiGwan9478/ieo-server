@@ -103,7 +103,7 @@ class WaitRepositoryTest {
 		WaitRecord record = WaitRecord.start(trip.pickup(), NOW, policy);
 		record.startWork(NOW.plusSeconds(150 * 60));
 		recordRepository.save(record);
-		WaitProof proof = proofRepository.save(WaitProof.create(record, null));
+		WaitProof proof = proofRepository.save(WaitProof.create(trip, null));
 		entityManager.flush();
 		entityManager.clear();
 
@@ -113,8 +113,8 @@ class WaitRepositoryTest {
 		assertThat(recordRepository.findAllByTripStopTripId(trip.getId())).hasSize(1);
 		assertThat(proof.getShareToken()).hasSize(43);
 		assertThat(proofRepository.findByShareToken(proof.getShareToken()))
-				.get().extracting(p -> p.getWaitRecord().getId()).isEqualTo(found.getId());
-		assertThat(proofRepository.findByWaitRecordId(found.getId())).isPresent();
+				.get().extracting(p -> p.getTrip().getId()).isEqualTo(trip.getId());
+		assertThat(proofRepository.findByTripId(trip.getId())).isPresent();
 	}
 
 	@Test

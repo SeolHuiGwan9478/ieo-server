@@ -17,6 +17,10 @@ import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -68,6 +72,14 @@ public class WaitRecord extends BaseTimeEntity {
 	/** 마지막으로 고친 시각. 원래 값이 비어 있던 경우(작업 시작을 나중에 넣음)도 고친 기록으로 알 수 있다 */
 	private Instant editedAt;
 
+	/**
+	 * 기사님이 확인하거나 누른 순간들 (WAIT-025). 시각을 고쳐도 이 목록은 그대로 남아 처음 기록을 보여 준다.
+	 * 이 기능 전에 만든 기록은 비어 있다
+	 */
+	@JdbcTypeCode(SqlTypes.JSON)
+	@Column(columnDefinition = "jsonb")
+	private List<WaitEvent> events = new ArrayList<>();
+
 	private WaitRecord(TripStop tripStop, Instant arrivedAt, WaitPolicy policy) {
 		this.tripStop = tripStop;
 		this.arrivedAt = arrivedAt;
@@ -117,6 +129,18 @@ public class WaitRecord extends BaseTimeEntity {
 		this.workStartedAt = workStartedAt;
 		this.departedAt = departedAt;
 		this.editedAt = now;
+	}
+
+	/** 확인하거나 누른 순간을 남긴다 */
+	public void record(WaitEvent event) {
+		List<WaitEvent> next = new ArrayList<>(events());
+		next.add(event);
+		// 목록을 바꿔 끼워야 JSON 칸이 바뀐 것을 안다
+		this.events = next;
+	}
+
+	public List<WaitEvent> events() {
+		return events == null ? List.of() : List.copyOf(events);
 	}
 
 	public WaitStatus status() {

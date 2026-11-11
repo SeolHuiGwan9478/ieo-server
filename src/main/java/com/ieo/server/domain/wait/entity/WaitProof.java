@@ -1,5 +1,6 @@
 package com.ieo.server.domain.wait.entity;
 
+import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.global.entity.BaseTimeEntity;
 import com.ieo.server.global.util.RandomTokens;
 import jakarta.persistence.Column;
@@ -17,7 +18,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 대기 증빙 웹 링크 (WAIT-020, 022). 주선사가 로그인 없이 /proof/{shareToken}으로 본다.
+ * 대기 증빙 웹 링크 (WAIT-020, 022). 주선사가 로그인 없이 /w/{shareToken}으로 본다.
+ * 운행 하나에 하나다: 링크 하나로 상차지와 하차지 대기 기록을 함께 본다 (2026-11-11).
  * 링크만 알면 볼 수 있으므로 토큰은 추측할 수 없는 무작위 값(32바이트)으로 만든다.
  * PDF(WAIT-021)는 P2라 나중에 붙인다.
  */
@@ -32,8 +34,8 @@ public class WaitProof extends BaseTimeEntity {
 	private Long id;
 
 	@OneToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "wait_record_id", unique = true)
-	private WaitRecord waitRecord;
+	@JoinColumn(name = "trip_id", unique = true)
+	private Trip trip;
 
 	@Column(nullable = false, unique = true, length = 43)
 	private String shareToken;
@@ -44,14 +46,14 @@ public class WaitProof extends BaseTimeEntity {
 	/** 주선사에게 보낸 시각 */
 	private Instant sentAt;
 
-	private WaitProof(WaitRecord waitRecord, String shareToken, Instant expiresAt) {
-		this.waitRecord = waitRecord;
+	private WaitProof(Trip trip, String shareToken, Instant expiresAt) {
+		this.trip = trip;
 		this.shareToken = shareToken;
 		this.expiresAt = expiresAt;
 	}
 
-	public static WaitProof create(WaitRecord waitRecord, Instant expiresAt) {
-		return new WaitProof(waitRecord, RandomTokens.urlSafe(), expiresAt);
+	public static WaitProof create(Trip trip, Instant expiresAt) {
+		return new WaitProof(trip, RandomTokens.urlSafe(), expiresAt);
 	}
 
 	public void markSent(Instant now) {

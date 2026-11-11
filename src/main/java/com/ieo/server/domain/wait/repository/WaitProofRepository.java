@@ -11,7 +11,7 @@ public interface WaitProofRepository extends JpaRepository<WaitProof, Long> {
 	/** 주선사가 링크를 열 때 */
 	Optional<WaitProof> findByShareToken(String shareToken);
 
-	Optional<WaitProof> findByWaitRecordId(Long waitRecordId);
+	Optional<WaitProof> findByTripId(Long tripId);
 
-	List<WaitProof> findAllByWaitRecordIdIn(Collection<Long> waitRecordIds);
+	List<WaitProof> findAllByTripIdIn(Collection<Long> tripIds);
 }
