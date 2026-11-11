@@ -286,7 +286,7 @@ class WaitControllerTest {
 	@Test
 	void 증빙은_주선사에게_한_번만_보내고_다시_눌러도_문자가_늘지_않는다() throws Exception {
 		event("PICKUP", "arrive", PLANNED);
-		String url = "/api/trips/" + trip.getId() + "/stops/PICKUP/wait/proof/send";
+		String url = "/api/trips/" + trip.getId() + "/wait-proof/send";
 
 		proof().andExpect(jsonPath("$.canSend").value(true)).andExpect(jsonPath("$.sentAt").doesNotExist());
 		mockMvc.perform(post(url).header("Authorization", bearer))
@@ -311,10 +311,8 @@ class WaitControllerTest {
 
 		String path = JsonPath.read(mockMvc.perform(post("/api/trips/" + trip.getId() + "/wait-proof").header("Authorization", bearer))
 				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.path");
-		// 예전 상하차지별 주소도 같은 링크
+		// 다시 만들어도 같은 링크
 		proof().andExpect(jsonPath("$.path").value(path));
-		mockMvc.perform(post("/api/trips/" + trip.getId() + "/stops/DROPOFF/wait/proof").header("Authorization", bearer))
-				.andExpect(jsonPath("$.path").value(path));
 
 		mockMvc.perform(get("/api/public/wait-proofs/" + path.substring(path.lastIndexOf('/') + 1)))
 				.andExpect(jsonPath("$.stops.length()").value(2))
@@ -332,7 +330,7 @@ class WaitControllerTest {
 	}
 
 	private ResultActions proof() throws Exception {
-		return mockMvc.perform(post("/api/trips/" + trip.getId() + "/stops/PICKUP/wait/proof").header("Authorization", bearer));
+		return mockMvc.perform(post("/api/trips/" + trip.getId() + "/wait-proof").header("Authorization", bearer));
 	}
 
 	private ResultActions putPolicy(String json) throws Exception {

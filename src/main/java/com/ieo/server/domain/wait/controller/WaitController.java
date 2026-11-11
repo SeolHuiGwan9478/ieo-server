@@ -92,24 +92,6 @@ public class WaitController {
 		return waitService.sendProof(userId, tripId);
 	}
 
-	/** 예전 앱용: 운행의 링크와 같다 */
-	@PostMapping("/stops/{stopType}/wait/proof")
-	public WaitProofLinkResponse createProof(
-			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
-			@PathVariable Long tripId,
-			@PathVariable StopType stopType) {
-		return waitService.createProof(userId, tripId, stopType);
-	}
-
-	/** 예전 앱용: 운행의 링크를 보낸다 */
-	@PostMapping("/stops/{stopType}/wait/proof/send")
-	public WaitProofLinkResponse sendProof(
-			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
-			@PathVariable Long tripId,
-			@PathVariable StopType stopType) {
-		return waitService.sendProof(userId, tripId, stopType);
-	}
-
 	private static WaitTimeRequest orEmpty(WaitTimeRequest request) {
 		return request == null ? WaitTimeRequest.at(null) : request;
 	}

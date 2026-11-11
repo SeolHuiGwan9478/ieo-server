@@ -177,12 +177,6 @@ public class WaitService {
 		return WaitProofLinkResponse.from(proofOf(trip), canSend(trip));
 	}
 
-	/** 예전 앱이 부르는 상하차지별 주소. 운행의 링크 하나를 돌려준다 */
-	public WaitProofLinkResponse createProof(Long userId, Long tripId, StopType type) {
-		findRecord(userId, tripId, type);
-		return createProof(userId, tripId);
-	}
-
 	/**
 	 * 증빙 링크를 주선사에게 문자로 보낸다 (WAIT-022). 이미 보냈으면 다시 보내지 않는다 (NOTI-003).
 	 * 차주가 이름만 적은 주선사는 연락처를 모르므로 보낼 수 없다
@@ -201,12 +195,6 @@ public class WaitService {
 			proof.markSent(clock.instant());
 		}
 		return WaitProofLinkResponse.from(proof, true);
-	}
-
-	/** 예전 앱이 부르는 상하차지별 주소 */
-	public WaitProofLinkResponse sendProof(Long userId, Long tripId, StopType type) {
-		findRecord(userId, tripId, type);
-		return sendProof(userId, tripId);
 	}
 
 	private void requireAnyWait(Trip trip) {
