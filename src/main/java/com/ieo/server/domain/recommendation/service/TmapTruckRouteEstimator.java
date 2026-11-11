@@ -105,33 +105,11 @@ public class TmapTruckRouteEstimator implements TruckRouteEstimator {
 				.header("appKey", properties.appKey())
 				.contentType(MediaType.APPLICATION_JSON)
 				.accept(MediaType.APPLICATION_JSON)
-				.body(request(leg, spec))
+				.body(spec.routeRequest(leg.fromLat(), leg.fromLng(), leg.toLat(), leg.toLng(), 2))
 				.retrieve()
 				.body(Response.class);
 		Summary summary = body.features().getFirst().properties();
 		return new TruckRoute(summary.totalDistance(), summary.totalTime(), summary.totalFare());
-	}
-
-	private static Map<String, Object> request(Leg leg, TruckSpec spec) {
-		Map<String, Object> request = new HashMap<>();
-		request.put("startX", leg.fromLng());
-		request.put("startY", leg.fromLat());
-		request.put("endX", leg.toLng());
-		request.put("endY", leg.toLat());
-		request.put("startName", "start");
-		request.put("endName", "end");
-		request.put("reqCoordType", "WGS84GEO");
-		request.put("resCoordType", "WGS84GEO");
-		request.put("totalValue", 2);
-		request.put("tollgateFareInfo", "Y");
-		request.put("carType", spec.carType());
-		request.put("truckType", 1);
-		request.put("truckWidth", spec.widthCm());
-		request.put("truckHeight", spec.heightCm());
-		request.put("truckLength", spec.lengthCm());
-		request.put("truckWeight", spec.loadKg());
-		request.put("truckTotalWeight", spec.totalKg());
-		return request;
 	}
 
 	private record Key(Leg leg, TruckSpec spec) {
