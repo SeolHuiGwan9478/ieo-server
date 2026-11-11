@@ -23,7 +23,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 차주의 추천 설정 (REC-004, REC-025). 차주당 한 줄이고, 없으면 기본값([defaults])으로 본다.
+ * 차주의 추천 설정 (REC-004, REC-005). 차주당 한 줄이고, 없으면 기본값([defaults])으로 본다.
  * 귀가 방향은 뒤로 미뤘다 (docs/design/04_배차추천.md)
  */
 @Getter

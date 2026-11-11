@@ -40,7 +40,7 @@ class DieselPricesTest {
 		}
 	};
 	private final DieselPrices prices = new DieselPrices(source,
-			new RecommendationProperties(1600, 1.3, 60, 60, 60), clock);
+			new RecommendationProperties(1600, 1.3, 60), clock);
 
 	@Test
 	void 주소의_시도_가격을_쓰고_시도를_모르면_전국_평균을_쓴다() {

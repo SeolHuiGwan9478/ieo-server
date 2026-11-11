@@ -64,16 +64,25 @@ public class DispatchRequest extends BaseTimeEntity {
 	@Column(nullable = false, length = 10)
 	private DispatchRequestStatus status;
 
-	private DispatchRequest(Order order, Driver driver, Vehicle vehicle) {
+	/** 차량 앱의 배차 추천(정차 중 근처 Top 3)에서 눌러 보낸 요청 (REC-003). 추천이 얼마나 쓰이는지 보는 데 쓴다 */
+	@Column(nullable = false)
+	private boolean isRecommendation;
+
+	private DispatchRequest(Order order, Driver driver, Vehicle vehicle, boolean isRecommendation) {
 		this.order = order;
 		this.driver = driver;
 		this.vehicle = vehicle;
 		this.status = DispatchRequestStatus.PENDING;
+		this.isRecommendation = isRecommendation;
 	}
 
 	/** 요청할 수 있는지는 Order.checkRequestable과 서비스(동시 요청 3건)가 먼저 확인한다 */
 	public static DispatchRequest create(Order order, Driver driver, Vehicle vehicle) {
-		return new DispatchRequest(order, driver, vehicle);
+		return create(order, driver, vehicle, false);
+	}
+
+	public static DispatchRequest create(Order order, Driver driver, Vehicle vehicle, boolean isRecommendation) {
+		return new DispatchRequest(order, driver, vehicle, isRecommendation);
 	}
 
 	/** 만료 시각. 저장 전에는 createdAt이 없어 null */

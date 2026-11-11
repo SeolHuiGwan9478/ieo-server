@@ -230,7 +230,8 @@ public class DispatchService {
 		requestRepository.flush();
 		DispatchRequest request;
 		try {
-			request = requestRepository.saveAndFlush(DispatchRequest.create(order, driver, vehicle));
+			request = requestRepository.saveAndFlush(DispatchRequest.create(order, driver, vehicle,
+					body != null && body.fromRecommendation()));
 		} catch (DataIntegrityViolationException e) {
 			// 같은 오더에 동시에 두 번 요청한 경우. 대기 중 요청 유니크 인덱스가 하나만 남긴다
 			throw new BusinessException(ErrorCode.DISPATCH_ALREADY_REQUESTED);

@@ -23,10 +23,7 @@ import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.site.repository.SiteRepository;
-import com.ieo.server.domain.trip.entity.Trip;
-import com.ieo.server.domain.trip.enums.PaymentType;
-import com.ieo.server.domain.trip.enums.TripSource;
-import com.ieo.server.domain.trip.repository.TripRepository;
+import com.ieo.server.domain.dispatch.repository.DispatchRequestRepository;
 import com.ieo.server.domain.user.entity.User;
 import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.domain.user.repository.UserRepository;
@@ -76,7 +73,7 @@ class RecommendationControllerTest {
 	private SiteRepository siteRepository;
 
 	@Autowired
-	private TripRepository tripRepository;
+	private DispatchRequestRepository requestRepository;
 
 	@Autowired
 	private BrokerRepository brokerRepository;
@@ -93,7 +90,6 @@ class RecommendationControllerTest {
 	private MockMvc mockMvc;
 	private String broker;
 	private String driver;
-	private Trip trip;
 	private Instant now;
 	/** 지금 운행의 하차지 */
 	private Site seongseo;
@@ -119,39 +115,34 @@ class RecommendationControllerTest {
 		vehicleRepository.save(vehicle);
 		driver = bearer(driverUser.getId());
 
-		Site pyeongtaek = siteRepository.save(Site.create("평택 포승 물류센터", "경기 평택시", 36.98, 126.84, null));
 		seongseo = siteRepository.save(Site.create("대구 성서 공단", "대구 달서구", 35.84, 128.49, null));
 		chilgok = siteRepository.save(Site.create("칠곡 물류센터", "경북 칠곡군", 35.955, 128.528, null));
 		bukgu = siteRepository.save(Site.create("대구 북구 창고", "대구 북구", 35.90, 128.58, null));
 		busan = siteRepository.save(Site.create("부산 신항", "부산 강서구", 35.08, 128.83, null));
 
-		trip = tripRepository.save(Trip.create(created, vehicle, null, "한빛로지스", 450_000, PaymentType.RECEIPT,
-				TripSource.MANUAL, pyeongtaek, now, seongseo, now.plusSeconds(3_600)));
-		trip.start(now);
-		trip.arriveAtPickup();
-		trip.departPickup();
 	}
 
 	@Test
-	void 하차지_근처에서_내_차에_실리고_시간이_맞는_오더를_실수익_순으로_준다() throws Exception {
-		Integer chilgokOrder = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
-		Integer bukguOrder = order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
-		order(busan, 900_000, "TON_5", "WING", now.plus(Duration.ofHours(3)));             // 30km 밖
-		order(chilgok, 500_000, "TON_25", "WING", now.plus(Duration.ofHours(2)));           // 톤수 부족
-		order(chilgok, 500_000, "TON_5", "CARGO", now.plus(Duration.ofHours(2)));           // 차종 다름
-		order(bukgu, 500_000, "TON_5", "WING", now.minus(Duration.ofHours(1)));             // 하차 끝나기 전에 상차 마감
+	void 세운_자리_근처에서_내_차에_실리는_오더를_실수익_순으로_3건까지_준다() throws Exception {
+		Integer first = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		Integer second = order(chilgok, 290_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		Integer third = order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		order(bukgu, 270_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));               // 4등이라 빠진다
+		order(busan, 900_000, "TON_5", "WING", now.plus(Duration.ofHours(3)));               // 30km 밖
+		order(chilgok, 500_000, "TON_25", "WING", now.plus(Duration.ofHours(2)));            // 톤수 부족
+		order(chilgok, 500_000, "TON_5", "CARGO", now.plus(Duration.ofHours(2)));            // 차종 다름
 
 		String body = recommend()
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.freeAt").exists())
-				.andExpect(jsonPath("$.items.length()").value(2))
-				.andExpect(jsonPath("$.items[0].order.id").value(chilgokOrder))
-				.andExpect(jsonPath("$.items[1].order.id").value(bukguOrder))
+				.andExpect(jsonPath("$.items.length()").value(3))
+				.andExpect(jsonPath("$.items[0].order.id").value(first))
+				.andExpect(jsonPath("$.items[1].order.id").value(second))
+				.andExpect(jsonPath("$.items[2].order.id").value(third))
 				.andExpect(jsonPath("$.items[0].order.pickup.name").value("칠곡 물류센터"))
 				.andExpect(jsonPath("$.items[0].longWait").value(false))
 				.andReturn().getResponse().getContentAsString();
 
-		// 실수익 = 운임 − (공차 + 운송) 기름값. 경로를 못 받으면 통행료는 비운다
+		// 실수익 = 운임 − (공차 + 운송) 기름값. 공차는 세운 자리에서 시작한다. 경로를 못 받으면 통행료는 비운다
 		long emptyMeters = ((Number) JsonPath.read(body, "$.items[0].emptyMeters")).longValue();
 		int fuelCost = JsonPath.read(body, "$.items[0].fuelCost");
 		int netProfit = JsonPath.read(body, "$.items[0].netProfit");
@@ -182,53 +173,21 @@ class RecommendationControllerTest {
 	}
 
 	@Test
-	void 안내한_오더는_다시_추천하지_않고_수락하면_배차_요청이_간다() throws Exception {
-		Integer first = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
-		Integer second = order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+	void 운행_상태와_상관없이_세운_자리_기준이고_요청을_걸어_둔_오더는_뺀다() throws Exception {
+		Integer requested = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		Integer other = order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
 
-		answer(first, "NEXT").andExpect(status().isOk()).andExpect(jsonPath("$.answer").value("NEXT"));
+		// 추천에서 눌러 보낸 요청은 isRecommendation으로 남는다
+		mockMvc.perform(post("/api/orders/" + requested + "/requests").header("Authorization", driver)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"isRecommendation\": true}"))
+				.andExpect(status().isCreated());
+		assertThat(requestRepository.findAllByOrderIdOrderByCreatedAtAsc(requested.longValue()).getFirst().isRecommendation()).isTrue();
+
 		recommend().andExpect(jsonPath("$.items.length()").value(1))
-				.andExpect(jsonPath("$.items[0].order.id").value(second));
-
-		answer(second, "ACCEPTED")
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.dispatchRequest.status").value("PENDING"));
-		mockMvc.perform(get("/api/dispatch-requests").header("Authorization", driver))
-				.andExpect(jsonPath("$.length()").value(1))
-				.andExpect(jsonPath("$[0].orderId").value(second));
-		recommend().andExpect(jsonPath("$.items.length()").value(0));
-	}
-
-	@Test
-	void 하차지에_도착하면_안내한_오더도_다시_보여_주고_거절한_것만_뺀다() throws Exception {
-		Integer heard = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
-		Integer rejected = order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
-		Integer other = order(bukgu, 270_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
-
-		answer(heard, null);
-		answer(rejected, "REJECTED");
-		recommend().andExpect(jsonPath("$.items.length()").value(1));
-
-		trip.arriveAtDropoff();
-		recommend().andExpect(jsonPath("$.items.length()").value(2))
-				.andExpect(jsonPath("$.items[0].order.id").value(heard))
-				.andExpect(jsonPath("$.items[1].order.id").value(other));
-	}
-
-	@Test
-	void 한_운행에서_3번_거절하면_더_추천하지_않는다() throws Exception {
-		List<Integer> orders = List.of(
-				order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2))),
-				order(chilgok, 290_000, "TON_5", "WING", now.plus(Duration.ofHours(2))),
-				order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2))),
-				order(bukgu, 270_000, "TON_5", "WING", now.plus(Duration.ofHours(2))));
-
-		answer(orders.get(0), "REJECTED");
-		answer(orders.get(1), "REJECTED");
-		recommend().andExpect(jsonPath("$.items.length()").value(2));
-		answer(orders.get(2), "REJECTED");
-		recommend().andExpect(jsonPath("$.items.length()").value(0))
-				.andExpect(jsonPath("$.freeAt").doesNotExist());
+				.andExpect(jsonPath("$.items[0].order.id").value(other));
+		// 운행이 없어도, 다른 곳에 세워도 그 자리 근처를 준다 (부산 신항 근처에는 없다)
+		mockMvc.perform(get("/api/recommendations").param("lat", "35.08").param("lng", "128.83").header("Authorization", driver))
+				.andExpect(jsonPath("$.items.length()").value(0));
 	}
 
 	@Test
@@ -283,29 +242,16 @@ class RecommendationControllerTest {
 	}
 
 	@Test
-	void 운송을_시작하기_전에는_추천하지_않는다() throws Exception {
-		order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
-		Trip scheduled = tripRepository.save(Trip.create(trip.getDriver(), trip.getVehicle(), null, "한빛로지스",
-				300_000, PaymentType.RECEIPT, TripSource.MANUAL, chilgok, now, seongseo, now.plusSeconds(3_600)));
-
-		mockMvc.perform(get("/api/trips/" + scheduled.getId() + "/recommendations").header("Authorization", driver))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.items.length()").value(0));
-		mockMvc.perform(put("/api/trips/" + scheduled.getId() + "/recommendations/1").header("Authorization", driver)
-						.contentType(MediaType.APPLICATION_JSON).content("{\"answer\": \"NEXT\"}"))
-				.andExpect(status().isConflict());
-		mockMvc.perform(get("/api/trips/" + trip.getId() + "/recommendations").header("Authorization", broker))
+	void 차주만_부르고_좌표가_잘못되면_거부한다() throws Exception {
+		mockMvc.perform(get("/api/recommendations").param("lat", "35.84").param("lng", "128.49").header("Authorization", broker))
 				.andExpect(status().isForbidden());
+		mockMvc.perform(get("/api/recommendations").param("lat", "95").param("lng", "128.49").header("Authorization", driver))
+				.andExpect(status().isBadRequest());
 	}
 
+	/** 대구 성서 공단에 세웠다 */
 	private ResultActions recommend() throws Exception {
-		return mockMvc.perform(get("/api/trips/" + trip.getId() + "/recommendations").header("Authorization", driver));
-	}
-
-	private ResultActions answer(Integer orderId, String answer) throws Exception {
-		return mockMvc.perform(put("/api/trips/" + trip.getId() + "/recommendations/" + orderId)
-				.header("Authorization", driver)
-				.contentType(MediaType.APPLICATION_JSON).content("{\"answer\": " + (answer == null ? "null" : "\"" + answer + "\"") + "}"));
+		return mockMvc.perform(get("/api/recommendations").param("lat", "35.84").param("lng", "128.49").header("Authorization", driver));
 	}
 
 	private ResultActions preference(String json) throws Exception {

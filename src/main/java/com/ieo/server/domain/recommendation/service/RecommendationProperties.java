@@ -8,15 +8,11 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *
  * @param dieselPriceWon      오피넷 경유가를 받지 못했을 때 쓰는 1L 가격(원)
  * @param roadFactor          직선거리에 곱해 도로 거리로 어림하는 값
- * @param averageSpeedKph     공차 이동 시간을 어림하는 평균 속도
- * @param defaultFinishMinutes 하차지 통계가 없을 때 하차 도착부터 끝날 때까지(분)
  * @param longWaitMinutes     상차지 평균 대기가 이 이상이면 "대기 길었던 곳"
  */
 @ConfigurationProperties("ieo.recommendation")
 public record RecommendationProperties(
 		@DefaultValue("1600") int dieselPriceWon,
 		@DefaultValue("1.3") double roadFactor,
-		@DefaultValue("60") double averageSpeedKph,
-		@DefaultValue("60") int defaultFinishMinutes,
 		@DefaultValue("60") int longWaitMinutes) {
 }

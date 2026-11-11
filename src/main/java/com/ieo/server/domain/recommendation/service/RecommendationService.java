@@ -2,160 +2,124 @@ package com.ieo.server.domain.recommendation.service;
 
 import com.ieo.server.domain.broker.dto.BrokerMetricsResponse;
 import com.ieo.server.domain.broker.service.BrokerMetricsService;
-import com.ieo.server.domain.dispatch.dto.CreateDispatchRequestRequest;
-import com.ieo.server.domain.dispatch.dto.DispatchRequestResponse;
 import com.ieo.server.domain.dispatch.dto.OrderResponse;
 import com.ieo.server.domain.dispatch.entity.Order;
 import com.ieo.server.domain.dispatch.repository.DispatchRequestRepository;
 import com.ieo.server.domain.dispatch.repository.OrderRepository;
-import com.ieo.server.domain.dispatch.service.DispatchService;
+import com.ieo.server.domain.document.service.DriverVerification;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
-import com.ieo.server.domain.recommendation.dto.AnswerRecommendationRequest;
-import com.ieo.server.domain.recommendation.dto.RecommendationAnswerResponse;
 import com.ieo.server.domain.recommendation.dto.RecommendationListResponse;
 import com.ieo.server.domain.recommendation.dto.RecommendationPreferenceRequest;
 import com.ieo.server.domain.recommendation.dto.RecommendationPreferenceResponse;
 import com.ieo.server.domain.recommendation.dto.RecommendationResponse;
-import com.ieo.server.domain.recommendation.entity.Recommendation;
 import com.ieo.server.domain.recommendation.entity.RecommendationPreference;
-import com.ieo.server.domain.recommendation.enums.RecommendationAnswer;
 import com.ieo.server.domain.recommendation.repository.RecommendationPreferenceRepository;
-import com.ieo.server.domain.recommendation.repository.RecommendationRepository;
-import com.ieo.server.domain.recommendation.service.EmptyRunEstimator.EmptyRun;
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.site.entity.SiteStats;
 import com.ieo.server.domain.site.repository.SiteStatsRepository;
-import com.ieo.server.domain.trip.entity.Trip;
-import com.ieo.server.domain.trip.entity.TripPosition;
-import com.ieo.server.domain.trip.enums.TripStatus;
-import com.ieo.server.domain.trip.repository.TripRepository;
-import com.ieo.server.domain.trip.service.TripLocationService;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.vehicle.entity.Vehicle;
+import com.ieo.server.domain.vehicle.repository.VehicleRepository;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import com.ieo.server.domain.document.service.DriverVerification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 배차 추천 (03). 지금 운행의 하차지 근처에서 이어서 할 오더를 골라 실수익 순으로 준다.
- * 운송 중(IN_TRANSIT)과 하차지 도착(AT_DROPOFF)일 때만 추천한다. 최종 결정은 차주가 한다: 수락해야 배차 요청이 간다.
- * 흐름과 계산식: docs/design/04_배차추천.md
+ * 배차 추천 (03, 2026-11-11 단순화). 차를 세우면(기어 P 또는 주차 브레이크) 차량 앱이 세운 자리를 보내고,
+ * 그 근처에서 모집 중인 오더를 실수익 높은 순으로 3건 돌려준다. 운행 상태와 상관없이 같다.
+ * 무엇을 보여 줬는지는 기록하지 않는다. 기사님이 눌러 배차를 요청하면 그 요청에 isRecommendation만 남는다.
+ *
+ * 먼저 직선거리로 어림해 상위 10건을 고르고, 그 10건만 TMAP 실제 경로로 다시 계산해 3건을 고른다 (TMAP 호출을 아낀다)
  */
 @Service
-@Transactional
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class RecommendationService {
 
-	static final int MAX_ITEMS = 5;
-	static final int MAX_REJECTIONS = 3;
+	/** 보여 주는 추천 수 */
+	static final int MAX_ITEMS = 3;
+	/** 실제 경로로 다시 계산하는 후보 수 */
+	static final int EXACT_CANDIDATES = 10;
 	private static final int CANDIDATE_LIMIT = 100;
 	private static final Comparator<Candidate> BY_PROFIT = Comparator.comparingInt(Candidate::netProfit).reversed()
 			.thenComparingLong(candidate -> candidate.estimate().emptyMeters());
-	private static final Set<TripStatus> RECOMMENDABLE = Set.of(TripStatus.IN_TRANSIT, TripStatus.AT_DROPOFF);
 
-	private final TripRepository tripRepository;
 	private final DriverRepository driverRepository;
+	private final VehicleRepository vehicleRepository;
 	private final OrderRepository orderRepository;
 	private final DispatchRequestRepository requestRepository;
 	private final SiteStatsRepository siteStatsRepository;
-	private final RecommendationRepository recommendationRepository;
 	private final RecommendationPreferenceRepository preferenceRepository;
-	private final TripLocationService locationService;
-	private final DispatchService dispatchService;
 	private final BrokerMetricsService metricsService;
-	private final EmptyRunEstimator emptyRunEstimator;
 	private final ProfitEstimator profitEstimator;
 	private final RecommendationProperties properties;
 	private final Clock clock;
 	private final DriverVerification driverVerification;
 
-	/** 지금 운행 다음 배차 후보. 추천하지 않는 상태(운송 전, 추천 끔, 3번 거절)면 빈 목록 */
-	@Transactional(readOnly = true)
-	public RecommendationListResponse recommend(Long userId, Long tripId) {
-		Trip trip = findMine(userId, tripId);
-		RecommendationPreference preference = preferenceOf(trip.getDriver());
-		if (!RECOMMENDABLE.contains(trip.getStatus()) || !preference.isEnabled()
-				|| recommendationRepository.countByTripIdAndAnswer(tripId, RecommendationAnswer.REJECTED) >= MAX_REJECTIONS) {
+	/**
+	 * 세운 자리([lat], [lng]) 근처 추천 (REC-001). 기본 차량에 맞고, 제외할 화물이 아니고, 아직 걸어 둔 요청이 없는 오더만.
+	 * 추천을 껐거나 기본 차량이 없으면 빈 목록
+	 */
+	public RecommendationListResponse recommend(Long userId, double lat, double lng) {
+		Driver driver = requireDriver(userId);
+		Site.validateLocation(lat, lng);
+		RecommendationPreference preference = preferenceOf(driver);
+		Optional<Vehicle> found = vehicleRepository.findByDriverUserIdAndDefaultVehicleTrue(userId);
+		if (!preference.isEnabled() || found.isEmpty()) {
 			return RecommendationListResponse.none();
 		}
+		Vehicle vehicle = found.get();
 		Instant now = clock.instant();
-		Site dropoff = trip.dropoff().getSite();
-		Instant freeAt = freeAt(trip, dropoff, now);
-		Vehicle vehicle = trip.getVehicle();
-		Set<Long> skip = skippedOrderIds(userId, trip);
+		// 대기 중·확정·확정 뒤 취소한 요청이 있는 오더는 뺀다. 철회·만료된 것은 다시 보여 준다
+		Set<Long> requested = requestRepository.findAllByDriverUserIdOrderByCreatedAtDesc(userId).stream()
+				.filter(request -> !request.allowsRetry(now))
+				.map(request -> request.getOrder().getId())
+				.collect(Collectors.toSet());
 
-		List<Candidate> candidates = orderRepository.findOpenNear(userId, now, dropoff.getLat(), dropoff.getLng(),
+		List<Candidate> candidates = orderRepository.findOpenNear(userId, now, lat, lng,
 						preference.getRadiusKm() * 1000.0, CANDIDATE_LIMIT).stream()
-				.filter(order -> !skip.contains(order.getId()))
+				.filter(order -> !requested.contains(order.getId()))
 				.filter(order -> order.fits(vehicle))
 				.filter(order -> !preference.excludes(order.getCargoCategory()))
-				.map(order -> candidate(order, dropoff, vehicle))
-				.filter(candidate -> !freeAt.plus(candidate.run().duration()).isAfter(candidate.order().getPickupUntil()))
+				.map(order -> candidate(order, lat, lng, vehicle))
 				.filter(candidate -> meetsMinimum(candidate, preference))
 				.sorted(BY_PROFIT)
-				.limit(MAX_ITEMS)
+				.limit(EXACT_CANDIDATES)
 				.toList();
 		candidates = withExactRoutes(candidates, vehicle).stream()
 				.filter(candidate -> meetsMinimum(candidate, preference))
 				.sorted(BY_PROFIT)
+				.limit(MAX_ITEMS)
 				.toList();
 
 		Map<Long, BrokerMetricsResponse> metrics = metricsService.getAll(
 				candidates.stream().map(candidate -> candidate.order().getBroker().getId()).toList());
 		boolean verified = driverVerification.isVerified(userId);
-		List<RecommendationResponse> items = candidates.stream()
+		return new RecommendationListResponse(candidates.stream()
 				.map(candidate -> new RecommendationResponse(
 						limitUnless(verified, OrderResponse.of(candidate.order(), now, candidate.estimate().emptyMeters(), null, null,
 								metrics.get(candidate.order().getBroker().getId()))),
 						candidate.estimate().emptyMeters(), candidate.estimate().fuelCost(), candidate.netProfit(),
 						isLongWait(candidate.order().getPickupSite()), candidate.estimate().tollFare()))
-				.toList();
-		return new RecommendationListResponse(freeAt, items);
+				.toList());
 	}
 
-	/**
-	 * 안내한 추천과 대답을 적는다 (REC-020~024). 같은 오더를 다시 적으면 대답을 바꾼다.
-	 * 수락이면 이 운행의 차량으로 배차 요청을 보낸다 (REC-023)
-	 */
-	public RecommendationAnswerResponse answer(Long userId, Long tripId, Long orderId, AnswerRecommendationRequest request) {
-		Trip trip = findMine(userId, tripId);
-		if (!RECOMMENDABLE.contains(trip.getStatus())) {
-			throw new BusinessException(ErrorCode.TRIP_INVALID_STATUS);
-		}
-		Order order = orderRepository.findById(orderId)
-				.filter(found -> found.getTargetDriver() == null || found.getTargetDriver().getUserId().equals(userId))
-				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-		RecommendationAnswer answer = request == null ? null : request.answer();
-
-		Recommendation recommendation = recommendationRepository.findByTripIdAndOrderId(tripId, orderId)
-				.orElseGet(() -> recommendationRepository.save(Recommendation.presented(trip, order, clock.instant())));
-		recommendation.answer(answer);
-
-		DispatchRequestResponse dispatchRequest = null;
-		if (answer == RecommendationAnswer.ACCEPTED) {
-			dispatchRequest = dispatchService.request(userId, orderId,
-					new CreateDispatchRequestRequest(trip.getVehicle().getId()));
-		}
-		return new RecommendationAnswerResponse(orderId, answer, dispatchRequest);
-	}
-
-	@Transactional(readOnly = true)
 	public RecommendationPreferenceResponse getPreference(Long userId) {
 		return RecommendationPreferenceResponse.from(preferenceOf(requireDriver(userId)));
 	}
 
+	@Transactional
 	public RecommendationPreferenceResponse changePreference(Long userId, RecommendationPreferenceRequest request) {
 		Driver driver = requireDriver(userId);
 		RecommendationPreference preference = preferenceRepository.findById(userId)
@@ -165,57 +129,17 @@ public class RecommendationService {
 		return RecommendationPreferenceResponse.from(preference);
 	}
 
-	/**
-	 * 하차가 끝날 예정 시각 (REC-002) = 하차지 도착 예정 + 하차지 평균 대기·작업.
-	 * 도착 예정은 차량 앱이 보낸 마지막 위치의 ETA. 이미 도착했거나 ETA가 없으면 지금
-	 */
-	private Instant freeAt(Trip trip, Site dropoff, Instant now) {
-		Instant arrival = trip.getStatus() == TripStatus.AT_DROPOFF ? now
-				: locationService.latest(trip.getId()).flatMap(TripPosition::eta).filter(now::isBefore).orElse(now);
-		Duration finish = siteStatsRepository.findById(dropoff.getId())
-				.filter(SiteStats::hasEnoughSamples)
-				.filter(stats -> stats.getAvgWaitMinutes() != null && stats.getAvgWorkMinutes() != null)
-				.map(stats -> Duration.ofMinutes(stats.getAvgWaitMinutes() + stats.getAvgWorkMinutes()))
-				.orElse(Duration.ofMinutes(properties.defaultFinishMinutes()));
-		return arrival.plus(finish);
-	}
-
-	/**
-	 * 지금 운행의 오더, 이미 배차 요청한 오더는 뺀다.
-	 * 운송 중에는 음성으로 한 건씩 안내하므로 이미 안내한 오더를 빼고,
-	 * 하차지에 서 있을 때는 카드로 5건을 보여 주므로 거절한 오더만 뺀다 (REC-020, 021)
-	 */
-	private Set<Long> skippedOrderIds(Long userId, Trip trip) {
-		Set<Long> skip = new HashSet<>();
-		if (trip.getOrder() != null) {
-			skip.add(trip.getOrder().getId());
-		}
-		boolean stopped = trip.getStatus() == TripStatus.AT_DROPOFF;
-		recommendationRepository.findAllByTripId(trip.getId()).stream()
-				.filter(recommendation -> !stopped || recommendation.getAnswer() == RecommendationAnswer.REJECTED)
-				.forEach(recommendation -> skip.add(recommendation.getOrder().getId()));
-		requestRepository.findAllByDriverUserIdOrderByCreatedAtDesc(userId)
-				.forEach(request -> skip.add(request.getOrder().getId()));
-		return skip;
-	}
-
-	/** 먼저 어림값으로 추리고, 상위 몇 건만 실제 경로로 다시 계산한다 (TMAP 호출을 아낀다) */
-	private Candidate candidate(Order order, Site dropoff, Vehicle vehicle) {
-		EmptyRun run = emptyRunEstimator.estimate(dropoff, order.getPickupSite());
-		return new Candidate(order, run, target(order, dropoff), profitEstimator.rough(target(order, dropoff), vehicle));
-	}
-
-	/** 공차는 하차지에서 시작하므로 하차지 시도의 경유가 */
-	private static ProfitEstimator.Target target(Order order, Site dropoff) {
-		return new ProfitEstimator.Target(order, dropoff.getLat(), dropoff.getLng(), dropoff.getAddress());
+	/** 공차는 세운 자리에서 시작한다. 경유가는 상차지 시도 평균 */
+	private Candidate candidate(Order order, double lat, double lng, Vehicle vehicle) {
+		ProfitEstimator.Target target = new ProfitEstimator.Target(order, lat, lng, order.getPickupSite().getAddress());
+		return new Candidate(order, target, profitEstimator.rough(target, vehicle));
 	}
 
 	private List<Candidate> withExactRoutes(List<Candidate> candidates, Vehicle vehicle) {
 		Map<Long, ProfitEstimator.Estimate> exact = profitEstimator.exact(
 				candidates.stream().map(Candidate::target).toList(), vehicle);
 		return candidates.stream()
-				.map(candidate -> new Candidate(candidate.order(), candidate.run(), candidate.target(),
-						exact.get(candidate.order().getId())))
+				.map(candidate -> new Candidate(candidate.order(), candidate.target(), exact.get(candidate.order().getId())))
 				.toList();
 	}
 
@@ -234,14 +158,6 @@ public class RecommendationService {
 		return preferenceRepository.findById(driver.getUserId()).orElseGet(() -> RecommendationPreference.defaults(driver));
 	}
 
-	/** 남의 운행이면 있는지도 알려 주지 않도록 404 */
-	private Trip findMine(Long userId, Long tripId) {
-		requireDriver(userId);
-		return tripRepository.findById(tripId)
-				.filter(trip -> trip.isOwnedBy(userId))
-				.orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_FOUND));
-	}
-
 	private Driver requireDriver(Long userId) {
 		Driver driver = driverRepository.findById(userId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_DRIVER));
@@ -251,7 +167,7 @@ public class RecommendationService {
 		return driver;
 	}
 
-	private record Candidate(Order order, EmptyRun run, ProfitEstimator.Target target, ProfitEstimator.Estimate estimate) {
+	private record Candidate(Order order, ProfitEstimator.Target target, ProfitEstimator.Estimate estimate) {
 
 		int netProfit() {
 			return estimate.netProfit();
