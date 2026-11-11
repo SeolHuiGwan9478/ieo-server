@@ -41,6 +41,11 @@ ieo:
     app-key: ${TMAP_APP_KEY:}
   opinet:
     api-key: ${OPINET_API_KEY:}
+  # 음성 대답 판별 (UX-025). 차량 앱이 단어 목록으로 못 알아들은 말만 온다. 키나 모델이 비어 있으면 늘 "모름"
+  voice:
+    openrouter:
+      api-key: ${OPENROUTER_API_KEY:}
+      model: ${OPENROUTER_MODEL:}
   # 리포트에서 노선·상하차지를 보여 주는 최소 건수 (BRK-044). 로컬·테스트는 낮춰 둔다
   report:
     min-samples: 10
