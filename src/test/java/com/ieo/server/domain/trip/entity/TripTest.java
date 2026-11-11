@@ -46,7 +46,6 @@ class TripTest {
 		assertThat(trip.pickup().getSite()).isSameAs(pyeongtaek);
 		assertThat(trip.pickup().getPlannedAt()).isEqualTo(T0);
 		assertThat(trip.dropoff().getSite()).isSameAs(daegu);
-		assertThat(trip.isEtaNoticeEnabled()).isTrue();
 		assertThat(trip.getBrokerName()).isEqualTo("한빛로지스");
 	}
 

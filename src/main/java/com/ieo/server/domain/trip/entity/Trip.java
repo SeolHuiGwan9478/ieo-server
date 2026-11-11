@@ -101,10 +101,6 @@ public class Trip extends BaseTimeEntity {
 
 	private Instant canceledAt;
 
-	/** 주선사·수하인에게 ETA 알림을 보낼지 (TRIP-024) */
-	@Column(nullable = false)
-	private boolean etaNoticeEnabled;
-
 	/** 주선사에게 마지막으로 알린 도착 예정 시각과 알린 때. 변경 재알림을 가르는 기준이다 (TRIP-022) */
 	private Instant notifiedEta;
 
@@ -123,7 +119,6 @@ public class Trip extends BaseTimeEntity {
 		this.fare = fare;
 		this.paymentType = paymentType;
 		this.source = source;
-		this.etaNoticeEnabled = true;
 	}
 
 	/** 상차지·하차지와 함께 예약 상태로 만든다. 차량은 이 차주의 차량이어야 한다 */
@@ -202,10 +197,6 @@ public class Trip extends BaseTimeEntity {
 	public void cancel(Instant now) {
 		moveTo(TripStatus.CANCELLED);
 		this.canceledAt = now;
-	}
-
-	public void changeEtaNotice(boolean enabled) {
-		this.etaNoticeEnabled = enabled;
 	}
 
 	public boolean isOwnedBy(Long userId) {

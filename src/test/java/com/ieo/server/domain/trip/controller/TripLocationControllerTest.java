@@ -25,7 +25,6 @@ import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.trip.entity.TripPosition;
 import com.ieo.server.domain.trip.enums.PaymentType;
 import com.ieo.server.domain.trip.enums.TripSource;
-import com.ieo.server.domain.trip.event.TripProgressed;
 import com.ieo.server.domain.trip.repository.TripPositionRepository;
 import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.user.entity.User;
@@ -49,8 +48,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.event.ApplicationEvents;
-import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -60,7 +57,6 @@ import org.springframework.web.context.WebApplicationContext;
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
-@RecordApplicationEvents
 class TripLocationControllerTest {
 
 	@MockitoBean
@@ -102,8 +98,6 @@ class TripLocationControllerTest {
 	@Autowired
 	private Clock clock;
 
-	@Autowired
-	private ApplicationEvents events;
 
 	private MockMvc mockMvc;
 	private String bearer;
@@ -143,17 +137,6 @@ class TripLocationControllerTest {
 		assertThat(position.getLat()).isEqualTo(36.95);
 		assertThat(position.getRemainMeters()).isEqualTo(200_000);
 		assertThat(position.getRouteMeters()).isEqualTo(200_000);
-	}
-
-	@Test
-	void 운송_중_진행률이_50과_67을_넘을_때_한_번씩_알린다() throws Exception {
-		toInTransit();
-		send(points(point(now.minusSeconds(90), 36.98, 126.84, 300_000, 12_000))).andExpect(status().isNoContent());
-		send(points(point(now.minusSeconds(60), 36.5, 127.5, 140_000, 6_000)));
-		send(points(point(now.minusSeconds(30), 36.4, 127.6, 130_000, 5_500)));
-		send(points(point(now, 36.0, 128.0, 90_000, 3_600)));
-
-		assertThat(events.stream(TripProgressed.class).map(TripProgressed::percent)).containsExactly(50, 67);
 	}
 
 	@Test

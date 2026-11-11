@@ -101,7 +101,7 @@ class TripControllerTest {
 				.andExpect(jsonPath("$.pickup.plannedAt").value("2026-11-03T00:00:00Z"))
 				.andExpect(jsonPath("$.pickup.geofenceRadiusM").value(200))
 				.andExpect(jsonPath("$.dropoff.name").value("대구 성서 공단"))
-				.andExpect(jsonPath("$.etaNoticeEnabled").value(true));
+				.andExpect(jsonPath("$.etaNoticeEnabled").doesNotExist());
 	}
 
 	@Test
