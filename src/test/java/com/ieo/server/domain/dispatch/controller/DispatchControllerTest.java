@@ -437,6 +437,41 @@ class DispatchControllerTest {
 	}
 
 	@Test
+	void 늦은_취소를_30일에_3번_하면_7일_동안_배차를_요청할_수_없다() throws Exception {
+		for (int i = 0; i < 3; i++) {
+			Integer soon = idOf(registerOrder(orderJson("TON_5", "WING", "FIRST", null, Instant.now().plus(Duration.ofHours(1)))));
+			Integer tripId = JsonPath.read(request(driver, soon).andReturn().getResponse().getContentAsString(), "$.tripId");
+			mockMvc.perform(post("/api/trips/" + tripId + "/cancel").header("Authorization", driver)
+							.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"SCHEDULE_CONFLICT\"}"))
+					.andExpect(status().isOk());
+		}
+
+		Integer next = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
+		request(driver, next)
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("DISPATCH_403_RESTRICTED"))
+				.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("까지 배차를 요청할 수 없어요")));
+	}
+
+	@Test
+	void 짐을_실은_뒤에는_차주가_앱에서_취소할_수_없다() throws Exception {
+		Integer orderId = idOf(registerOrder(orderJson("TON_5", "WING", "FIRST", null)));
+		Integer tripId = JsonPath.read(request(driver, orderId).andReturn().getResponse().getContentAsString(), "$.tripId");
+		mockMvc.perform(post("/api/trips/" + tripId + "/start").header("Authorization", driver)).andExpect(status().isOk());
+		mockMvc.perform(post("/api/trips/" + tripId + "/stops/PICKUP/wait/arrive").header("Authorization", driver)
+				.contentType(MediaType.APPLICATION_JSON).content("{}"));
+		mockMvc.perform(post("/api/trips/" + tripId + "/stops/PICKUP/wait/depart").header("Authorization", driver)
+				.contentType(MediaType.APPLICATION_JSON).content("{}"));
+		mockMvc.perform(get("/api/trips/" + tripId).header("Authorization", driver))
+				.andExpect(jsonPath("$.status").value("IN_TRANSIT"));
+
+		mockMvc.perform(post("/api/trips/" + tripId + "/cancel").header("Authorization", driver)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"VEHICLE_PROBLEM\"}"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("TRIP_409_LOADED"));
+	}
+
+	@Test
 	void 오더는_한_번만_신고할_수_있다() throws Exception {
 		Integer orderId = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
 

@@ -45,6 +45,9 @@ public class DispatchCanceller {
 			order.closeAfterCancel();
 		}
 		Cancellation cancellation = cancellationRepository.save(Cancellation.of(trip, canceledBy, reason, memo));
+		// TODO(DSP-034, 12 요금제): 크레딧 차감 규칙을 정한 뒤 붙인다.
+		//  차주가 늦게 취소하면(cancellation.isLate()) 차주 크레딧을 돌려주지 않고,
+		//  주선사가 늦게 취소하면 차주 크레딧을 돌려준다
 		// 끝난 운행의 위치는 지운다. 차주 취소는 TripService도 지우지만 주선사 취소는 여기만 지난다
 		locationService.clear(trip);
 		try {

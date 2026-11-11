@@ -28,6 +28,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional
 public class TripService {
+
+	/** 짐을 실은 뒤의 상태. 이에오 배차는 이때 차주가 앱에서 취소하지 못한다 */
+	private static final Set<TripStatus> LOADED = Set.of(TripStatus.IN_TRANSIT, TripStatus.AT_DROPOFF);
 
 	static final int MAX_LIST_SIZE = 50;
 
@@ -137,6 +141,10 @@ public class TripService {
 	public TripResponse cancel(Long userId, Long tripId, CancelTripRequest request) {
 		Trip trip = findMine(userId, tripId);
 		Instant now = clock.instant();
+		// 이에오 배차는 상차한 뒤 앱에서 취소하지 못한다. 짐을 실은 채 버리는 일이라 주선사와 통화해 주선사가 취소한다 (DSP-031)
+		if (trip.getOrder() != null && LOADED.contains(trip.getStatus())) {
+			throw new BusinessException(ErrorCode.TRIP_CANCEL_AFTER_LOADING);
+		}
 		if (trip.getOrder() == null) {
 			trip.cancel(now);
 		} else {

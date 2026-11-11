@@ -100,10 +100,6 @@ public class WaitService {
 		WaitRecord record = WaitRecord.start(stop, arrivedAt, policy);
 		record.record(event(WaitEventType.ARRIVED, arrivedAt, request));
 		record = recordRepository.save(record);
-		if (type == StopType.DROPOFF && trip.getBroker() != null) {
-			brokerNotifier.send(trip.getBroker(), "[이에오] " + trip.getVehicle().getPlateNumber() + " 차량이 "
-					+ stop.getSite().getName() + "에 도착했어요.");
-		}
 		return new Arrival(WaitRecordResponse.from(record), true);
 	}
 

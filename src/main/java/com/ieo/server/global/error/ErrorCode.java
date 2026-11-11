@@ -100,6 +100,7 @@ public enum ErrorCode {
 	DISPATCH_VEHICLE_MISMATCH(HttpStatus.BAD_REQUEST, "DISPATCH_400_VEHICLE", "차종이 오더와 같고 톤수가 오더 이상인 차량만 요청할 수 있어요."),
 	DISPATCH_REQUEST_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "DISPATCH_429_LIMIT", "대기 중인 배차 요청은 3건까지 걸어 둘 수 있어요."),
 	DISPATCH_TOO_FAST(HttpStatus.TOO_MANY_REQUESTS, "DISPATCH_429_FAST", "요청이 너무 빨라요. 1분 뒤에 다시 해 주세요."),
+	DISPATCH_RESTRICTED(HttpStatus.FORBIDDEN, "DISPATCH_403_RESTRICTED", "늦은 취소가 30일에 3번이라 잠시 배차를 요청할 수 없어요."),
 	DISPATCH_ALREADY_REQUESTED(HttpStatus.CONFLICT, "DISPATCH_409_DUPLICATE", "이미 배차를 요청한 오더예요."),
 	DISPATCH_REQUEST_NOT_PENDING(HttpStatus.CONFLICT, "DISPATCH_409_STATUS", "이미 확정됐거나 만료·철회된 요청이에요."),
 
@@ -107,6 +108,7 @@ public enum ErrorCode {
 	TRIP_NOT_FOUND(HttpStatus.NOT_FOUND, "TRIP_404", "운행을 찾을 수 없어요."),
 	TRIP_INVALID_FARE(HttpStatus.BAD_REQUEST, "TRIP_400_FARE", "운임은 0원에서 1억 원 사이로 입력해 주세요."),
 	TRIP_INVALID_STATUS(HttpStatus.CONFLICT, "TRIP_409_STATUS", "지금 운행 상태에서는 할 수 없는 요청이에요."),
+	TRIP_CANCEL_AFTER_LOADING(HttpStatus.CONFLICT, "TRIP_409_LOADED", "짐을 실은 뒤에는 앱에서 취소할 수 없어요. 주선사에게 연락해 주세요."),
 	TRIP_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, "TRIP_409_IN_PROGRESS", "이미 진행 중인 운행이 있습니다. 먼저 끝내거나 취소해 주세요."),
 	TRIP_NO_VEHICLE(HttpStatus.BAD_REQUEST, "TRIP_400_VEHICLE", "운행에 쓸 차량을 먼저 등록해 주세요."),
 	TRIP_NOT_DRIVER(HttpStatus.FORBIDDEN, "TRIP_403_ROLE", "차주 계정만 운행을 등록할 수 있어요."),

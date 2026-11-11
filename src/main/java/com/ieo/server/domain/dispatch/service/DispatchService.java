@@ -2,8 +2,6 @@ package com.ieo.server.domain.dispatch.service;
 
 import com.ieo.server.domain.broker.dto.BrokerMetricsResponse;
 import com.ieo.server.domain.broker.service.BrokerMetricsService;
-import com.ieo.server.domain.recommendation.dto.ProfitEstimateResponse;
-import com.ieo.server.domain.recommendation.service.ProfitEstimator;
 import com.ieo.server.domain.dispatch.dto.CreateDispatchRequestRequest;
 import com.ieo.server.domain.dispatch.dto.CreateOrderReportRequest;
 import com.ieo.server.domain.dispatch.dto.DispatchRequestResponse;
@@ -13,13 +11,16 @@ import com.ieo.server.domain.dispatch.entity.DispatchRequest;
 import com.ieo.server.domain.dispatch.entity.Order;
 import com.ieo.server.domain.dispatch.entity.OrderReport;
 import com.ieo.server.domain.dispatch.enums.ConfirmMode;
-import com.ieo.server.domain.dispatch.event.DispatchRequested;
 import com.ieo.server.domain.dispatch.enums.DispatchRequestStatus;
+import com.ieo.server.domain.dispatch.event.DispatchRequested;
 import com.ieo.server.domain.dispatch.repository.DispatchRequestRepository;
 import com.ieo.server.domain.dispatch.repository.OrderReportRepository;
 import com.ieo.server.domain.dispatch.repository.OrderRepository;
+import com.ieo.server.domain.document.service.DriverVerification;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
+import com.ieo.server.domain.recommendation.dto.ProfitEstimateResponse;
+import com.ieo.server.domain.recommendation.service.ProfitEstimator;
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.trip.repository.TripRepository;
@@ -30,13 +31,14 @@ import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import com.ieo.server.domain.document.service.DriverVerification;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
@@ -58,6 +60,7 @@ public class DispatchService {
 	static final int MAX_RADIUS_M = 300_000;
 	/** 1분 안에 만들 수 있는 요청 수. 넘으면 매크로로 보고 막는다 (DSP-025) */
 	static final int MAX_REQUESTS_PER_MINUTE = 5;
+	private static final DateTimeFormatter UNTIL = DateTimeFormatter.ofPattern("M월 d일 H시 m분").withZone(ZoneId.of("Asia/Seoul"));
 	/** 거리·차량 조건으로 거르기 전에 DB에서 읽는 최대 수 */
 	private static final int CANDIDATE_LIMIT = 500;
 
@@ -74,6 +77,7 @@ public class DispatchService {
 	private final ApplicationEventPublisher events;
 	private final DriverVerification driverVerification;
 	private final RouteFares routeFares;
+	private final LateCancelPenalty lateCancelPenalty;
 	private final com.ieo.server.domain.recommendation.service.EmptyRunCost emptyRunCost;
 
 	/**
@@ -204,6 +208,10 @@ public class DispatchService {
 		Order order = findVisible(userId, orderId);
 		Vehicle vehicle = resolveVehicle(userId, body == null ? null : body.vehicleId());
 		Instant now = clock.instant();
+		lateCancelPenalty.blockedUntil(userId, now).ifPresent(until -> {
+			throw new BusinessException(ErrorCode.DISPATCH_RESTRICTED,
+					"늦은 취소가 30일에 3번이라 " + UNTIL.format(until) + "까지 배차를 요청할 수 없어요.");
+		});
 
 		order.checkRequestable(driver, vehicle, now);
 		// 철회했거나 만료된 요청만 있으면 다시 요청할 수 있다. 확정 뒤 취소한 오더는 다시 받지 않는다
