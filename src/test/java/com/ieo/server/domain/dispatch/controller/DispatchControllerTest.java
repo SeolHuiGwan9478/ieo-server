@@ -80,6 +80,12 @@ class DispatchControllerTest {
 	private JwtProvider jwtProvider;
 
 	@Autowired
+	private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+	@Autowired
+	private jakarta.persistence.EntityManager entityManager;
+
+	@Autowired
 	private TripPositionRepository positionRepository;
 
 	@Autowired
@@ -298,6 +304,21 @@ class DispatchControllerTest {
 		mockMvc.perform(get("/api/broker/orders/" + orderId + "/requests").header("Authorization", broker))
 				.andExpect(jsonPath("$.length()").value(1))
 				.andExpect(jsonPath("$[0].requestId").value(again));
+	}
+
+	@Test
+	void 만료된_요청이_있는_오더도_다시_요청할_수_있다() throws Exception {
+		Integer orderId = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", null)));
+		Integer first = idOf(request(driver, orderId));
+		// 10분이 지나 만료된 것으로 만든다. 상태는 PENDING 그대로 남아 있다
+		entityManager.flush();
+		jdbc.update("update dispatch_requests set created_at = now() - interval '11 minutes' where id = ?", first);
+		entityManager.clear();
+
+		Integer again = idOf(request(driver, orderId).andExpect(status().isCreated()));
+		mockMvc.perform(get("/api/orders/" + orderId).header("Authorization", driver))
+				.andExpect(jsonPath("$.myRequest.id").value(again))
+				.andExpect(jsonPath("$.myRequest.status").value("PENDING"));
 	}
 
 	@Test

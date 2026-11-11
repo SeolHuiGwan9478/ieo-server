@@ -225,6 +225,9 @@ public class DispatchService {
 		}
 
 		before.forEach(request -> request.settleExpiry(now));
+		// Hibernate는 새 줄 저장(insert)을 수정(update)보다 먼저 보낸다. 옛 요청을 먼저 EXPIRED로 써 둬야
+		// "대기 중 요청은 하나" 인덱스에 걸리지 않는다
+		requestRepository.flush();
 		DispatchRequest request;
 		try {
 			request = requestRepository.saveAndFlush(DispatchRequest.create(order, driver, vehicle));
