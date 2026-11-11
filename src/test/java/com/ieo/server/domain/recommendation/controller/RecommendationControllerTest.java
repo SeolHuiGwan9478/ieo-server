@@ -242,6 +242,18 @@ class RecommendationControllerTest {
 	}
 
 	@Test
+	void 새로_더한_화물_종류도_올리고_제외할_수_있다() throws Exception {
+		order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)), "WASTE");
+		order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)), "HEAVY");
+		recommend().andExpect(jsonPath("$.items.length()").value(2))
+				.andExpect(jsonPath("$.items[0].order.cargoCategoryLabel").value("폐기물"));
+
+		preference("{\"enabled\": true, \"radiusKm\": 30, \"excludedCargoCategories\": [\"WASTE\", \"HEAVY\"]}")
+				.andExpect(status().isOk());
+		recommend().andExpect(jsonPath("$.items.length()").value(0));
+	}
+
+	@Test
 	void 차주만_부르고_좌표가_잘못되면_거부한다() throws Exception {
 		mockMvc.perform(get("/api/recommendations").param("lat", "35.84").param("lng", "128.49").header("Authorization", broker))
 				.andExpect(status().isForbidden());
