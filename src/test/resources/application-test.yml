@@ -40,3 +40,8 @@ ieo:
   # 상차 시간 지난 오더 자동 마감은 테스트 중에 돌면 과거 날짜 오더를 쓰는 다른 테스트가 흔들린다. OrderExpirerTest가 직접 부른다
   dispatch:
     auto-expire: false
+  # 휴게소 갱신은 실제 API를 부르지 않는다. RestAreaSyncServiceTest가 가짜 목록으로 직접 부른다
+  rest-area:
+    expressway-key: ""
+    public-data-key: ""
+    auto-sync: false

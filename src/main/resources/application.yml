@@ -39,6 +39,12 @@ ieo:
     app-key: ${TMAP_APP_KEY:}
   opinet:
     api-key: ${OPINET_API_KEY:}
+  # 고속도로 휴게소 (TRIP-032). 일주일에 한 번 받아 rest_areas에 저장한다. 키가 비어 있으면 그 API는 부르지 않는다
+  # 도로공사: 편의시설(샤워실·수면실·세탁실)·화물 휴게소, 표준데이터: 좌표·상하행 (저작자표시)
+  rest-area:
+    expressway-key: ${EX_API_KEY:}
+    public-data-key: ${DATA_GO_KR_KEY:}
+    auto-sync: true
   # 음성 대답 판별 (UX-025). 차량 앱이 단어 목록으로 못 알아들은 말만 온다. 키나 모델이 비어 있으면 늘 "모름"
   voice:
     openrouter:
