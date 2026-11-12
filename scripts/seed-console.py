@@ -264,6 +264,17 @@ class Seed:
                 rid = int(record['id'])
                 self.db.run(f'INSERT INTO extra_incomes (ledger_entry_id,wait_record_id,amount,paid_at,created_at,updated_at)\n      SELECT id,{rid},{amount},paid_at,created_at,updated_at FROM ledger_entries WHERE trip_id={tid} AND broker_id={self.bid}\n      ON CONFLICT (wait_record_id) DO UPDATE SET amount=EXCLUDED.amount,paid_at=EXCLUDED.paid_at;')
 
+    def receipt(self, driver, tid, pickup, i):
+        """최근 완료 운행 6건: 기사님이 휴대폰으로 종이 인수증을 찍어 보낸다 (04 인수증)"""
+        if i >= 6:
+            return
+        proof = api('GET', f'/api/trips/{tid}/delivery-proof', token=driver['token'])
+        if proof['status'] != 'SENT':
+            if not proof['photos']:
+                upload(f'/api/trips/{tid}/delivery-proof/photos', driver['token'], paper_photo())
+            api('POST', f'/api/trips/{tid}/delivery-proof/send', token=driver['token'])
+        self.db.run(f'UPDATE delivery_proofs SET created_at={q(stamp(pickup + timedelta(hours=5)))},sent_at={q(stamp(pickup + timedelta(hours=5, minutes=50 + i % 3 * 10)))} WHERE trip_id IN (SELECT id FROM trips WHERE id={tid} AND broker_id={self.bid});')
+
     def history(self):
         for i, days in enumerate(list(range(1, 11)) + [17 + 10 * j for j in range(14)]):
             driver = self.drivers[i % 4]
@@ -273,20 +284,15 @@ class Seed:
             pickup = (self.now - timedelta(days=days)).replace(hour=7, minute=0)
             self.timeline(oid, tid, pickup)
             if trip['status'] == 'COMPLETED':
+                # 예전 시드로 이미 끝난 운행에도 인수증 사진을 채운다 (서명 방식 때 만든 데이터에는 사진이 없다)
+                self.receipt(driver, tid, pickup, i)
                 self.settle(tid, pickup, i)
                 continue
             if trip['status'] == 'SCHEDULED':
                 api('POST', f'/api/trips/{tid}/start', token=driver['token'])
             self.waits(driver, tid, 'PICKUP', pickup, [45, 90, 150, 210][i % 4], 30)
             self.waits(driver, tid, 'DROPOFF', pickup + timedelta(hours=5), 20 + i % 3 * 10, 25)
-            if i < 6:
-                # 기사님이 휴대폰으로 종이 인수증을 찍어 보낸다 (04 인수증)
-                proof = api('GET', f'/api/trips/{tid}/delivery-proof', token=driver['token'])
-                if proof['status'] != 'SENT':
-                    if not proof['photos']:
-                        upload(f'/api/trips/{tid}/delivery-proof/photos', driver['token'], paper_photo())
-                    api('POST', f'/api/trips/{tid}/delivery-proof/send', token=driver['token'])
-                self.db.run(f'UPDATE delivery_proofs SET created_at={q(stamp(pickup + timedelta(hours=5)))},sent_at={q(stamp(pickup + timedelta(hours=5, minutes=50 + i % 3 * 10)))} WHERE trip_id IN (SELECT id FROM trips WHERE id={tid} AND broker_id={self.bid});')
+            self.receipt(driver, tid, pickup, i)
             self.settle(tid, pickup, i)
             if (i + 1) % 4 == 0:
                 print(f'과거 완료 운행 {i + 1}/24건 준비', flush=True)
