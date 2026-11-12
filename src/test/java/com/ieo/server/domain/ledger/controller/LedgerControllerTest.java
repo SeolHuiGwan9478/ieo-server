@@ -213,8 +213,9 @@ class LedgerControllerTest {
 	void 직접_추가한_줄은_고치고_지울_수_있지만_자동_줄은_지울_수_없다() throws Exception {
 		Integer manualId = JsonPath.read(mockMvc.perform(post("/api/ledger").header("Authorization", bearer)
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"workDate\":\"2026-01-11\",\"description\":\"전화로 받은 일\",\"fare\":300000,\"paymentType\":\"COLLECT\",\"brokerName\":\"동네물류\"}"))
+						.content("{\"workDate\":\"2026-01-11\",\"description\":\"전화로 받은 일\",\"fare\":300000,\"paymentType\":\"COLLECT\",\"brokerName\":\"동네물류\",\"distanceKm\":180}"))
 				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.distanceKm").value(180))
 				.andExpect(jsonPath("$.auto").value(false))
 				.andExpect(jsonPath("$.expectedPaymentDate").value("2026-01-11"))
 				.andExpect(jsonPath("$.brokerName").value("동네물류"))
@@ -222,9 +223,14 @@ class LedgerControllerTest {
 
 		mockMvc.perform(patch("/api/ledger/" + manualId).header("Authorization", bearer)
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"fare\":320000,\"paymentType\":\"RECEIPT\",\"expectedPaymentDate\":\"2026-02-11\"}"))
+						.content("{\"fare\":320000,\"paymentType\":\"RECEIPT\",\"expectedPaymentDate\":\"2026-02-11\",\"distanceKm\":195}"))
 				.andExpect(jsonPath("$.fare").value(320000))
-				.andExpect(jsonPath("$.paymentTypeLabel").value("인수증"));
+				.andExpect(jsonPath("$.paymentTypeLabel").value("인수증"))
+				.andExpect(jsonPath("$.distanceKm").value(195));
+		mockMvc.perform(patch("/api/ledger/" + manualId).header("Authorization", bearer)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"fare\":320000,\"paymentType\":\"RECEIPT\",\"expectedPaymentDate\":\"2026-02-11\",\"distanceKm\":4000}"))
+				.andExpect(status().isBadRequest());
 		mockMvc.perform(delete("/api/ledger/" + manualId).header("Authorization", bearer))
 				.andExpect(status().isNoContent());
 
@@ -237,6 +243,11 @@ class LedgerControllerTest {
 						.contentType(MediaType.APPLICATION_JSON).content("{\"distanceKm\":312}"))
 				.andExpect(jsonPath("$.distanceKm").value(312))
 				.andReturn().getResponse().getContentAsString(), "$.id");
+		// 자동으로 잰 거리도 손으로 고친다
+		mockMvc.perform(patch("/api/ledger/" + autoId).header("Authorization", bearer)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"fare\":450000,\"paymentType\":\"RECEIPT\",\"expectedPaymentDate\":\"2026-02-11\",\"distanceKm\":305}"))
+				.andExpect(jsonPath("$.distanceKm").value(305));
 		mockMvc.perform(delete("/api/ledger/" + autoId).header("Authorization", bearer))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("LEDGER_409_AUTO"));

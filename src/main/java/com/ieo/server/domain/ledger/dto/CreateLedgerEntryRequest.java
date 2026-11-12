@@ -13,5 +13,7 @@ public record CreateLedgerEntryRequest(
 		@NotNull Integer fare,
 		@NotNull PaymentType paymentType,
 		@Size(max = 50) String brokerName,
-		LocalDate expectedPaymentDate) {
+		LocalDate expectedPaymentDate,
+		/** 주행거리(km). 모르면 비운다 */
+		Integer distanceKm) {
 }

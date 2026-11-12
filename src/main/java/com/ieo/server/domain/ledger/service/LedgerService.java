@@ -71,15 +71,17 @@ public class LedgerService {
 	/** 직접 추가 (LEDG-004) */
 	public LedgerEntryResponse addManual(Long userId, CreateLedgerEntryRequest request) {
 		Driver driver = requireDriver(userId);
-		LedgerEntry entry = entryRepository.save(LedgerEntry.manual(driver, request.workDate(), request.description(),
-				request.fare(), request.paymentType(), request.brokerName(), request.expectedPaymentDate()));
-		return toResponse(entry);
+		LedgerEntry entry = LedgerEntry.manual(driver, request.workDate(), request.description(),
+				request.fare(), request.paymentType(), request.brokerName(), request.expectedPaymentDate());
+		entry.changeDistance(request.distanceKm());
+		return toResponse(entryRepository.save(entry));
 	}
 
-	/** 운임·결제 방식·지급 예정일 고치기 (LEDG-003) */
+	/** 운임·결제 방식·지급 예정일·주행거리 고치기 (LEDG-003) */
 	public LedgerEntryResponse update(Long userId, Long entryId, UpdateLedgerEntryRequest request) {
 		LedgerEntry entry = findMine(userId, entryId);
 		entry.edit(request.fare(), request.paymentType(), request.expectedPaymentDate());
+		entry.changeDistance(request.distanceKm());
 		metricsCalculator.recalculate(entry.getTrip());
 		return toResponse(entry);
 	}
