@@ -7,6 +7,7 @@
 - 서버 주소는 IEO_API_BASE 환경변수로 바꾼다 (기본 http://localhost:8080). 주선사 번호는 IEO_SEED_BROKER_PHONE
 - 차주(010-1234-5678, 5톤 카고)와 주선사(010-9876-5432, 회사·대기비 정책)를 만든다. 이미 있으면 로그인한다
 - 모집 중인 주선사 오더가 없으면(전에 올린 오더는 상차 시간이 지나면 마감된다) 오늘·내일 상차로 4건 올린다
+- 상하차지 5곳에 높이 제한·지게차·주차·메모를 남긴다 (이미 정보가 있는 곳은 건너뜀)
 - 차주에게 예약된 운행이 없으면 오더 하나를 요청하고 주선사가 확정한다
 - 지급일 지난 장부가 없으면 직접 추가한 지난 운행 2줄을 넣는다. 하나는 지급일이 지나 미수금 경고에 나온다
 
@@ -117,6 +118,44 @@ def site(name, address, lat, lng):
     return {"site": {"name": name, "address": address, "lat": lat, "lng": lng}}
 
 
+# 상하차지 현장 정보 (05 상하차지). 처음부터 카드가 비어 보이지 않게 넣는다.
+# 차는 5톤 카고 높이 3.6m: 이천(3.5m)은 "높이 제한보다 높아요", 김포(3.7m)는 "20센티 안쪽" 경고가 나온다
+SITE_INFO = {
+    "평택 물류센터": ({"HEIGHT_LIMIT": "4.0", "FORKLIFT": "true", "PARKING": "true"},
+                ["정문 말고 2번 게이트로 들어가요", "지게차 기사 점심시간은 12시부터 1시예요"]),
+    "이천 냉동창고": ({"HEIGHT_LIMIT": "3.5", "FORKLIFT": "true", "PARKING": "false"},
+                ["진입로가 좁아서 후진으로 대야 해요"]),
+    "대전 산업단지": ({"FORKLIFT": "false", "PARKING": "true"},
+                ["수작업 하차라 시간 넉넉히 잡으세요"]),
+    "부산 신항 CY": ({"FORKLIFT": "true"},
+                 ["반입 예약 시간을 꼭 지켜야 해요"]),
+    "김포 한강 물류": ({"HEIGHT_LIMIT": "3.7", "FORKLIFT": "true", "PARKING": "true"},
+                 ["오후 4시 넘으면 하차를 안 받아요"]),
+}
+
+
+def fill_site_info(token, sites, tag=""):
+    """오더를 올려 생긴 상하차지에 높이 제한·지게차·주차·메모를 남긴다. 이미 정보가 있는 곳은 건너뛴다"""
+    filled = []
+    for entry in sites:
+        info = entry["site"]
+        name = info["name"][len(tag):]
+        attributes, notes = SITE_INFO[name]
+        nearby = call("GET", f"/api/sites/nearby?lat={info['lat']}&lng={info['lng']}&radiusM=200", token=token)
+        match = next((s for s in nearby if s["name"] == info["name"]), None)
+        if match is None:
+            continue
+        card = call("GET", f"/api/sites/{match['id']}", token=token)
+        if card.get("notes") or (card.get("attributes") or {}).get("updatedAt"):
+            continue
+        for key, value in attributes.items():
+            call("POST", f"/api/sites/{match['id']}/attributes", {"key": key, "value": value}, token=token)
+        for text in notes:
+            call("POST", f"/api/sites/{match['id']}/notes", {"text": text}, token=token)
+        filled.append(name)
+    return filled
+
+
 def kst(day, hour, minute=0):
     return datetime(day.year, day.month, day.day, hour, minute, tzinfo=KST).astimezone(timezone.utc) \
         .isoformat().replace("+00:00", "Z")
@@ -184,6 +223,9 @@ def main():
     else:
         ids = [call("POST", "/api/broker/orders", body, token=broker)["id"] for body in orders]
         print("오더 등록", len(ids), "건:", ids)
+
+    filled = fill_site_info(driver, [pyeongtaek, icheon, daejeon, busan, gimpo])
+    print("상하차지 현장 정보:", ", ".join(filled) if filled else "이미 있어 건너뜀")
 
     trips = call("GET", "/api/trips", token=driver)
     trip_items = trips if isinstance(trips, list) else trips.get("items", [])

@@ -10,6 +10,7 @@
   승인 전에는 오더를 올릴 수 없다 (07 운영자 서류심사 인계 13장)
 - 시연 차주의 필수 서류 4종도 같은 방법으로 올리고 승인한다. 승인 전에는 배차를 요청할 수 없다
 - 모집 중인 시연 오더가 없으면 오늘·내일 상차로 4건 올린다 (상차 시간이 지나면 마감되니 시연 전날 다시 돌린다)
+- 시연 상하차지 5곳에 높이 제한·지게차·주차·메모를 남긴다 (이미 있으면 건너뜀)
 - 시연 차주에게 예약된 운행이 없으면 오더 하나를 요청하고 시연 주선사가 확정한다
 - 지급일 지난 장부가 없으면 지난 운행 2줄을 넣는다
 
@@ -169,6 +170,9 @@ def main():
     else:
         ids = [call("POST", "/api/broker/orders", body, token=broker)["id"] for body in orders]
         print("시연 오더 등록", len(ids), "건")
+
+    filled = base.fill_site_info(driver, [pyeongtaek, icheon, daejeon, busan, gimpo], tag=TAG)
+    print("상하차지 현장 정보:", ", ".join(filled) if filled else "이미 있어 건너뜀")
 
     trips = call("GET", "/api/trips", token=driver)
     items = trips if isinstance(trips, list) else trips.get("items", [])
