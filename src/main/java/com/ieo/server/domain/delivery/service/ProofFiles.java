@@ -3,36 +3,16 @@ package com.ieo.server.domain.delivery.service;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.io.IOException;
-import java.util.Base64;
 import org.springframework.web.multipart.MultipartFile;
 
-/** 서명 이미지·사진 검사. content type만 믿지 않고 파일 앞부분(매직 바이트)으로 PNG·JPG인지 본다 */
+/** 인수증 사진 검사. content type만 믿지 않고 파일 앞부분(매직 바이트)으로 PNG·JPG인지 본다 */
 final class ProofFiles {
 
 	static final String PNG = "image/png";
 	static final String JPEG = "image/jpeg";
-	private static final String PNG_DATA_URL = "data:image/png;base64,";
-	private static final int MAX_SIGNATURE_BYTES = 300 * 1024;
 	private static final long MAX_PHOTO_BYTES = 5L * 1024 * 1024;
 
 	private ProofFiles() {
-	}
-
-	/** 서명 캔버스의 PNG data URL을 바이트로 */
-	static byte[] decodeSignature(String dataUrl) {
-		if (dataUrl == null || !dataUrl.startsWith(PNG_DATA_URL)) {
-			throw new BusinessException(ErrorCode.DELIVERY_INVALID_FILE);
-		}
-		byte[] bytes;
-		try {
-			bytes = Base64.getDecoder().decode(dataUrl.substring(PNG_DATA_URL.length()));
-		} catch (IllegalArgumentException e) {
-			throw new BusinessException(ErrorCode.DELIVERY_INVALID_FILE);
-		}
-		if (bytes.length == 0 || bytes.length > MAX_SIGNATURE_BYTES || !PNG.equals(detect(bytes))) {
-			throw new BusinessException(ErrorCode.DELIVERY_INVALID_FILE);
-		}
-		return bytes;
 	}
 
 	record Photo(byte[] content, String contentType) {

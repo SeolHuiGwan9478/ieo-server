@@ -5,7 +5,10 @@ import com.ieo.server.domain.broker.dto.BrokerTripResponse;
 import com.ieo.server.domain.broker.enums.BrokerTripTab;
 import com.ieo.server.domain.broker.service.BrokerTripService;
 import com.ieo.server.global.auth.AuthInterceptor;
+import com.ieo.server.global.storage.FileStorage;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestAttribute;
@@ -34,5 +37,13 @@ public class BrokerTripController {
 	@GetMapping("/{tripId}")
 	public BrokerTripResponse getTrip(@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @PathVariable Long tripId) {
 		return tripService.getTrip(userId, tripId);
+	}
+
+	/** 차주가 보낸 종이 인수증 사진. 보내기 전이면 404 */
+	@GetMapping("/{tripId}/receipt-photos/{photoId}")
+	public ResponseEntity<byte[]> receiptPhoto(
+			@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @PathVariable Long tripId, @PathVariable Long photoId) {
+		FileStorage.StoredFile file = tripService.receiptPhoto(userId, tripId, photoId);
+		return ResponseEntity.ok().contentType(MediaType.parseMediaType(file.contentType())).body(file.content());
 	}
 }

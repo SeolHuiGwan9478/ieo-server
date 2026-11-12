@@ -1,10 +1,10 @@
 package com.ieo.server.domain.delivery.controller;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -26,14 +26,11 @@ import com.ieo.server.domain.vehicle.repository.VehicleRepository;
 import com.ieo.server.global.auth.JwtProvider;
 import com.ieo.server.global.util.KoreanDate;
 import com.jayway.jsonpath.JsonPath;
-import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -50,7 +47,6 @@ class DeliveryProofControllerTest {
 	/** PNG 파일 앞부분(매직 바이트) + 내용 */
 	private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3};
 	private static final byte[] JPG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 4, 5, 6};
-	private static final String SIGNATURE = "data:image/png;base64," + Base64.getEncoder().encodeToString(PNG);
 
 	@Autowired
 	private WebApplicationContext context;
@@ -92,136 +88,109 @@ class DeliveryProofControllerTest {
 	}
 
 	@Test
-	void 수하인_서명_페이지는_로그인_없이_열린다() throws Exception {
-		mockMvc.perform(get("/r/아무토큰"))
-				.andExpect(status().isOk())
-				.andExpect(forwardedUrl("/receipt.html"));
-	}
+	void 하차지에서_종이_인수증_사진을_올리고_보내면_지급_예정일이_보낸_날부터_잡힌다() throws Exception {
+		Trip trip = tripAtDropoff(PaymentType.RECEIPT);
 
-	@Test
-	void 수하인이_링크로_서명하면_운행이_끝나고_지급_예정일이_서명일부터_잡힌다() throws Exception {
-		Trip trip = tripAtDropoff();
+		proof(trip)
+				.andExpect(jsonPath("$.required").value(true))
+				.andExpect(jsonPath("$.status").value("NONE"))
+				.andExpect(jsonPath("$.canUpload").value(true))
+				.andExpect(jsonPath("$.photos.length()").value(0));
+		upload(trip, JPG).andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("PENDING"));
+		String body = upload(trip, PNG)
+				.andExpect(jsonPath("$.photos.length()").value(2))
+				.andReturn().getResponse().getContentAsString();
 
-		String token = tokenOf(issue(trip, "{\"lat\":35.84,\"lng\":128.49}")
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.status").value("PENDING"))
-				.andExpect(jsonPath("$.path").exists()));
-		issue(trip, null).andExpect(status().isOk()).andExpect(jsonPath("$.token").value(token));
-		// QR에는 수하인 서명 페이지 주소가 들어간다
-		issue(trip, null).andExpect(jsonPath("$.path").value("/r/" + token));
-
-		mockMvc.perform(get("/api/public/delivery-proofs/" + token))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.pickupSiteName").value("평택 포승 물류센터"))
-				.andExpect(jsonPath("$.dropoffAddress").value("대구 달서구 성서로 1"))
-				.andExpect(jsonPath("$.plateNumber").value("경기82사1234"))
-				.andExpect(jsonPath("$.brokerName").value("동네물류"))
-				.andExpect(jsonPath("$.expiresAt").doesNotExist());
-
-		sign(token, "{\"signerName\":\"김수하\",\"signature\":\"" + SIGNATURE + "\",\"issueNote\":\"박스 1개 찌그러짐\"}")
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.status").value("SIGNED"))
-				.andExpect(jsonPath("$.signerName").value("김수하"))
-				.andExpect(jsonPath("$.issueNote").value("박스 1개 찌그러짐"))
-				.andExpect(jsonPath("$.signaturePath").exists())
-				.andExpect(jsonPath("$.expiresAt").exists());
-
-		mockMvc.perform(get("/api/trips/" + trip.getId()).header("Authorization", bearer))
-				.andExpect(jsonPath("$.status").value("COMPLETED"));
-		String today = KoreanDate.of(Instant.now()).toString();
-		mockMvc.perform(get("/api/ledger").header("Authorization", bearer).param("from", today).param("to", today))
-				.andExpect(jsonPath("$[0].expectedPaymentDate").value(KoreanDate.of(Instant.now()).plusDays(30).toString()));
-		mockMvc.perform(get("/api/public/delivery-proofs/" + token + "/signature"))
-				.andExpect(status().isOk())
+		String path = JsonPath.read(body, "$.photos[1].path");
+		mockMvc.perform(get(path).header("Authorization", bearer))
 				.andExpect(content().contentType("image/png"))
 				.andExpect(content().bytes(PNG));
-		mockMvc.perform(get("/api/trips/" + trip.getId() + "/delivery-proof").header("Authorization", bearer))
-				.andExpect(jsonPath("$.status").value("SIGNED"));
+
+		Integer first = JsonPath.read(body, "$.photos[0].id");
+		mockMvc.perform(delete("/api/trips/" + trip.getId() + "/delivery-proof/photos/" + first).header("Authorization", bearer))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.photos.length()").value(1));
+
+		completeTrip(trip);
+		send(trip).andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("SENT"))
+				.andExpect(jsonPath("$.sentAt").exists())
+				.andExpect(jsonPath("$.canUpload").value(false));
+
+		String today = KoreanDate.of(Instant.now()).toString();
+		mockMvc.perform(get("/api/ledger").header("Authorization", bearer).param("from", today).param("to", today))
+				.andExpect(jsonPath("$[0].expectedPaymentDate").value(KoreanDate.of(Instant.now()).plusDays(30).toString()))
+				.andExpect(jsonPath("$[0].receiptSentAt").exists());
 	}
 
 	@Test
-	void 두_번_서명하거나_서명이_PNG가_아니면_거부한다() throws Exception {
-		String token = tokenOf(issue(tripAtDropoff(), null));
+	void 보낸_뒤에는_사진을_바꾸거나_다시_보낼_수_없다() throws Exception {
+		Trip trip = tripAtDropoff(PaymentType.RECEIPT);
+		String body = upload(trip, JPG).andReturn().getResponse().getContentAsString();
+		Integer photoId = JsonPath.read(body, "$.photos[0].id");
+		send(trip).andExpect(status().isOk());
 
-		sign(token, "{\"signature\":\"data:image/jpeg;base64," + Base64.getEncoder().encodeToString(JPG) + "\"}")
+		upload(trip, JPG).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DELIVERY_409_SENT"));
+		send(trip).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DELIVERY_409_SENT"));
+		mockMvc.perform(delete("/api/trips/" + trip.getId() + "/delivery-proof/photos/" + photoId).header("Authorization", bearer))
+				.andExpect(jsonPath("$.code").value("DELIVERY_409_SENT"));
+	}
+
+	@Test
+	void 사진_없이는_보낼_수_없고_사진은_다섯_장까지다() throws Exception {
+		Trip trip = tripAtDropoff(PaymentType.RECEIPT);
+		send(trip).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DELIVERY_409_NO_PHOTO"));
+
+		for (int i = 0; i < 5; i++) {
+			upload(trip, JPG).andExpect(status().isOk());
+		}
+		proof(trip).andExpect(jsonPath("$.canUpload").value(false));
+		upload(trip, JPG).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("DELIVERY_400_PHOTO_LIMIT"));
+		upload(trip, "not an image".getBytes()).andExpect(jsonPath("$.code").value("DELIVERY_400_PHOTO_LIMIT"));
+	}
+
+	@Test
+	void 사진이_아니면_거부한다() throws Exception {
+		upload(tripAtDropoff(PaymentType.RECEIPT), "not an image".getBytes())
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("DELIVERY_400_FILE"));
-		sign(token, "{\"signature\":\"data:image/png;base64,!!!\"}")
-				.andExpect(jsonPath("$.code").value("DELIVERY_400_FILE"));
-		sign(token, "{\"signature\":\"" + SIGNATURE + "\"}").andExpect(status().isOk());
-		sign(token, "{\"signature\":\"" + SIGNATURE + "\"}")
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("DELIVERY_409_SIGNED"));
 	}
 
 	@Test
-	void 수하인은_이상_사항_사진을_올리고_볼_수_있다() throws Exception {
-		String token = tokenOf(issue(tripAtDropoff(), null));
+	void 인수증_결제가_아니거나_하차지_전이거나_취소된_운행은_받지_않는다() throws Exception {
+		Trip prepaid = tripAtDropoff(PaymentType.PREPAID);
+		proof(prepaid).andExpect(jsonPath("$.required").value(false)).andExpect(jsonPath("$.canUpload").value(false));
+		upload(prepaid, JPG).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DELIVERY_409_NOT_RECEIPT"));
 
-		String body = mockMvc.perform(multipart("/api/public/delivery-proofs/" + token + "/photos")
-						.file(new MockMultipartFile("file", "damage.jpg", "image/jpeg", JPG)))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.photos.length()").value(1))
-				.andExpect(jsonPath("$.photos[0].type").value("ISSUE"))
-				.andExpect(jsonPath("$.status").value("PENDING"))
-				.andReturn().getResponse().getContentAsString();
-		String path = JsonPath.read(body, "$.photos[0].path");
-		mockMvc.perform(get(path))
-				.andExpect(content().contentType("image/jpeg"))
-				.andExpect(content().bytes(JPG));
+		Trip early = Trip.create(driver, vehicle, null, "동네물류", 450_000, PaymentType.RECEIPT, TripSource.MANUAL,
+				pyeongtaek, null, daegu, null);
+		early.start(Instant.now());
+		tripRepository.save(early);
+		proof(early).andExpect(jsonPath("$.canUpload").value(false));
+		upload(early, JPG).andExpect(jsonPath("$.code").value("DELIVERY_409_TOO_EARLY"));
 
-		mockMvc.perform(multipart("/api/public/delivery-proofs/" + token + "/photos")
-						.file(new MockMultipartFile("file", "note.txt", "image/jpeg", "not an image".getBytes())))
-				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("DELIVERY_400_FILE"));
-	}
-
-	@Test
-	void 서명을_못_받으면_차주가_종이_인수증_사진으로_대신한다() throws Exception {
-		Trip trip = tripAtDropoff();
-		issue(trip, null);
-
-		mockMvc.perform(multipart("/api/trips/" + trip.getId() + "/delivery-proof/paper-photos")
-						.file(new MockMultipartFile("file", "paper.jpg", "image/jpeg", JPG))
-						.header("Authorization", bearer))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.status").value("PHOTO"))
-				.andExpect(jsonPath("$.photos[0].type").value("PAPER"));
-		mockMvc.perform(get("/api/trips/" + trip.getId()).header("Authorization", bearer))
-				.andExpect(jsonPath("$.status").value("COMPLETED"));
-	}
-
-	@Test
-	void 운행이_끝나고_7일이_지나면_링크가_만료된다() throws Exception {
-		Trip trip = tripAtDropoff();
-		String token = tokenOf(issue(trip, null));
-		trip.complete(Instant.now().minus(Duration.ofDays(8)));
-		tripRepository.flush();
-
-		mockMvc.perform(get("/api/public/delivery-proofs/" + token))
-				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("DELIVERY_404"));
-		mockMvc.perform(get("/api/public/delivery-proofs/없는토큰"))
-				.andExpect(status().isNotFound());
-	}
-
-	@Test
-	void 취소된_운행과_남의_운행은_인수증을_받을_수_없다() throws Exception {
-		Trip cancelled = tripAtDropoff();
+		Trip cancelled = tripAtDropoff(PaymentType.RECEIPT);
 		cancelled.cancel(Instant.now());
-		issue(cancelled, null)
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("DELIVERY_409_CANCELLED"));
+		upload(cancelled, JPG).andExpect(jsonPath("$.code").value("DELIVERY_409_CANCELLED"));
+	}
+
+	@Test
+	void 남의_운행_인수증은_볼_수_없다() throws Exception {
+		Trip trip = tripAtDropoff(PaymentType.RECEIPT);
+		String body = upload(trip, JPG).andReturn().getResponse().getContentAsString();
+		String path = JsonPath.read(body, "$.photos[0].path");
 
 		User other = userRepository.save(User.create("01090001802", UserRole.DRIVER));
 		driverRepository.save(Driver.of(other));
-		mockMvc.perform(post("/api/trips/" + tripAtDropoff().getId() + "/delivery-proof")
-						.header("Authorization", "Bearer " + jwtProvider.issue(other.getId()).accessToken()))
+		String otherBearer = "Bearer " + jwtProvider.issue(other.getId()).accessToken();
+		mockMvc.perform(get("/api/trips/" + trip.getId() + "/delivery-proof").header("Authorization", otherBearer))
 				.andExpect(status().isNotFound());
+		mockMvc.perform(get(path).header("Authorization", otherBearer)).andExpect(status().isNotFound());
 	}
 
-	private Trip tripAtDropoff() {
-		Trip trip = Trip.create(driver, vehicle, null, "동네물류", 450_000, PaymentType.RECEIPT, TripSource.MANUAL,
+	private Trip tripAtDropoff(PaymentType paymentType) {
+		Trip trip = Trip.create(driver, vehicle, null, "동네물류", 450_000, paymentType, TripSource.MANUAL,
 				pyeongtaek, null, daegu, null);
 		trip.start(Instant.now().minusSeconds(6 * 3600));
 		trip.arriveAtPickup();
@@ -230,20 +199,22 @@ class DeliveryProofControllerTest {
 		return tripRepository.save(trip);
 	}
 
-	private ResultActions issue(Trip trip, String json) throws Exception {
-		var request = post("/api/trips/" + trip.getId() + "/delivery-proof").header("Authorization", bearer);
-		if (json != null) {
-			request.contentType(MediaType.APPLICATION_JSON).content(json);
-		}
-		return mockMvc.perform(request);
+	private void completeTrip(Trip trip) throws Exception {
+		mockMvc.perform(post("/api/trips/" + trip.getId() + "/complete").header("Authorization", bearer))
+				.andExpect(status().isOk());
 	}
 
-	private ResultActions sign(String token, String json) throws Exception {
-		return mockMvc.perform(post("/api/public/delivery-proofs/" + token + "/sign")
-				.contentType(MediaType.APPLICATION_JSON).content(json));
+	private ResultActions proof(Trip trip) throws Exception {
+		return mockMvc.perform(get("/api/trips/" + trip.getId() + "/delivery-proof").header("Authorization", bearer));
 	}
 
-	private String tokenOf(ResultActions result) throws Exception {
-		return JsonPath.read(result.andReturn().getResponse().getContentAsString(), "$.token");
+	private ResultActions upload(Trip trip, byte[] content) throws Exception {
+		return mockMvc.perform(multipart("/api/trips/" + trip.getId() + "/delivery-proof/photos")
+				.file(new MockMultipartFile("file", "paper.jpg", "image/jpeg", content))
+				.header("Authorization", bearer));
+	}
+
+	private ResultActions send(Trip trip) throws Exception {
+		return mockMvc.perform(post("/api/trips/" + trip.getId() + "/delivery-proof/send").header("Authorization", bearer));
 	}
 }

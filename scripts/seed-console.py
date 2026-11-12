@@ -6,7 +6,6 @@
 """
 import argparse
 import importlib.util
-import base64
 import json
 import os
 from pathlib import Path
@@ -106,24 +105,29 @@ def login(db, phone, role, name, vehicle=None):
         body['vehicle'] = vehicle
     return api('POST', '/api/auth/signup', body)['accessToken']
 
-def signature():
-    width, height = (220, 70)
-    pixels = bytearray([255] * width * height * 3)
-    points = [(15, 48), (40, 17), (31, 54), (70, 25), (57, 47), (102, 28), (94, 51), (147, 20), (137, 47), (202, 39)]
-    for (x1, y1), (x2, y2) in zip(points, points[1:]):
-        steps = max(abs(x2 - x1), abs(y2 - y1))
-        for i in range(steps + 1):
-            x, y = (round(x1 + (x2 - x1) * i / steps), round(y1 + (y2 - y1) * i / steps))
-            for dx in range(-1, 2):
-                for dy in range(-1, 2):
-                    p = ((y + dy) * width + x + dx) * 3
-                    pixels[p:p + 3] = bytes([35, 52, 76])
+def paper_photo():
+    """종이 인수증처럼 보이는 PNG: 흰 종이에 글줄 몇 개"""
+    width, height = (240, 320)
+    pixels = bytearray([250, 248, 240] * width * height)
+    for line in range(9):
+        y0 = 40 + line * 28
+        right = 150 if line % 3 == 2 else 210
+        for y in range(y0, y0 + 6):
+            for x in range(25, right):
+                p = (y * width + x) * 3
+                pixels[p:p + 3] = bytes([90, 90, 90])
 
     def chunk(kind, data):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 4294967295)
     raw = b''.join((b'\x00' + pixels[y * width * 3:(y + 1) * width * 3] for y in range(height)))
-    png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
-    return 'data:image/png;base64,' + base64.b64encode(png).decode()
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+
+def upload(path, token, content, filename='paper.png', content_type='image/png'):
+    boundary = 'ieo-seed-boundary'
+    body = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\nContent-Type: {content_type}\r\n\r\n').encode() + content + f'\r\n--{boundary}--\r\n'.encode()
+    request = urllib.request.Request(BASE + path, data=body, method='POST', headers={'Authorization': 'Bearer ' + token, 'Content-Type': f'multipart/form-data; boundary={boundary}'})
+    with urllib.request.urlopen(request) as response:
+        return json.loads(response.read())
 
 class Seed:
 
@@ -248,7 +252,7 @@ class Seed:
             record = api('POST', f'/api/trips/{tid}/stops/{kind}/wait/work-start', {'at': stamp(arrived + timedelta(minutes=wait))}, token)
         if depart and (not record['departedAt']):
             api('POST', f'/api/trips/{tid}/stops/{kind}/wait/depart', {'at': stamp(arrived + timedelta(minutes=(wait or 0) + work))}, token)
-        api('POST', f'/api/trips/{tid}/stops/{kind}/wait/proof', token=token)
+        api('POST', f'/api/trips/{tid}/wait-proof', token=token)
 
     def settle(self, tid, pickup, i):
         paid = pickup + timedelta(days=[25, 35, 20, 30][i % 4], hours=8)
@@ -276,10 +280,13 @@ class Seed:
             self.waits(driver, tid, 'PICKUP', pickup, [45, 90, 150, 210][i % 4], 30)
             self.waits(driver, tid, 'DROPOFF', pickup + timedelta(hours=5), 20 + i % 3 * 10, 25)
             if i < 6:
-                proof = api('POST', f'/api/trips/{tid}/delivery-proof', {}, driver['token'])
-                if not proof['signedAt']:
-                    api('POST', f"/api/public/delivery-proofs/{proof['token']}/sign", {'signerName': '시연 수하인', 'signature': signature(), 'issueNote': '시연용 인수 확인'})
-                self.db.run(f'UPDATE delivery_proofs SET created_at={q(stamp(pickup + timedelta(hours=5)))},signed_at={q(stamp(pickup + timedelta(hours=5, minutes=50 + i % 3 * 10)))} WHERE trip_id IN (SELECT id FROM trips WHERE id={tid} AND broker_id={self.bid});')
+                # 기사님이 휴대폰으로 종이 인수증을 찍어 보낸다 (04 인수증)
+                proof = api('GET', f'/api/trips/{tid}/delivery-proof', token=driver['token'])
+                if proof['status'] != 'SENT':
+                    if not proof['photos']:
+                        upload(f'/api/trips/{tid}/delivery-proof/photos', driver['token'], paper_photo())
+                    api('POST', f'/api/trips/{tid}/delivery-proof/send', token=driver['token'])
+                self.db.run(f'UPDATE delivery_proofs SET created_at={q(stamp(pickup + timedelta(hours=5)))},sent_at={q(stamp(pickup + timedelta(hours=5, minutes=50 + i % 3 * 10)))} WHERE trip_id IN (SELECT id FROM trips WHERE id={tid} AND broker_id={self.bid});')
             self.settle(tid, pickup, i)
             if (i + 1) % 4 == 0:
                 print(f'과거 완료 운행 {i + 1}/24건 준비', flush=True)
@@ -310,7 +317,6 @@ class Seed:
                 self.waits(driver, tid, 'PICKUP', pickup, 80, 30)
             if i == 3:
                 self.waits(driver, tid, 'DROPOFF', self.now - timedelta(minutes=100), 80, 0, False)
-                api('POST', f'/api/trips/{tid}/delivery-proof', {}, driver['token'])
             site = SITES[(i + (2 if i == 3 else 0)) % 6]
             api('POST', f'/api/trips/{tid}/locations', {'points': [{'recordedAt': stamp(datetime.now(KST)), 'lat': site[2], 'lng': site[3], 'remainMeters': [28000, 0, 65000, 0][i], 'remainSeconds': [2400, 0, 4200, 0][i]}]}, driver['token'])
             self.timeline(oid, tid, pickup)

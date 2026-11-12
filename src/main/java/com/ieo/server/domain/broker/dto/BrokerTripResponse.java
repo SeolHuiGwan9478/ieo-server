@@ -1,7 +1,8 @@
 package com.ieo.server.domain.broker.dto;
 
+import com.ieo.server.domain.delivery.dto.ProofPhotoResponse;
 import com.ieo.server.domain.delivery.entity.DeliveryProof;
-import com.ieo.server.domain.delivery.enums.DeliveryProofStatus;
+import com.ieo.server.domain.delivery.entity.ProofPhoto;
 import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.trip.entity.TripPosition;
 import com.ieo.server.domain.trip.enums.PaymentType;
@@ -12,6 +13,7 @@ import com.ieo.server.domain.vehicle.enums.Tonnage;
 import com.ieo.server.global.config.WebConfig;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 /**
  * 주선사 콘솔의 운행 한 건 (BRK-020, 021). 우리 회사 오더로 배차된 운행만 온다.
@@ -20,7 +22,7 @@ import java.time.Instant;
  * 차주 번호도 단골일 때만 준다 (단골 목록에서 이미 보이는 번호).
  * etaAt·progressPercent는 위치가 아니라서 단골이 아니어도 준다. 차주가 주선사 공유 동의를 끄면(ACC-006) 위치·ETA·진행률 모두 주지 않는다.
  * 셋 다 운행 중 마지막 위치(TripPosition, 운행마다 한 줄)에서 읽고, 위치가 아직 안 왔거나 상하차지에 머무는 중이면 null이다.
- * receipt는 수하인이 서명했거나 차주가 종이 인수증 사진을 올린 뒤에만 있다.
+ * receipt는 차주가 종이 인수증 사진을 보낸 뒤에만 있다. 결제 방식이 인수증인데 receipt가 없으면 아직 안 보낸 것이다.
  * fare는 지급운임(차주). billedFare(청구운임)·fee(수수료)·feeRate(%)는 오더에 청구운임을 적었을 때만 있다 (주선사 콘솔 전용)
  */
 public record BrokerTripResponse(
@@ -61,30 +63,23 @@ public record BrokerTripResponse(
 		}
 	}
 
-	/** 전자인수증. path(/r/토큰)를 콘솔 주소 뒤에 붙이면 인수증 페이지다. 링크는 운행 완료 7일 뒤 만료 */
-	public record Receipt(
-			DeliveryProofStatus status,
-			String signerName,
-			Instant signedAt,
-			boolean hasPaperPhoto,
-			String issueNote,
-			String path,
-			Instant expiresAt) {
+	/** 차주가 보낸 종이 인수증 사진. 사진 path에 로그인 토큰을 붙여 받는다 */
+	public record Receipt(Instant sentAt, List<ProofPhotoResponse> photos) {
 
-		/** 서명 전이고 종이 사진도 없으면 null */
-		static Receipt of(DeliveryProof proof, boolean hasPaperPhoto) {
-			if (proof == null || (!proof.isSigned() && !hasPaperPhoto)) {
+		/** 아직 보내지 않았으면 null */
+		static Receipt of(Trip trip, DeliveryProof proof, List<ProofPhoto> photos) {
+			if (proof == null || !proof.isSent()) {
 				return null;
 			}
-			return new Receipt(proof.status(hasPaperPhoto), proof.getSignerName(), proof.getSignedAt(), hasPaperPhoto,
-					proof.getIssueNote(), WebConfig.RECEIPT_PAGE + "/" + proof.getToken(), proof.expiresAt());
+			return new Receipt(proof.getSentAt(),
+					photos.stream().map(photo -> ProofPhotoResponse.forBroker(photo, trip.getId())).toList());
 		}
 	}
 
 	/** position은 아직 위치가 없으면 null */
 	public static BrokerTripResponse of(Trip trip, boolean linkedDriver, boolean sharing, TripPosition shared,
 			BrokerTripStopResponse pickup, BrokerTripStopResponse dropoff,
-			DeliveryProof deliveryProof, boolean hasPaperPhoto) {
+			DeliveryProof deliveryProof, List<ProofPhoto> receiptPhotos) {
 		User user = trip.getDriver().getUser();
 		Vehicle vehicle = trip.getVehicle();
 		TripPosition position = sharing ? shared : null;
@@ -112,7 +107,7 @@ public record BrokerTripResponse(
 				trip.getPaymentType().getLabel(),
 				pickup,
 				dropoff,
-				Receipt.of(deliveryProof, hasPaperPhoto),
+				Receipt.of(trip, deliveryProof, receiptPhotos),
 				trip.getStartedAt(),
 				trip.getCompletedAt(),
 				trip.getCanceledAt(),

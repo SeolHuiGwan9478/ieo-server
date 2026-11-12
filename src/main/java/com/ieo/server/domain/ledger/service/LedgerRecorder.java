@@ -45,11 +45,11 @@ public class LedgerRecorder {
 		metricsCalculator.recalculate(trip);
 	}
 
-	/** 인수증이 서명되면 인수증 결제의 지급 예정일을 서명일 기준으로 다시 잡는다 (POD-008) */
+	/** 인수증을 주선사에게 보내면 인수증 결제의 지급 예정일을 보낸 날 기준으로 다시 잡는다 (POD-008, LEDG-020) */
 	@Transactional
-	public void onDeliveryProofSigned(Trip trip, LocalDate signedOn) {
+	public void onReceiptSent(Trip trip, LocalDate sentOn) {
 		entryRepository.findByTripId(trip.getId())
-				.ifPresent(entry -> entry.rebaseOnDeliveryProof(signedOn, settlementDays(trip)));
+				.ifPresent(entry -> entry.rebaseOnDeliveryProof(sentOn, settlementDays(trip)));
 		metricsCalculator.recalculate(trip);
 	}
 

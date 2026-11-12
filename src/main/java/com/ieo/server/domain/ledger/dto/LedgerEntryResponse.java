@@ -8,7 +8,8 @@ import java.util.List;
 
 /**
  * 장부 한 줄. auto는 운행이 끝나 자동으로 생긴 줄. overdue는 지급 예정일이 지났는데 받지 못함(빨간색, LEDG-022).
- * waitMinutes는 운행의 상차·하차 대기 합계(자동 줄만)
+ * waitMinutes는 운행의 상차·하차 대기 합계(자동 줄만).
+ * receiptSentAt은 인수증 결제 운행에서 종이 인수증을 주선사에게 보낸 시각. 인수증 결제 운행인데 null이면 아직 안 보냈다
  */
 public record LedgerEntryResponse(
 		Long id,
@@ -27,9 +28,10 @@ public record LedgerEntryResponse(
 		boolean paid,
 		Instant paidAt,
 		boolean overdue,
+		Instant receiptSentAt,
 		List<ExtraIncomeResponse> extraIncomes) {
 
-	public static LedgerEntryResponse of(LedgerEntry entry, LocalDate today, Long waitMinutes,
+	public static LedgerEntryResponse of(LedgerEntry entry, LocalDate today, Long waitMinutes, Instant receiptSentAt,
 			List<ExtraIncomeResponse> extraIncomes) {
 		return new LedgerEntryResponse(
 				entry.getId(),
@@ -48,6 +50,7 @@ public record LedgerEntryResponse(
 				entry.isPaid(),
 				entry.getPaidAt(),
 				entry.isOverdue(today),
+				receiptSentAt,
 				extraIncomes);
 	}
 }

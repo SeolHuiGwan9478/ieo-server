@@ -1,22 +1,20 @@
 package com.ieo.server.domain.delivery.service;
 
 import com.ieo.server.domain.delivery.dto.DeliveryProofResponse;
-import com.ieo.server.domain.delivery.dto.IssueDeliveryProofRequest;
 import com.ieo.server.domain.delivery.dto.ProofPhotoResponse;
-import com.ieo.server.domain.delivery.dto.SignDeliveryProofRequest;
 import com.ieo.server.domain.delivery.entity.DeliveryProof;
 import com.ieo.server.domain.delivery.entity.ProofPhoto;
-import com.ieo.server.domain.delivery.enums.ProofPhotoType;
+import com.ieo.server.domain.delivery.enums.DeliveryProofStatus;
 import com.ieo.server.domain.delivery.repository.DeliveryProofRepository;
 import com.ieo.server.domain.delivery.repository.ProofPhotoRepository;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.ledger.service.LedgerRecorder;
-import com.ieo.server.domain.site.entity.Site;
+import com.ieo.server.domain.notification.service.BrokerNotifier;
 import com.ieo.server.domain.trip.entity.Trip;
+import com.ieo.server.domain.trip.enums.PaymentType;
 import com.ieo.server.domain.trip.enums.TripStatus;
 import com.ieo.server.domain.trip.repository.TripRepository;
-import com.ieo.server.domain.trip.service.TripService;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
@@ -32,10 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 전자인수증 (04 인수증). 차주가 링크를 발급하고(차량 화면 QR), 수하인이 로그인 없이 링크로 열어 서명한다.
- * 서명하거나 차주가 종이 인수증 사진을 올리면 인수가 끝난 것으로 본다:
- * 하차지에 있는 운행은 완료하고, 인수증 결제의 지급 예정일을 그날부터 다시 센다 (POD-008).
- * TODO: 주선사 전달(POD-007)과 ETA 알림에 링크 넣기(POD-002)는 09 알림을 만든 뒤 붙인다
+ * 인수증 (04 인수증). 결제 방식이 인수증인 운행만 받는다.
+ * 차주가 하차지에 도착한 뒤 종이 인수증 사진을 휴대폰으로 올리고(5장까지), [주선사에게 보내기]를 누른다.
+ * 보내면 장부의 지급 예정일을 보낸 날부터 다시 세고(LEDG-020), 주선사에게 문자로 알린다. 주선사는 콘솔에서 사진을 본다
  */
 @Service
 @RequiredArgsConstructor
@@ -48,132 +45,122 @@ public class DeliveryProofService {
 	private final ProofPhotoRepository photoRepository;
 	private final TripRepository tripRepository;
 	private final DriverRepository driverRepository;
-	private final TripService tripService;
 	private final LedgerRecorder ledgerRecorder;
+	private final BrokerNotifier brokerNotifier;
 	private final FileStorage fileStorage;
 	private final Clock clock;
 
-	public record Issued(DeliveryProofResponse proof, boolean created) {
-	}
-
-	/** 차주: 인수증 링크 발급. 이미 있으면 같은 링크 (POD-001, 003) */
-	public Issued issue(Long userId, Long tripId, IssueDeliveryProofRequest request) {
+	/** 차주: 인수증 상태와 사진. 아직 없으면 NONE */
+	@Transactional(readOnly = true)
+	public DeliveryProofResponse get(Long userId, Long tripId) {
 		Trip trip = findMyTrip(userId, tripId);
-		if (trip.getStatus() == TripStatus.CANCELLED) {
-			throw new BusinessException(ErrorCode.DELIVERY_TRIP_CANCELLED);
-		}
-		Optional<DeliveryProof> existing = proofRepository.findByTripId(tripId);
-		if (existing.isPresent()) {
-			return new Issued(toResponse(existing.get()), false);
-		}
-		Double lat = request == null ? null : request.lat();
-		Double lng = request == null ? null : request.lng();
-		if (lat != null && lng != null) {
-			Site.validateLocation(lat, lng);
-		} else {
-			lat = null;
-			lng = null;
-		}
-		return new Issued(toResponse(proofRepository.save(DeliveryProof.issue(trip, lat, lng))), true);
+		return toResponse(trip, proofRepository.findByTripId(tripId).orElse(null));
 	}
 
-	/** 차주: 인수증 상태 (차량 앱이 서명됐는지 확인할 때) */
-	@Transactional(readOnly = true)
-	public DeliveryProofResponse getForDriver(Long userId, Long tripId) {
-		findMyTrip(userId, tripId);
-		return toResponse(proofRepository.findByTripId(tripId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_PROOF_NOT_FOUND)));
-	}
-
-	/** 차주: 서명을 못 받을 때 종이 인수증 사진을 올린다 (POD-009). 인수가 끝난 것으로 본다 */
-	public DeliveryProofResponse uploadPaperPhoto(Long userId, Long tripId, MultipartFile file) {
-		findMyTrip(userId, tripId);
+	/** 차주: 종이 인수증 사진 한 장 올리기 (POD-009) */
+	public DeliveryProofResponse addPhoto(Long userId, Long tripId, MultipartFile file) {
+		Trip trip = findMyTrip(userId, tripId);
+		requireUploadable(trip);
 		DeliveryProof proof = proofRepository.findByTripId(tripId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_PROOF_NOT_FOUND));
-		addPhoto(proof, ProofPhotoType.PAPER, file);
-		onDelivered(proof.getTrip());
-		return toResponse(proof);
-	}
-
-	/** 수하인: 링크로 인수증 보기 (POD-004) */
-	@Transactional(readOnly = true)
-	public DeliveryProofResponse view(String token) {
-		return toResponse(findOpen(token));
-	}
-
-	/** 수하인: 서명 (POD-006) */
-	public DeliveryProofResponse sign(String token, SignDeliveryProofRequest request) {
-		DeliveryProof proof = findOpen(token);
-		if (proof.isSigned()) {
-			throw new BusinessException(ErrorCode.DELIVERY_ALREADY_SIGNED);
-		}
-		byte[] signature = ProofFiles.decodeSignature(request.signature());
-		boolean withLocation = request.lat() != null && request.lng() != null;
-		if (withLocation) {
-			Site.validateLocation(request.lat(), request.lng());
-		}
-		String key = fileStorage.store(FOLDER, signature, ProofFiles.PNG);
-		proof.sign(request.signerName(), key, request.issueNote(),
-				withLocation ? request.lat() : null, withLocation ? request.lng() : null, clock.instant());
-		onDelivered(proof.getTrip());
-		return toResponse(proof);
-	}
-
-	/** 수하인: 이상 사항 사진 (POD-005) */
-	public DeliveryProofResponse uploadIssuePhoto(String token, MultipartFile file) {
-		DeliveryProof proof = findOpen(token);
-		addPhoto(proof, ProofPhotoType.ISSUE, file);
-		return toResponse(proof);
-	}
-
-	@Transactional(readOnly = true)
-	public FileStorage.StoredFile signatureImage(String token) {
-		DeliveryProof proof = findOpen(token);
-		if (proof.getSignatureKey() == null) {
-			throw new BusinessException(ErrorCode.DELIVERY_PROOF_NOT_FOUND);
-		}
-		return fileStorage.load(proof.getSignatureKey());
-	}
-
-	@Transactional(readOnly = true)
-	public FileStorage.StoredFile photo(String token, Long photoId) {
-		DeliveryProof proof = findOpen(token);
-		ProofPhoto photo = photoRepository.findById(photoId)
-				.filter(found -> found.getDeliveryProof().getId().equals(proof.getId()))
-				.orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_PROOF_NOT_FOUND));
-		return fileStorage.load(photo.getFileKey());
-	}
-
-	/** 인수가 끝남: 하차지에 있는 운행은 완료하고, 인수증 결제의 지급 예정일을 오늘부터 다시 센다 */
-	private void onDelivered(Trip trip) {
-		Instant now = clock.instant();
-		if (trip.getStatus() == TripStatus.AT_DROPOFF) {
-			tripService.completeTrip(trip, now);
-		}
-		ledgerRecorder.onDeliveryProofSigned(trip, KoreanDate.of(now));
-	}
-
-	private void addPhoto(DeliveryProof proof, ProofPhotoType type, MultipartFile file) {
+				.orElseGet(() -> proofRepository.save(DeliveryProof.create(trip)));
+		proof.requireNotSent();
 		if (photoRepository.countByDeliveryProofId(proof.getId()) >= ProofPhoto.MAX_PER_PROOF) {
 			throw new BusinessException(ErrorCode.DELIVERY_PHOTO_LIMIT);
 		}
 		ProofFiles.Photo photo = ProofFiles.readPhoto(file);
 		String key = fileStorage.store(FOLDER, photo.content(), photo.contentType());
-		photoRepository.save(ProofPhoto.of(proof, type, key));
+		photoRepository.save(ProofPhoto.of(proof, key));
+		return toResponse(trip, proof);
 	}
 
-	private DeliveryProofResponse toResponse(DeliveryProof proof) {
-		List<ProofPhoto> photos = photoRepository.findAllByDeliveryProofIdOrderByIdAsc(proof.getId());
-		boolean hasPaper = photos.stream().anyMatch(photo -> photo.getType() == ProofPhotoType.PAPER);
-		return DeliveryProofResponse.of(proof, proof.status(hasPaper),
-				photos.stream().map(photo -> ProofPhotoResponse.of(photo, proof.getToken())).toList());
+	/** 차주: 보내기 전에 잘못 찍은 사진 지우기 */
+	public DeliveryProofResponse deletePhoto(Long userId, Long tripId, Long photoId) {
+		Trip trip = findMyTrip(userId, tripId);
+		DeliveryProof proof = findProof(tripId);
+		proof.requireNotSent();
+		ProofPhoto photo = findPhoto(proof, photoId);
+		photoRepository.delete(photo);
+		photoRepository.flush();
+		fileStorage.delete(photo.getFileKey());
+		return toResponse(trip, proof);
 	}
 
-	/** 없는 토큰과 만료된 링크는 똑같이 404 */
-	private DeliveryProof findOpen(String token) {
-		return proofRepository.findByToken(token)
-				.filter(proof -> !proof.isExpired(clock.instant()))
+	/** 차주: [주선사에게 보내기] (POD-011). 사진이 한 장 이상 있어야 한다 */
+	public DeliveryProofResponse send(Long userId, Long tripId) {
+		Trip trip = findMyTrip(userId, tripId);
+		DeliveryProof proof = proofRepository.findByTripId(tripId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_NO_PHOTO));
+		proof.requireNotSent();
+		if (photoRepository.countByDeliveryProofId(proof.getId()) == 0) {
+			throw new BusinessException(ErrorCode.DELIVERY_NO_PHOTO);
+		}
+		Instant now = clock.instant();
+		proof.send(now);
+		ledgerRecorder.onReceiptSent(trip, KoreanDate.of(now));
+		if (trip.getBroker() != null) {
+			brokerNotifier.send(trip.getBroker(), "[이에오] " + trip.getVehicle().getPlateNumber()
+					+ " 차량의 인수증 사진이 도착했어요. 콘솔 운행 상세에서 볼 수 있어요.");
+		}
+		return toResponse(trip, proof);
+	}
+
+	/** 차주: 내 운행의 인수증 사진 */
+	@Transactional(readOnly = true)
+	public FileStorage.StoredFile photoForDriver(Long userId, Long tripId, Long photoId) {
+		findMyTrip(userId, tripId);
+		return fileStorage.load(findPhoto(findProof(tripId), photoId).getFileKey());
+	}
+
+	/** 주선사: 보낸 인수증의 사진. 운행이 그 주선사 것인지는 부르는 쪽이 확인한다 */
+	@Transactional(readOnly = true)
+	public FileStorage.StoredFile sentPhoto(Trip trip, Long photoId) {
+		DeliveryProof proof = proofRepository.findByTripId(trip.getId())
+				.filter(DeliveryProof::isSent)
 				.orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_PROOF_NOT_FOUND));
+		return fileStorage.load(findPhoto(proof, photoId).getFileKey());
+	}
+
+	private static void requireUploadable(Trip trip) {
+		if (trip.getPaymentType() != PaymentType.RECEIPT) {
+			throw new BusinessException(ErrorCode.DELIVERY_NOT_RECEIPT);
+		}
+		if (trip.getStatus() == TripStatus.CANCELLED) {
+			throw new BusinessException(ErrorCode.DELIVERY_TRIP_CANCELLED);
+		}
+		if (!reachedDropoff(trip)) {
+			throw new BusinessException(ErrorCode.DELIVERY_TOO_EARLY);
+		}
+	}
+
+	private static boolean reachedDropoff(Trip trip) {
+		return trip.getStatus() == TripStatus.AT_DROPOFF || trip.getStatus() == TripStatus.COMPLETED;
+	}
+
+	private DeliveryProofResponse toResponse(Trip trip, DeliveryProof proof) {
+		List<ProofPhoto> photos = proof == null ? List.of()
+				: photoRepository.findAllByDeliveryProofIdOrderByIdAsc(proof.getId());
+		boolean sent = proof != null && proof.isSent();
+		boolean canUpload = trip.getPaymentType() == PaymentType.RECEIPT && reachedDropoff(trip)
+				&& !sent && photos.size() < ProofPhoto.MAX_PER_PROOF;
+		return new DeliveryProofResponse(
+				trip.getId(),
+				trip.getPaymentType() == PaymentType.RECEIPT,
+				proof == null ? DeliveryProofStatus.NONE : proof.status(photos.size()),
+				proof == null ? null : proof.getSentAt(),
+				photos.stream().map(photo -> ProofPhotoResponse.forDriver(photo, trip.getId())).toList(),
+				ProofPhoto.MAX_PER_PROOF,
+				canUpload);
+	}
+
+	private DeliveryProof findProof(Long tripId) {
+		return proofRepository.findByTripId(tripId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_PROOF_NOT_FOUND));
+	}
+
+	private ProofPhoto findPhoto(DeliveryProof proof, Long photoId) {
+		Optional<ProofPhoto> photo = photoRepository.findById(photoId)
+				.filter(found -> found.getDeliveryProof().getId().equals(proof.getId()));
+		return photo.orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_PROOF_NOT_FOUND));
 	}
 
 	/** 남의 운행이면 있는지도 알려 주지 않도록 404 */

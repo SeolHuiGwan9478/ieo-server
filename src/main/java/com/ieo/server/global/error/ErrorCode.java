@@ -123,10 +123,13 @@ public enum ErrorCode {
 	WAIT_INVALID_STATUS(HttpStatus.CONFLICT, "WAIT_409_STATUS", "지금 대기 상태에서는 할 수 없는 요청이에요."),
 
 	// 인수증
-	DELIVERY_PROOF_NOT_FOUND(HttpStatus.NOT_FOUND, "DELIVERY_404", "인수증을 찾을 수 없거나 링크가 만료됐어요."),
-	DELIVERY_ALREADY_SIGNED(HttpStatus.CONFLICT, "DELIVERY_409_SIGNED", "이미 서명한 인수증이에요."),
-	DELIVERY_TRIP_CANCELLED(HttpStatus.CONFLICT, "DELIVERY_409_CANCELLED", "취소된 운행은 인수증을 받을 수 없어요."),
-	DELIVERY_INVALID_FILE(HttpStatus.BAD_REQUEST, "DELIVERY_400_FILE", "서명은 PNG, 사진은 JPG·PNG 5MB 이하로 올려 주세요."),
+	DELIVERY_PROOF_NOT_FOUND(HttpStatus.NOT_FOUND, "DELIVERY_404", "인수증 사진을 찾을 수 없어요."),
+	DELIVERY_NOT_RECEIPT(HttpStatus.CONFLICT, "DELIVERY_409_NOT_RECEIPT", "결제 방식이 인수증인 운행만 인수증을 보내요."),
+	DELIVERY_TOO_EARLY(HttpStatus.CONFLICT, "DELIVERY_409_TOO_EARLY", "인수증 사진은 하차지에 도착한 뒤 올릴 수 있어요."),
+	DELIVERY_ALREADY_SENT(HttpStatus.CONFLICT, "DELIVERY_409_SENT", "이미 주선사에게 보낸 인수증이에요."),
+	DELIVERY_NO_PHOTO(HttpStatus.CONFLICT, "DELIVERY_409_NO_PHOTO", "인수증 사진을 한 장 이상 올려 주세요."),
+	DELIVERY_TRIP_CANCELLED(HttpStatus.CONFLICT, "DELIVERY_409_CANCELLED", "취소된 운행은 인수증을 보낼 수 없어요."),
+	DELIVERY_INVALID_FILE(HttpStatus.BAD_REQUEST, "DELIVERY_400_FILE", "사진은 JPG·PNG 5MB 이하로 올려 주세요."),
 	DELIVERY_PHOTO_LIMIT(HttpStatus.BAD_REQUEST, "DELIVERY_400_PHOTO_LIMIT", "사진은 5장까지 올릴 수 있어요."),
 
 	// 장부

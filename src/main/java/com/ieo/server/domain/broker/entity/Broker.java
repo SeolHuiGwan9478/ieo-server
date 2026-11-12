@@ -145,7 +145,7 @@ public class Broker extends BaseTimeEntity {
 
 	/**
 	 * 정산 주기 (BRK-003). 0~365일 (오더 지급일 범위와 같다).
-	 * 이미 지급 예정일이 계산된 장부는 바꾸지 않는다. 아직 인수증 서명 전인 운행은 서명할 때의 값을 쓴다.
+	 * 이미 지급 예정일이 계산된 장부는 바꾸지 않는다. 아직 인수증을 보내기 전인 운행은 보낼 때의 값을 쓴다.
 	 */
 	public void changeSettlementDays(int settlementDays) {
 		this.settlementDays = validateSettlementDays(settlementDays);

@@ -132,7 +132,7 @@ public class LedgerEntry extends BaseTimeEntity {
 
 	/**
 	 * 지급 예정일 (LEDG-020): 선불·착불은 운행일, 인수증은 운행일 + 정산 일수.
-	 * 전자인수증이 서명되면 rebaseOnDeliveryProof로 서명일 기준으로 다시 잡는다
+	 * 인수증을 주선사에게 보내면 rebaseOnDeliveryProof로 보낸 날 기준으로 다시 잡는다
 	 */
 	public static LocalDate expectedPaymentDate(PaymentType paymentType, LocalDate workDate, int settlementDays) {
 		return paymentType == PaymentType.RECEIPT ? workDate.plusDays(settlementDays) : workDate;

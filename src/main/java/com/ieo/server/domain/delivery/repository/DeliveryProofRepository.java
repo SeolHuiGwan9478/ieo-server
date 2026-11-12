@@ -10,9 +10,6 @@ public interface DeliveryProofRepository extends JpaRepository<DeliveryProof, Lo
 
 	Optional<DeliveryProof> findByTripId(Long tripId);
 
-	/** 여러 운행의 인수증 (주선사 운행 목록) */
+	/** 여러 운행의 인수증 (주선사 운행 목록, 장부) */
 	List<DeliveryProof> findAllByTripIdIn(Collection<Long> tripIds);
-
-	/** 수하인이 링크를 열 때 */
-	Optional<DeliveryProof> findByToken(String token);
 }

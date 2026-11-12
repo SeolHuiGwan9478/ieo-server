@@ -16,7 +16,6 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
 	/** 수하인 페이지 주소의 앞부분. 뒤에 인수증 토큰이 붙는다 */
-	public static final String RECEIPT_PAGE = "/r";
 
 	/** 주선사가 보는 대기 증빙 페이지 주소의 앞부분. 뒤에 증빙 토큰이 붙는다 */
 	public static final String WAIT_PROOF_PAGE = "/w";
@@ -40,12 +39,10 @@ public class WebConfig implements WebMvcConfigurer {
 
 	/**
 	 * 로그인 없이 여는 페이지. 데이터는 페이지가 /api/public에서 받는다.
-	 * - 수하인 전자인수증 (POD-004): 차량 화면 QR
 	 * - 대기 증빙 (WAIT-020): 차주가 주선사에게 보내는 링크
 	 */
 	@Override
 	public void addViewControllers(ViewControllerRegistry registry) {
-		registry.addViewController(RECEIPT_PAGE + "/*").setViewName("forward:/receipt.html");
 		registry.addViewController(WAIT_PROOF_PAGE + "/*").setViewName("forward:/wait-proof.html");
 	}
 

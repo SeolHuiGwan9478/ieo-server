@@ -10,9 +10,10 @@ import com.ieo.server.domain.broker.enums.DriverLinkStatus;
 import com.ieo.server.domain.broker.repository.BrokerDriverLinkRepository;
 import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
 import com.ieo.server.domain.delivery.entity.DeliveryProof;
-import com.ieo.server.domain.delivery.enums.ProofPhotoType;
+import com.ieo.server.domain.delivery.entity.ProofPhoto;
 import com.ieo.server.domain.delivery.repository.DeliveryProofRepository;
 import com.ieo.server.domain.delivery.repository.ProofPhotoRepository;
+import com.ieo.server.domain.delivery.service.DeliveryProofService;
 import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.user.enums.ConsentType;
 import com.ieo.server.domain.user.service.ConsentService;
@@ -28,7 +29,7 @@ import com.ieo.server.domain.wait.repository.WaitProofRepository;
 import com.ieo.server.domain.wait.repository.WaitRecordRepository;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
-import java.util.HashSet;
+import com.ieo.server.global.storage.FileStorage;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -63,6 +64,7 @@ public class BrokerTripService {
 	private final WaitProofRepository waitProofRepository;
 	private final DeliveryProofRepository deliveryProofRepository;
 	private final ProofPhotoRepository photoRepository;
+	private final DeliveryProofService deliveryProofService;
 
 	/** 우리 회사 운행. 탭 기본은 진행 중, 최근 배차 순, page는 0부터 */
 	public BrokerTripPageResponse getTrips(Long userId, BrokerTripTab tab, Integer page, Integer size) {
@@ -77,13 +79,22 @@ public class BrokerTripService {
 	}
 
 	public BrokerTripResponse getTrip(Long userId, Long tripId) {
-		BrokerMember member = requireActiveMember(userId);
-		Long brokerId = member.getBroker().getId();
-		Trip trip = tripRepository.findById(tripId)
+		Trip trip = findOurTrip(userId, tripId);
+		return toResponses(trip.getBroker().getId(), List.of(trip)).getFirst();
+	}
+
+	/** 차주가 보낸 종이 인수증 사진 (POD-011) */
+	public FileStorage.StoredFile receiptPhoto(Long userId, Long tripId, Long photoId) {
+		return deliveryProofService.sentPhoto(findOurTrip(userId, tripId), photoId);
+	}
+
+	/** 우리 회사 오더로 배차된 운행. 아니면 있는지도 알려 주지 않도록 404 */
+	private Trip findOurTrip(Long userId, Long tripId) {
+		Long brokerId = requireActiveMember(userId).getBroker().getId();
+		return tripRepository.findById(tripId)
 				.filter(found -> found.getSource() == TripSource.IEO_DISPATCH)
 				.filter(found -> found.getBroker() != null && found.getBroker().getId().equals(brokerId))
 				.orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_FOUND));
-		return toResponses(brokerId, List.of(trip)).getFirst();
 	}
 
 	/** 위치·대기 기록·증빙·인수증을 운행 수와 관계없이 몇 번의 조회로 모은다 */
@@ -114,9 +125,10 @@ public class BrokerTripService {
 
 		Map<Long, DeliveryProof> receiptByTrip = deliveryProofRepository.findAllByTripIdIn(tripIds).stream()
 				.collect(Collectors.toMap(proof -> proof.getTrip().getId(), Function.identity()));
-		Set<Long> paperProofIds = receiptByTrip.isEmpty() ? Set.of()
-				: new HashSet<>(photoRepository.findProofIdsHavingType(
-						receiptByTrip.values().stream().map(DeliveryProof::getId).toList(), ProofPhotoType.PAPER));
+		Map<Long, List<ProofPhoto>> photosByProof = receiptByTrip.isEmpty() ? Map.of()
+				: photoRepository.findAllByDeliveryProofIdInOrderByIdAsc(
+						receiptByTrip.values().stream().map(DeliveryProof::getId).toList()).stream()
+						.collect(Collectors.groupingBy(photo -> photo.getDeliveryProof().getId()));
 
 		return trips.stream()
 				.map(trip -> {
@@ -128,7 +140,7 @@ public class BrokerTripService {
 							stop(trip.pickup(), recordByStop, proofByRecord),
 							stop(trip.dropoff(), recordByStop, proofByRecord),
 							receipt,
-							receipt != null && paperProofIds.contains(receipt.getId()));
+							receipt == null ? List.of() : photosByProof.getOrDefault(receipt.getId(), List.of()));
 				})
 				.toList();
 	}

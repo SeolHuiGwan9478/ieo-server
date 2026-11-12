@@ -3,6 +3,7 @@ package com.ieo.server.domain.broker.controller;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -12,7 +13,6 @@ import com.ieo.server.domain.broker.repository.BrokerRepository;
 import com.ieo.server.domain.broker.service.BrokerService;
 import com.ieo.server.domain.delivery.entity.DeliveryProof;
 import com.ieo.server.domain.delivery.entity.ProofPhoto;
-import com.ieo.server.domain.delivery.enums.ProofPhotoType;
 import com.ieo.server.domain.delivery.repository.DeliveryProofRepository;
 import com.ieo.server.domain.delivery.repository.ProofPhotoRepository;
 import com.ieo.server.domain.driver.entity.Driver;
@@ -40,6 +40,7 @@ import com.ieo.server.domain.wait.entity.WaitRecord;
 import com.ieo.server.domain.wait.repository.WaitProofRepository;
 import com.ieo.server.domain.wait.repository.WaitRecordRepository;
 import com.ieo.server.global.auth.JwtProvider;
+import com.ieo.server.global.storage.FileStorage;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Clock;
 import java.time.Instant;
@@ -65,6 +66,7 @@ import org.springframework.web.context.WebApplicationContext;
 class BrokerTripControllerTest {
 
 	private static final Instant T0 = Instant.parse("2026-11-04T00:00:00Z");
+	private static final byte[] JPG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 4, 5, 6};
 
 	@Autowired
 	private WebApplicationContext context;
@@ -104,6 +106,9 @@ class BrokerTripControllerTest {
 
 	@Autowired
 	private ProofPhotoRepository photoRepository;
+
+	@Autowired
+	private FileStorage fileStorage;
 
 	@Autowired
 	private JwtProvider jwtProvider;
@@ -229,24 +234,22 @@ class BrokerTripControllerTest {
 	}
 
 	@Test
-	void 인수증은_서명하거나_종이_사진을_올린_뒤에_보인다() throws Exception {
-		Trip signed = trip(driver("01090007001", "김기사"), hanbit, TripSource.IEO_DISPATCH);
-		DeliveryProof proof = deliveryProofRepository.save(DeliveryProof.issue(signed, null, null));
-		perform(get("/api/brokers/me/trips/{id}", signed.getId()), owner)
+	void 인수증은_차주가_보낸_뒤에_사진과_함께_보인다() throws Exception {
+		Trip trip = trip(driver("01090007001", "김기사"), hanbit, TripSource.IEO_DISPATCH);
+		DeliveryProof proof = deliveryProofRepository.save(DeliveryProof.create(trip));
+		ProofPhoto photo = photoRepository.save(ProofPhoto.of(proof, fileStorage.store("delivery", JPG, "image/jpeg")));
+		String photoPath = "/api/brokers/me/trips/" + trip.getId() + "/receipt-photos/" + photo.getId();
+		perform(get("/api/brokers/me/trips/{id}", trip.getId()), owner)
 				.andExpect(jsonPath("$.receipt").doesNotExist());
+		perform(get(photoPath), owner).andExpect(status().isNotFound());
 
-		proof.sign("홍길동", "sig/key.png", null, null, null, T0);
-		perform(get("/api/brokers/me/trips/{id}", signed.getId()), owner)
-				.andExpect(jsonPath("$.receipt.status").value("SIGNED"))
-				.andExpect(jsonPath("$.receipt.signerName").value("홍길동"))
-				.andExpect(jsonPath("$.receipt.path").value("/r/" + proof.getToken()))
-				.andExpect(jsonPath("$.receipt.hasPaperPhoto").value(false));
-
-		Trip paper = trip(driver("01090007002", "이기사"), hanbit, TripSource.IEO_DISPATCH);
-		DeliveryProof paperProof = deliveryProofRepository.save(DeliveryProof.issue(paper, null, null));
-		photoRepository.save(ProofPhoto.of(paperProof, ProofPhotoType.PAPER, "paper/key.jpg"));
-		perform(get("/api/brokers/me/trips").param("tab", "SCHEDULED"), owner)
-				.andExpect(jsonPath("$.items[?(@.id == " + paper.getId() + ")].receipt.status").value(Matchers.contains("PHOTO")));
+		proof.send(T0);
+		perform(get("/api/brokers/me/trips/{id}", trip.getId()), owner)
+				.andExpect(jsonPath("$.receipt.sentAt").value("2026-11-04T00:00:00Z"))
+				.andExpect(jsonPath("$.receipt.photos[0].path").value(photoPath));
+		perform(get(photoPath), owner)
+				.andExpect(status().isOk())
+				.andExpect(content().bytes(JPG));
 	}
 
 	@Test

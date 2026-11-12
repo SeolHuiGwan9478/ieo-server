@@ -1,6 +1,8 @@
 package com.ieo.server.domain.ledger.service;
 
 import com.ieo.server.domain.broker.service.BrokerMetricsCalculator;
+import com.ieo.server.domain.delivery.entity.DeliveryProof;
+import com.ieo.server.domain.delivery.repository.DeliveryProofRepository;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.ledger.dto.CreateLedgerEntryRequest;
@@ -15,6 +17,7 @@ import com.ieo.server.domain.ledger.entity.LedgerEntry;
 import com.ieo.server.domain.ledger.repository.ExpenseRepository;
 import com.ieo.server.domain.ledger.repository.ExtraIncomeRepository;
 import com.ieo.server.domain.ledger.repository.LedgerEntryRepository;
+import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.wait.entity.WaitRecord;
 import com.ieo.server.domain.wait.repository.WaitRecordRepository;
@@ -22,6 +25,7 @@ import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import com.ieo.server.global.util.KoreanDate;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -48,6 +52,7 @@ public class LedgerService {
 	private final ExtraIncomeRepository extraIncomeRepository;
 	private final ExpenseRepository expenseRepository;
 	private final WaitRecordRepository waitRecordRepository;
+	private final DeliveryProofRepository deliveryProofRepository;
 	private final DriverRepository driverRepository;
 	private final BrokerMetricsCalculator metricsCalculator;
 	private final Clock clock;
@@ -168,8 +173,14 @@ public class LedgerService {
 				.findAllByLedgerEntryIdIn(entries.stream().map(LedgerEntry::getId).toList()).stream()
 				.collect(Collectors.groupingBy(income -> income.getLedgerEntry().getId(),
 						Collectors.mapping(ExtraIncomeResponse::from, Collectors.toList())));
+		List<Long> tripIds = entries.stream().map(LedgerEntry::getTrip).filter(Objects::nonNull).map(Trip::getId).toList();
+		Map<Long, Instant> receiptSentByTrip = tripIds.isEmpty() ? Map.of()
+				: deliveryProofRepository.findAllByTripIdIn(tripIds).stream()
+						.filter(DeliveryProof::isSent)
+						.collect(Collectors.toMap(proof -> proof.getTrip().getId(), DeliveryProof::getSentAt));
 		return entries.stream()
 				.map(entry -> LedgerEntryResponse.of(entry, today, waitMinutes(entry),
+						entry.getTrip() == null ? null : receiptSentByTrip.get(entry.getTrip().getId()),
 						incomes.getOrDefault(entry.getId(), List.of())))
 				.toList();
 	}
