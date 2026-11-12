@@ -77,6 +77,9 @@ public enum ErrorCode {
 	PLAN_INVALID(HttpStatus.BAD_REQUEST, "PLAN_400", "플랜을 골라 주세요."),
 	PLAN_UPGRADE_REQUIRED(HttpStatus.FORBIDDEN, "PLAN_403_UPGRADE", "지금 플랜에서는 쓸 수 없는 기능입니다. 플랜을 올려 주세요."),
 	PLAN_MEMBER_LIMIT(HttpStatus.FORBIDDEN, "PLAN_403_MEMBER_LIMIT", "지금 플랜의 담당자 수 한도에 도달했어요."),
+	PLAN_LIMIT_REACHED(HttpStatus.FORBIDDEN, "PLAN_403_LIMIT", "지금 플랜의 한도를 다 썼어요. 플랜을 올려 주세요."),
+	PLAN_TRIAL_USED(HttpStatus.CONFLICT, "PLAN_409_TRIAL", "무료 체험은 한 번만 쓸 수 있어요."),
+	PLAN_NOT_DRIVER(HttpStatus.FORBIDDEN, "PLAN_403_ROLE", "차주 계정만 기사님 플랜을 쓸 수 있어요."),
 	DRIVER_LINK_NOT_FOUND(HttpStatus.NOT_FOUND, "DRIVER_LINK_404", "단골 연결을 찾을 수 없어요."),
 	DRIVER_LINK_NOT_DRIVER(HttpStatus.FORBIDDEN, "DRIVER_LINK_403_ROLE", "차주 계정만 단골 연결을 수락할 수 있어요."),
 	DRIVER_LINK_DUPLICATE(HttpStatus.CONFLICT, "DRIVER_LINK_409_DUPLICATE", "이미 연결을 요청한 번호입니다. 요청을 취소한 뒤 다시 보내 주세요."),
@@ -136,6 +139,8 @@ public enum ErrorCode {
 	LEDGER_NOT_FOUND(HttpStatus.NOT_FOUND, "LEDGER_404", "장부 항목을 찾을 수 없어요."),
 	LEDGER_INVALID(HttpStatus.BAD_REQUEST, "LEDGER_400", "장부 입력값이 올바르지 않아요."),
 	LEDGER_NOT_DRIVER(HttpStatus.FORBIDDEN, "LEDGER_403_ROLE", "차주 계정만 장부를 쓸 수 있어요."),
+	TAX_INVOICE_NOT_READY(HttpStatus.BAD_REQUEST, "TAX_INVOICE_400_NOT_READY", "세금계산서에 필요한 정보가 비어 있어요."),
+	TAX_INVOICE_ALREADY_ISSUED(HttpStatus.CONFLICT, "TAX_INVOICE_409_ISSUED", "이 운행은 이미 세금계산서를 발행했어요."),
 	LEDGER_AUTO_ENTRY(HttpStatus.CONFLICT, "LEDGER_409_AUTO", "운행으로 자동 생긴 장부는 지울 수 없습니다. 운임이나 결제 방식을 고쳐 주세요."),
 	EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND, "EXPENSE_404", "경비를 찾을 수 없어요."),
 

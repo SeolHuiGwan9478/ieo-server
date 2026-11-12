@@ -28,6 +28,7 @@ import com.ieo.server.domain.wait.repository.WaitProofRepository;
 import com.ieo.server.domain.wait.repository.WaitRecordRepository;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
+import com.ieo.server.domain.plan.service.DriverPlanService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -65,6 +66,7 @@ public class WaitService {
 	private final BrokerNotifier brokerNotifier;
 	private final TripLocationService locationService;
 	private final Clock clock;
+	private final DriverPlanService driverPlanService;
 
 	@Value("${ieo.public-base-url}")
 	private String publicBaseUrl;
@@ -189,6 +191,7 @@ public class WaitService {
 		}
 		WaitProof proof = proofOf(trip);
 		if (proof.getSentAt() == null) {
+			driverPlanService.requireWaitProofRoom(userId); // 베이직 30일 3건 (12장)
 			brokerNotifier.send(trip.getBroker(), "[이에오] " + trip.getVehicle().getPlateNumber()
 					+ " 차량의 대기 증빙이 도착했어요. " + publicBaseUrl.replaceAll("/+$", "")
 					+ WaitProofLinkResponse.from(proof, true).path());

@@ -24,6 +24,10 @@ import com.ieo.server.domain.wait.repository.WaitRecordRepository;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import com.ieo.server.global.util.KoreanDate;
+import com.ieo.server.domain.ledger.entity.TaxInvoice;
+import com.ieo.server.domain.ledger.repository.TaxInvoiceRepository;
+import com.ieo.server.domain.plan.enums.DriverFeature;
+import com.ieo.server.domain.plan.service.DriverPlanService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -56,6 +60,8 @@ public class LedgerService {
 	private final DriverRepository driverRepository;
 	private final BrokerMetricsCalculator metricsCalculator;
 	private final Clock clock;
+	private final TaxInvoiceRepository taxInvoiceRepository;
+	private final DriverPlanService driverPlanService;
 
 	/** 기간 장부. 비우면 이번 달. 최근 날짜 먼저 */
 	@Transactional(readOnly = true)
@@ -65,6 +71,9 @@ public class LedgerService {
 		LocalDate start = from != null ? from : today.withDayOfMonth(1);
 		LocalDate end = to != null ? to : today.withDayOfMonth(today.lengthOfMonth());
 		validateRange(start, end);
+		if (start.isBefore(today.withDayOfMonth(1))) {
+			driverPlanService.requireFeature(userId, DriverFeature.LEDGER_HISTORY); // 베이직은 이번 달만 (12장)
+		}
 		return toResponses(entryRepository.findAllByDriverUserIdAndWorkDateBetweenOrderByWorkDateDescIdDesc(userId, start, end));
 	}
 
@@ -180,9 +189,13 @@ public class LedgerService {
 				: deliveryProofRepository.findAllByTripIdIn(tripIds).stream()
 						.filter(DeliveryProof::isSent)
 						.collect(Collectors.toMap(proof -> proof.getTrip().getId(), DeliveryProof::getSentAt));
+		Map<Long, Instant> invoiceIssuedByEntry = taxInvoiceRepository
+				.findAllByLedgerEntryIdIn(entries.stream().map(LedgerEntry::getId).toList()).stream()
+				.collect(Collectors.toMap(invoice -> invoice.getLedgerEntry().getId(), TaxInvoice::getIssuedAt));
 		return entries.stream()
 				.map(entry -> LedgerEntryResponse.of(entry, today, waitMinutes(entry),
 						entry.getTrip() == null ? null : receiptSentByTrip.get(entry.getTrip().getId()),
+						invoiceIssuedByEntry.get(entry.getId()),
 						incomes.getOrDefault(entry.getId(), List.of())))
 				.toList();
 	}

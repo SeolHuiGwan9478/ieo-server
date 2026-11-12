@@ -9,6 +9,11 @@ import com.ieo.server.domain.ledger.dto.ReceivablesResponse;
 import com.ieo.server.domain.ledger.dto.UpdateLedgerEntryRequest;
 import com.ieo.server.domain.ledger.service.LedgerExportService;
 import com.ieo.server.domain.ledger.service.LedgerService;
+import com.ieo.server.domain.ledger.dto.TaxInvoiceResponse;
+import com.ieo.server.domain.ledger.service.TaxInvoiceService;
+import com.ieo.server.domain.plan.enums.DriverFeature;
+import com.ieo.server.domain.plan.service.DriverPlanService;
+import java.time.YearMonth;
 import com.ieo.server.global.auth.AuthInterceptor;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
@@ -38,6 +43,8 @@ public class LedgerController {
 
 	private final LedgerService ledgerService;
 	private final LedgerExportService ledgerExportService;
+	private final TaxInvoiceService taxInvoiceService;
+	private final DriverPlanService driverPlanService;
 
 	/** 기간 장부. 비우면 이번 달 */
 	@GetMapping("/api/ledger")
@@ -54,10 +61,30 @@ public class LedgerController {
 			@RequestAttribute(AuthInterceptor.USER_ID) Long userId,
 			@RequestParam LocalDate from,
 			@RequestParam LocalDate to) {
+		driverPlanService.requireFeature(userId, DriverFeature.LEDGER_EXPORT);
 		return ResponseEntity.ok()
 				.contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
 				.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"ieo-ledger-" + from + "_" + to + ".csv\"")
 				.body(ledgerExportService.export(userId, from, to));
+	}
+
+	/** 운행 한 건의 세금계산서: 발행했으면 발행한 것, 아니면 초안 (LEDG-041) */
+	@GetMapping("/api/ledger/{entryId}/tax-invoice")
+	public TaxInvoiceResponse getTaxInvoice(@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @PathVariable Long entryId) {
+		return taxInvoiceService.get(userId, entryId);
+	}
+
+	/** 세금계산서 발행. 지금은 데모 발행 (LEDG-045) */
+	@PostMapping("/api/ledger/{entryId}/tax-invoice")
+	@ResponseStatus(HttpStatus.CREATED)
+	public TaxInvoiceResponse issueTaxInvoice(@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @PathVariable Long entryId) {
+		return taxInvoiceService.issue(userId, entryId);
+	}
+
+	/** 한 달 동안 발행한 세금계산서. month는 2026-11 꼴 */
+	@GetMapping("/api/tax-invoices")
+	public List<TaxInvoiceResponse> getTaxInvoices(@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @RequestParam YearMonth month) {
+		return taxInvoiceService.getMonth(userId, month);
 	}
 
 	/** 직접 추가 */

@@ -1,5 +1,8 @@
 package com.ieo.server.domain.ledger.controller;
 
+import com.ieo.server.domain.plan.entity.DriverSubscription;
+import com.ieo.server.domain.plan.enums.DriverPlan;
+import com.ieo.server.domain.plan.repository.DriverSubscriptionRepository;
 import java.nio.charset.StandardCharsets;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.hamcrest.Matchers.containsString;
@@ -85,6 +88,9 @@ class LedgerControllerTest {
 	@Autowired
 	private JwtProvider jwtProvider;
 
+	@Autowired
+	private DriverSubscriptionRepository subscriptionRepository;
+
 	private MockMvc mockMvc;
 	private String bearer;
 	private Driver driver;
@@ -100,6 +106,10 @@ class LedgerControllerTest {
 		driver = driverRepository.save(Driver.of(user));
 		vehicle = vehicleRepository.save(Vehicle.create(driver, "경기82사1234", Tonnage.TON_5, BodyType.CARGO, null));
 		bearer = "Bearer " + jwtProvider.issue(user.getId()).accessToken();
+		// 지난 장부·내보내기는 프로부터라 프로로 시작한다. 베이직 잠금은 맨 아래 테스트에서 따로 본다
+		DriverSubscription subscription = DriverSubscription.basic(driver);
+		subscription.subscribe(DriverPlan.PRO, Instant.now());
+		subscriptionRepository.save(subscription);
 		broker = brokerRepository.save(Broker.create("한빛로지스", "1234567891", "제2026-001호", null));
 		policyRepository.save(WaitPolicy.create(broker, 120, 30, 10_000, 50_000, WaitRounding.UP));
 		pyeongtaek = siteRepository.save(Site.create("평택 포승 물류센터", "경기 평택시", 36.98, 126.84, null));
@@ -325,5 +335,56 @@ class LedgerControllerTest {
 	private ResultActions addExpense(String json) throws Exception {
 		return mockMvc.perform(post("/api/expenses").header("Authorization", bearer)
 				.contentType(MediaType.APPLICATION_JSON).content(json));
+	}
+
+	@Test
+	void 베이직은_지난_장부와_내보내기가_잠긴다() throws Exception {
+		subscriptionRepository.deleteAll();
+		mockMvc.perform(get("/api/ledger").header("Authorization", bearer).param("from", "2026-01-01").param("to", "2026-01-31"))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("PLAN_403_UPGRADE"));
+		mockMvc.perform(get("/api/ledger/export").header("Authorization", bearer).param("from", "2026-01-01").param("to", "2026-01-31"))
+				.andExpect(status().isForbidden());
+		mockMvc.perform(get("/api/ledger").header("Authorization", bearer))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	void 운행_한_건에_세금계산서_한_장을_데모로_발행한다() throws Exception {
+		Trip trip = startedTrip();
+		event(trip, "PICKUP", "arrive", PLANNED.minusSeconds(3 * 3600));
+		event(trip, "PICKUP", "work-start", PLANNED.plusSeconds(150 * 60));
+		event(trip, "PICKUP", "depart", PLANNED.plusSeconds(190 * 60));
+		event(trip, "DROPOFF", "arrive", PLANNED.plusSeconds(6 * 3600));
+		event(trip, "DROPOFF", "depart", PLANNED.plusSeconds(7 * 3600));
+		String list = mockMvc.perform(get("/api/ledger").header("Authorization", bearer).param("from", DAY).param("to", DAY))
+				.andReturn().getResponse().getContentAsString();
+		Integer entryId = JsonPath.read(list, "$[0].id");
+
+		// 사업자 정보가 없으면 초안에 빈 칸이 보이고 발행은 거절
+		mockMvc.perform(get("/api/ledger/" + entryId + "/tax-invoice").header("Authorization", bearer))
+				.andExpect(jsonPath("$.issued").value(false))
+				.andExpect(jsonPath("$.missing[0]").value("내 사업자 정보"))
+				.andExpect(jsonPath("$.supplyAmount").value(460000))
+				.andExpect(jsonPath("$.vat").value(46000));
+		mockMvc.perform(post("/api/ledger/" + entryId + "/tax-invoice").header("Authorization", bearer))
+				.andExpect(status().isBadRequest());
+
+		driver.changeBusinessInfo("한길운수", "1234567891", "홍길동");
+		mockMvc.perform(post("/api/ledger/" + entryId + "/tax-invoice").header("Authorization", bearer))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.issued").value(true))
+				.andExpect(jsonPath("$.provider").value("DEMO"))
+				.andExpect(jsonPath("$.approvalNumber").value(containsString("-99999999-")))
+				.andExpect(jsonPath("$.buyer.name").value("한빛로지스"))
+				.andExpect(jsonPath("$.fareAmount").value(450000))
+				.andExpect(jsonPath("$.waitFeeAmount").value(10000))
+				.andExpect(jsonPath("$.totalAmount").value(506000));
+		mockMvc.perform(post("/api/ledger/" + entryId + "/tax-invoice").header("Authorization", bearer))
+				.andExpect(status().isConflict());
+		mockMvc.perform(get("/api/ledger").header("Authorization", bearer).param("from", DAY).param("to", DAY))
+				.andExpect(jsonPath("$[0].taxInvoiceIssuedAt").isNotEmpty());
+		mockMvc.perform(get("/api/tax-invoices").header("Authorization", bearer).param("month", DAY.substring(0, 7)))
+				.andExpect(jsonPath("$.length()").value(1));
 	}
 }

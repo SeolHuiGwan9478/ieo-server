@@ -9,6 +9,9 @@ import com.ieo.server.domain.broker.enums.BrokerPlan;
 import com.ieo.server.domain.broker.repository.BrokerInvitationRepository;
 import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
 import com.ieo.server.domain.broker.repository.BrokerSubscriptionRepository;
+import com.ieo.server.domain.plan.entity.PlanPayment;
+import com.ieo.server.domain.plan.enums.PlanOwnerType;
+import com.ieo.server.domain.plan.repository.PlanPaymentRepository;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.time.Clock;
@@ -29,6 +32,7 @@ public class BrokerPlanService {
 	private final BrokerSubscriptionRepository subscriptionRepository;
 	private final BrokerMemberRepository memberRepository;
 	private final BrokerInvitationRepository invitationRepository;
+	private final PlanPaymentRepository paymentRepository;
 	private final Clock clock;
 
 	public BrokerPlan planOf(Long brokerId) {
@@ -81,16 +85,21 @@ public class BrokerPlanService {
 		}
 	}
 
-	/** 플랜 바꾸기. 결제가 없어 바로 적용 (BILL-007). 부르는 쪽이 대표인지 확인한다 */
+	/** 플랜 바꾸기. 데모 결제라 바로 적용하고 유료 플랜이면 결제 기록(30일)을 남긴다 (BILL-007). 부르는 쪽이 대표인지 확인한다 */
 	@Transactional
 	public BrokerPlanResponse change(Broker broker, BrokerPlan plan) {
 		Instant now = clock.instant();
+		BrokerPlan before = planOf(broker.getId());
 		BrokerSubscription subscription = subscriptionRepository.findById(broker.getId())
 				.map(found -> {
 					found.change(plan, now);
 					return found;
 				})
 				.orElseGet(() -> subscriptionRepository.save(BrokerSubscription.of(broker, plan, now)));
+		if (plan.getPrice() > 0 && before != plan) {
+			paymentRepository.save(PlanPayment.demo(PlanOwnerType.BROKER, broker.getId(), plan.name(), plan.getPrice(),
+					now, now.plus(PlanPayment.PERIOD), now));
+		}
 		return BrokerPlanResponse.of(subscription.getPlan(), subscription.getStartedAt());
 	}
 }
