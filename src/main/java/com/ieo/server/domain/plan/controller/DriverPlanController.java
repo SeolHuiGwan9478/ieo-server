@@ -7,6 +7,7 @@ import com.ieo.server.global.auth.AuthInterceptor;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
@@ -36,6 +37,12 @@ public class DriverPlanController {
 	@PostMapping("/trial")
 	public DriverPlanResponse startTrial(@RequestAttribute(AuthInterceptor.USER_ID) Long userId) {
 		return driverPlanService.startTrial(userId);
+	}
+
+	/** 보상 쿠폰 쓰기 (DSP-034) */
+	@PostMapping("/coupons/{couponId}/use")
+	public DriverPlanResponse useCoupon(@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @PathVariable Long couponId) {
+		return driverPlanService.useCoupon(userId, couponId);
 	}
 
 	@PostMapping("/resume")

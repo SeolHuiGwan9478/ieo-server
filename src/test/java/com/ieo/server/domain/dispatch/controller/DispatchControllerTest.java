@@ -454,6 +454,50 @@ class DispatchControllerTest {
 	}
 
 	@Test
+	void 주선사가_상차_2시간_이내에_취소하면_기사님이_프로_3일_쿠폰을_받고_쓰면_플랜이_바뀐다() throws Exception {
+		Integer soon = idOf(registerOrder(orderJson("TON_5", "WING", "FIRST", null, Instant.now().plus(Duration.ofHours(1)))));
+		request(driver, soon);
+		cancelByBroker(soon, "{\"reason\":\"SCHEDULE_CONFLICT\"}").andExpect(status().isOk());
+		// 받기만 하고 플랜은 그대로
+		String body = mockMvc.perform(get("/api/plans/me").header("Authorization", driver))
+				.andExpect(jsonPath("$.plan").value("BASIC"))
+				.andExpect(jsonPath("$.coupons[0].reason").value("주선사 늦은 취소"))
+				.andExpect(jsonPath("$.coupons[0].days").value(3))
+				.andExpect(jsonPath("$.coupons[0].usable").value(true))
+				.andReturn().getResponse().getContentAsString();
+		Integer couponId = JsonPath.read(body, "$.coupons[0].id");
+
+		mockMvc.perform(post("/api/plans/me/coupons/" + couponId + "/use").header("Authorization", driver))
+				.andExpect(jsonPath("$.plan").value("PRO"))
+				.andExpect(jsonPath("$.gift").value(true))
+				.andExpect(jsonPath("$.daysLeft").value(3))
+				.andExpect(jsonPath("$.coupons[0].usable").value(false))
+				.andExpect(jsonPath("$.coupons[0].usedAt").isNotEmpty());
+		mockMvc.perform(post("/api/plans/me/coupons/" + couponId + "/use").header("Authorization", driver))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("COUPON_409_USED"));
+
+		// 넉넉히 미리 취소하면 쿠폰 없음
+		Integer later = idOf(registerOrder(orderJson("TON_5", "WING", "FIRST", null)));
+		request(driver, later);
+		cancelByBroker(later, "{\"reason\":\"SCHEDULE_CONFLICT\"}").andExpect(status().isOk());
+		mockMvc.perform(get("/api/plans/me").header("Authorization", driver))
+				.andExpect(jsonPath("$.coupons.length()").value(1));
+	}
+
+	@Test
+	void 기사님이_늦게_취소하면_보상도_차감도_없다() throws Exception {
+		Integer soon = idOf(registerOrder(orderJson("TON_5", "WING", "FIRST", null, Instant.now().plus(Duration.ofHours(1)))));
+		Integer tripId = JsonPath.read(request(driver, soon).andReturn().getResponse().getContentAsString(), "$.tripId");
+		mockMvc.perform(post("/api/trips/" + tripId + "/cancel").header("Authorization", driver)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"SCHEDULE_CONFLICT\"}"))
+				.andExpect(status().isOk());
+		mockMvc.perform(get("/api/plans/me").header("Authorization", driver))
+				.andExpect(jsonPath("$.plan").value("BASIC"))
+				.andExpect(jsonPath("$.coupons.length()").value(0));
+	}
+
+	@Test
 	void 짐을_실은_뒤에는_차주가_앱에서_취소할_수_없다() throws Exception {
 		Integer orderId = idOf(registerOrder(orderJson("TON_5", "WING", "FIRST", null)));
 		Integer tripId = JsonPath.read(request(driver, orderId).andReturn().getResponse().getContentAsString(), "$.tripId");

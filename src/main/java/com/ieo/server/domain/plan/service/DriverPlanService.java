@@ -5,11 +5,13 @@ import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.ledger.repository.TaxInvoiceRepository;
 import com.ieo.server.domain.plan.dto.DriverPlanResponse;
 import com.ieo.server.domain.plan.entity.DriverSubscription;
+import com.ieo.server.domain.plan.entity.PlanCoupon;
 import com.ieo.server.domain.plan.entity.PlanPayment;
 import com.ieo.server.domain.plan.enums.DriverFeature;
 import com.ieo.server.domain.plan.enums.DriverPlan;
 import com.ieo.server.domain.plan.enums.PlanOwnerType;
 import com.ieo.server.domain.plan.repository.DriverSubscriptionRepository;
+import com.ieo.server.domain.plan.repository.PlanCouponRepository;
 import com.ieo.server.domain.plan.repository.PlanPaymentRepository;
 import com.ieo.server.domain.wait.repository.WaitProofRepository;
 import com.ieo.server.global.error.BusinessException;
@@ -34,9 +36,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class DriverPlanService {
 
 	private static final Duration WAIT_PROOF_WINDOW = Duration.ofDays(30);
+	/** 주선사 늦은 취소 쿠폰의 프로 이용일 (DSP-034, 가정값) */
+	static final int LATE_CANCEL_COUPON_DAYS = 3;
+	/** 같은 기사님이 30일에 받을 수 있는 쿠폰 수. 주선사와 짜고 취소를 반복하는 일을 막는다 */
+	static final int MAX_COUPONS = 3;
+	private static final Duration COUPON_WINDOW = Duration.ofDays(30);
 
 	private final DriverSubscriptionRepository subscriptionRepository;
 	private final PlanPaymentRepository paymentRepository;
+	private final PlanCouponRepository couponRepository;
 	private final DriverRepository driverRepository;
 	private final WaitProofRepository waitProofRepository;
 	private final TaxInvoiceRepository taxInvoiceRepository;
@@ -56,7 +64,7 @@ public class DriverPlanService {
 			return response(subscription);
 		}
 		Instant now = clock.instant();
-		if (subscription.planAt(now) == plan && !subscription.isTrial()) {
+		if (subscription.planAt(now) == plan && !subscription.isTrial() && !subscription.isGift()) {
 			subscription.resume();
 			return response(subscription);
 		}
@@ -75,6 +83,32 @@ public class DriverPlanService {
 		return response(subscription);
 	}
 
+	/**
+	 * 주선사가 상차 2시간 안에 배차를 취소하면 기사님에게 프로 이용일 쿠폰을 준다 (DSP-034).
+	 * 바로 쓰이지 않고 기사님이 [사용하기]를 눌러야 플랜이 바뀐다. 운행 하나에 한 장, 30일에 MAX_COUPONS장까지
+	 */
+	public void compensateLateCancel(Driver driver, Long tripId) {
+		Instant now = clock.instant();
+		if (couponRepository.existsByTripId(tripId)
+				|| couponRepository.countByDriverUserIdAndIssuedAtGreaterThanEqual(driver.getUserId(), now.minus(COUPON_WINDOW)) >= MAX_COUPONS) {
+			return;
+		}
+		couponRepository.save(PlanCoupon.issue(driver, tripId, LATE_CANCEL_COUPON_DAYS, "주선사 늦은 취소", now));
+	}
+
+	/** 쿠폰 쓰기: 프로 이용일을 지금 플랜 끝에 더한다. 베이직이면 오늘부터 프로. 결제 기록은 남기지 않는다 */
+	public DriverPlanResponse useCoupon(Long userId, Long couponId) {
+		Driver driver = requireDriver(userId);
+		PlanCoupon coupon = couponRepository.findById(couponId)
+				.filter(found -> found.getDriver().getUserId().equals(userId))
+				.orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
+		Instant now = clock.instant();
+		coupon.use(now);
+		DriverSubscription subscription = current(driver);
+		subscription.addProDays(coupon.getDays(), now);
+		return response(subscription);
+	}
+
 	/** 해지 취소: 다음 30일도 이어서 쓴다 */
 	public DriverPlanResponse resume(Long userId) {
 		DriverSubscription subscription = current(requireDriver(userId));
@@ -86,7 +120,7 @@ public class DriverPlanService {
 	public DriverPlan planOf(Long userId) {
 		Instant now = clock.instant();
 		return subscriptionRepository.findById(userId)
-				.map(subscription -> subscription.isExpiredAt(now) && !subscription.isTrial() && !subscription.isCancelAtPeriodEnd()
+				.map(subscription -> subscription.isExpiredAt(now) && subscription.isAutoRenewing()
 						? subscription.getPlan() // 자동 갱신 대상: 다음에 읽을 때 결제(데모)된다
 						: subscription.planAt(now))
 				.orElse(DriverPlan.BASIC);
@@ -130,7 +164,7 @@ public class DriverPlanService {
 				.orElseGet(() -> subscriptionRepository.save(DriverSubscription.basic(driver)));
 		Instant now = clock.instant();
 		while (subscription.isExpiredAt(now)) {
-			if (subscription.isTrial() || subscription.isCancelAtPeriodEnd()) {
+			if (!subscription.isAutoRenewing()) {
 				subscription.downgrade();
 			} else {
 				subscription.renew();
@@ -158,7 +192,8 @@ public class DriverPlanService {
 
 	private DriverPlanResponse response(DriverSubscription subscription) {
 		Long userId = subscription.getDriverId();
-		return DriverPlanResponse.of(subscription, clock.instant(), waitProofsSent(userId), taxInvoicesThisMonth(userId));
+		return DriverPlanResponse.of(subscription, clock.instant(), waitProofsSent(userId), taxInvoicesThisMonth(userId),
+				couponRepository.findTop10ByDriverUserIdOrderByIssuedAtDesc(userId));
 	}
 
 	private Driver requireDriver(Long userId) {

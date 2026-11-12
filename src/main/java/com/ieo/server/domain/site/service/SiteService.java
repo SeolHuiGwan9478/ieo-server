@@ -130,7 +130,6 @@ public class SiteService {
 		Driver driver = requireDriver(userId);
 		Site site = findSite(siteId);
 		attributeRepository.saveAndFlush(SiteAttribute.create(site, request.key(), request.value(), driver));
-		// TODO(SITE-011, 12 요금제 크레딧): 정보를 남긴 차주에게 소정의 크레딧을 준다. 규칙은 크레딧을 만들 때 정한다
 		return SiteAttributesResponse.from(attributeRepository.findLatestBySiteId(siteId));
 	}
 
@@ -140,7 +139,6 @@ public class SiteService {
 		Driver driver = requireDriver(userId);
 		Site site = findSite(siteId);
 		SiteNote note = noteRepository.saveAndFlush(SiteNote.create(site, driver, request.text()));
-		// TODO(SITE-011, 12 요금제 크레딧): 메모를 남긴 차주에게 소정의 크레딧을 준다. 짧거나 같은 곳에 연달아 남긴 메모는 빼는 규칙과 함께
 		return SiteNoteResponse.of(note, userId);
 	}
 

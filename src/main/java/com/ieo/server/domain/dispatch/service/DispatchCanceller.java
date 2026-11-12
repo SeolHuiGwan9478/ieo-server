@@ -6,9 +6,11 @@ import com.ieo.server.domain.dispatch.enums.CancelReason;
 import com.ieo.server.domain.dispatch.repository.CancellationRepository;
 import com.ieo.server.domain.dispatch.repository.DispatchRequestRepository;
 import com.ieo.server.domain.dispatch.repository.OrderRepository;
+import com.ieo.server.domain.plan.service.DriverPlanService;
 import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.trip.service.TripLocationService;
 import com.ieo.server.domain.user.entity.User;
+import com.ieo.server.domain.user.enums.UserRole;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.time.Instant;
@@ -29,6 +31,7 @@ public class DispatchCanceller {
 	private final CancellationRepository cancellationRepository;
 	private final OrderRepository orderRepository;
 	private final TripLocationService locationService;
+	private final DriverPlanService driverPlanService;
 
 	/** reopen이면 오더를 다시 모집하고, 아니면 내린다. 차주가 취소하면 늘 다시 모집한다 */
 	public Cancellation cancel(Trip trip, User canceledBy, CancelReason reason, String memo, boolean reopen, Instant now) {
@@ -45,9 +48,10 @@ public class DispatchCanceller {
 			order.closeAfterCancel();
 		}
 		Cancellation cancellation = cancellationRepository.save(Cancellation.of(trip, canceledBy, reason, memo));
-		// TODO(DSP-034, 12 요금제): 크레딧 차감 규칙을 정한 뒤 붙인다.
-		//  차주가 늦게 취소하면(cancellation.isLate()) 차주 크레딧을 돌려주지 않고,
-		//  주선사가 늦게 취소하면 차주 크레딧을 돌려준다
+		// 주선사가 상차 2시간 안에 취소하면 기사님에게 프로 3일 쿠폰 (DSP-034). 기사님이 늦게 취소하면 돈·이용일은 빼지 않고 배차 요청 제한만 (DSP-033)
+		if (canceledBy.getRole() != UserRole.DRIVER && cancellation.isLate()) {
+			driverPlanService.compensateLateCancel(trip.getDriver(), trip.getId());
+		}
 		// 끝난 운행의 위치는 지운다. 차주 취소는 TripService도 지우지만 주선사 취소는 여기만 지난다
 		locationService.clear(trip);
 		try {

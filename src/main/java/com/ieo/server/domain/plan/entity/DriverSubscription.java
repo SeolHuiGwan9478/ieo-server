@@ -15,6 +15,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.MapsId;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -62,6 +63,10 @@ public class DriverSubscription extends BaseTimeEntity {
 	@Column(nullable = false)
 	private boolean cancelAtPeriodEnd;
 
+	/** 쿠폰으로 받은 프로 이용일만으로 쓰는 중 (DSP-034). 끝나면 결제 없이 BASIC으로 */
+	@Column(nullable = false)
+	private boolean gift;
+
 	private DriverSubscription(Driver driver) {
 		this.driver = driver;
 		this.plan = DriverPlan.BASIC;
@@ -88,11 +93,37 @@ public class DriverSubscription extends BaseTimeEntity {
 		if (plan == null || !plan.isPaid()) {
 			throw new BusinessException(ErrorCode.PLAN_INVALID);
 		}
+		// 쿠폰으로 받은 날이 남아 있으면 버리지 않고 결제한 30일 뒤에 붙인다
+		Duration leftover = gift && periodEnd != null && now.isBefore(periodEnd) ? Duration.between(now, periodEnd) : Duration.ZERO;
 		this.plan = plan;
 		this.periodStart = now;
-		this.periodEnd = now.plus(PlanPayment.PERIOD);
+		this.periodEnd = now.plus(PlanPayment.PERIOD).plus(leftover);
 		this.trial = false;
 		this.cancelAtPeriodEnd = false;
+		this.gift = false;
+	}
+
+	/** 기간이 끝나면 다시 결제(데모)하는지. 체험·해지·쿠폰 이용일이면 BASIC으로 내린다 */
+	public boolean isAutoRenewing() {
+		return !trial && !cancelAtPeriodEnd && !gift;
+	}
+
+	/**
+	 * 쿠폰의 프로 이용일을 더한다 (DSP-034). 프로(유료·체험·쿠폰)를 쓰는 중이면 지금 기간 끝에 더하고,
+	 * 베이직이면 오늘부터 그날만큼 프로가 된다
+	 */
+	public void addProDays(int days, Instant now) {
+		Duration extra = Duration.ofDays(days);
+		if (planAt(now).isPaid()) {
+			this.periodEnd = periodEnd.plus(extra);
+			return;
+		}
+		this.plan = DriverPlan.PRO;
+		this.periodStart = now;
+		this.periodEnd = now.plus(extra);
+		this.trial = false;
+		this.cancelAtPeriodEnd = false;
+		this.gift = true;
 	}
 
 	public void startTrial(Instant now) {
@@ -127,5 +158,6 @@ public class DriverSubscription extends BaseTimeEntity {
 		this.periodEnd = null;
 		this.trial = false;
 		this.cancelAtPeriodEnd = false;
+		this.gift = false;
 	}
 }
