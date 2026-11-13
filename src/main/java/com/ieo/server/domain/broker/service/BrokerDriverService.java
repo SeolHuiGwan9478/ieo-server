@@ -15,6 +15,7 @@ import com.ieo.server.domain.user.repository.UserRepository;
 import com.ieo.server.domain.vehicle.repository.VehicleRepository;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
+import com.ieo.server.domain.notification.service.NotificationService;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -37,6 +38,7 @@ public class BrokerDriverService {
 	private final BrokerDriverLinkRepository linkRepository;
 	private final UserRepository userRepository;
 	private final VehicleRepository vehicleRepository;
+	private final NotificationService notificationService;
 	private final Clock clock;
 	private final DriverRecordService driverRecordService;
 
@@ -66,7 +68,8 @@ public class BrokerDriverService {
 
 	/**
 	 * 번호로 단골 연결을 요청한다. 미가입 번호여도 저장하고, 그 번호로 가입한 차주에게 보인다.
-	 * 이미 우리 단골이거나 같은 번호로 대기 중인 요청이 있으면 409. 문자는 보내지 않는다. 차주는 차량 앱에서 요청을 본다 (2026-11-13).
+	 * 이미 우리 단골이거나 같은 번호로 대기 중인 요청이 있으면 409. 문자는 보내지 않는다 (2026-11-13).
+	 * 가입한 차주에게는 앱 알림을 보내고, 수락·거절은 휴대폰에서만 한다. 미가입 번호는 그 번호로 가입하면 요청이 보인다.
 	 */
 	public SentDriverInvitationResponse invite(Long userId, String phone) {
 		BrokerMember me = requireActiveMember(userId);
@@ -98,6 +101,8 @@ public class BrokerDriverService {
 		}
 
 		BrokerDriverLink link = linkRepository.save(BrokerDriverLink.request(me, phone));
+		userRepository.findByPhone(phone).filter(user -> user.getRole() == UserRole.DRIVER)
+				.ifPresent(driver -> notificationService.linkRequested(link, driver.getId()));
 		return SentDriverInvitationResponse.from(link, now);
 	}
 

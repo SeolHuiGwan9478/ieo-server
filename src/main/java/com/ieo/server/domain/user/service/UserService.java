@@ -2,6 +2,7 @@ package com.ieo.server.domain.user.service;
 
 import com.ieo.server.domain.user.dto.ChangePhoneRequest;
 import com.ieo.server.domain.broker.repository.BrokerDriverLinkRepository;
+import com.ieo.server.domain.notification.repository.NotificationRepository;
 import com.ieo.server.domain.broker.repository.BrokerInvitationRepository;
 import com.ieo.server.domain.broker.service.BrokerMemberService;
 import com.ieo.server.domain.document.service.DriverDocumentService;
@@ -42,6 +43,7 @@ public class UserService {
 	private final BrokerMemberService brokerMemberService;
 	private final BrokerInvitationRepository brokerInvitationRepository;
 	private final BrokerDriverLinkRepository brokerDriverLinkRepository;
+	private final NotificationRepository notificationRepository;
 	private final CarSessionService carSessionService;
 	private final DriverDocumentService driverDocumentService;
 	private final Clock clock;
@@ -110,6 +112,7 @@ public class UserService {
 			phoneTokenRepository.deleteByPhone(phone);
 			brokerInvitationRepository.deleteByPhone(phone);
 			// 단골 연결 요청·연결도 지운다. 확정된 배차·운행은 오더와 운행에 남는다
+			notificationRepository.deleteByDriverLinkPhone(phone);
 			brokerDriverLinkRepository.deleteByPhone(phone);
 		}
 	}

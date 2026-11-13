@@ -1,5 +1,6 @@
 package com.ieo.server.domain.notification.service;
 
+import com.ieo.server.domain.broker.entity.BrokerDriverLink;
 import com.ieo.server.domain.dispatch.entity.DispatchRequest;
 import com.ieo.server.domain.dispatch.enums.DispatchRequestStatus;
 import com.ieo.server.domain.dispatch.event.DispatchConfirmed;
@@ -58,6 +59,13 @@ public class NotificationService {
 		requestRepository.findById(requestId)
 				.filter(request -> request.statusAt(clock.instant()) == DispatchRequestStatus.EXPIRED)
 				.ifPresent(request -> record(request, NotificationType.DISPATCH_EXPIRED));
+	}
+
+	/** 단골 연결을 요청받은 (이미 가입한) 차주에게 알린다 (BRK-002). 휴대폰에서 눌러 수락·거절한다 */
+	public void linkRequested(BrokerDriverLink link, Long driverUserId) {
+		Notification saved = notificationRepository.save(Notification.aboutLink(link, driverUserId, clock.instant()));
+		NotificationResponse response = NotificationResponse.of(saved);
+		afterCommit(() -> hub.push(driverUserId, response));
 	}
 
 	/** after 다음 알림. after가 없으면 최근 20건 */

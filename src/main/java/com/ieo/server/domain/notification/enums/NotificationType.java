@@ -7,5 +7,7 @@ public enum NotificationType {
 	/** 다른 차주로 마감됐거나 주선사가 오더를 내렸다 */
 	DISPATCH_DECLINED,
 	/** 10분 안에 확정되지 않았다 */
-	DISPATCH_EXPIRED
+	DISPATCH_EXPIRED,
+	/** 주선사가 단골 연결을 요청했다. 수락·거절은 휴대폰에서만 한다 (BRK-002) */
+	DRIVER_LINK_REQUESTED
 }

@@ -196,7 +196,7 @@ class NotificationControllerTest {
 				.doesNotContain("DISPATCH_EXPIRED");
 		assertThat(hub.connections(driverId)).isEqualTo(1);
 
-		hub.push(driverId, new NotificationResponse(999L, NotificationType.DISPATCH_DECLINED, "마감", 1L, 1L, Instant.now()));
+		hub.push(driverId, new NotificationResponse(999L, NotificationType.DISPATCH_DECLINED, "마감", 1L, 1L, null, Instant.now()));
 		assertThat(stream.getResponse().getContentAsString(StandardCharsets.UTF_8)).contains("id:999").contains("\"message\":\"마감\"");
 	}
 

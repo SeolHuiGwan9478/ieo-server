@@ -108,6 +108,24 @@ class BrokerDriverControllerTest {
 	}
 
 	@Test
+	void 가입한_차주에게는_단골_요청_앱_알림이_가고_미가입_번호에는_가지_않는다() throws Exception {
+		long linkId = invite(DRIVER_PHONE);
+
+		perform(get("/api/notifications"), driver)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].type").value("DRIVER_LINK_REQUESTED"))
+				.andExpect(jsonPath("$[0].driverLinkId").value(linkId))
+				.andExpect(jsonPath("$[0].orderId").doesNotExist())
+				.andExpect(jsonPath("$[0].message").value("한빛로지스에서 단골 연결을 요청했어요. 휴대폰 앱에서 수락하거나 거절할 수 있어요"));
+
+		invite("01090006009");
+		User newcomer = driverUser("01090006009", "새기사");
+		perform(get("/api/notifications"), newcomer)
+				.andExpect(jsonPath("$.length()").value(0));
+	}
+
+	@Test
 	void 미가입_번호도_요청이_저장되고_가입하면_보인다() throws Exception {
 		invite("01090006009");
 
