@@ -237,6 +237,37 @@ class RecommendationControllerTest {
 	}
 
 	@Test
+	void 오더_상세는_상하차지에서는_그곳에서_재고_추천한_숫자를_그대로_쓴다() throws Exception {
+		Integer nearBusan = order(busan, 400_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		Trip trip = Trip.create(driverEntity, vehicleEntity, null, null, 450_000, PaymentType.RECEIPT, TripSource.MANUAL,
+				busan, now, chilgok, now.plus(Duration.ofHours(5)));
+		trip.start(now);
+		trip.arriveAtPickup();
+		tripRepository.save(trip);
+		String card = recommend().andReturn().getResponse().getContentAsString();
+		clearInvocations(truckRoutes);
+
+		// 성서 좌표를 보내도 상차지(부산 신항)에서 잰 추천 숫자를 그대로 준다
+		profit(nearBusan, "35.84", "128.49")
+				.andExpect(jsonPath("$.originName").value("부산 신항"))
+				.andExpect(jsonPath("$.netProfit").value((int) JsonPath.read(card, "$.items[0].netProfit")))
+				.andExpect(jsonPath("$.emptyMeters").value(((Number) JsonPath.read(card, "$.items[0].emptyMeters")).longValue()));
+		verify(truckRoutes, never()).routes(any(), any());
+	}
+
+	@Test
+	void 운행이_없으면_지금_위치에서_재고_10분_안_1km_안에서_다시_열면_TMAP을_다시_부르지_않는다() throws Exception {
+		Integer near = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+
+		profit(near, "35.84", "128.49").andExpect(jsonPath("$.originName").doesNotExist());
+		profit(near, "35.843", "128.492");
+		verify(truckRoutes, times(1)).routes(any(), any());
+
+		profit(near, "35.86", "128.49");
+		verify(truckRoutes, times(2)).routes(any(), any());
+	}
+
+	@Test
 	void 요청을_걸어_둔_오더는_뺀다() throws Exception {
 		Integer requested = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
 		Integer other = order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
@@ -335,6 +366,12 @@ class RecommendationControllerTest {
 	/** 대구 성서 공단에 세웠다 */
 	private ResultActions recommend() throws Exception {
 		return mockMvc.perform(get("/api/recommendations").param("lat", "35.84").param("lng", "128.49").header("Authorization", driver));
+	}
+
+	private ResultActions profit(Integer orderId, String lat, String lng) throws Exception {
+		return mockMvc.perform(get("/api/orders/" + orderId + "/profit").param("lat", lat).param("lng", lng)
+						.header("Authorization", driver))
+				.andExpect(status().isOk());
 	}
 
 	private ResultActions preference(String json) throws Exception {

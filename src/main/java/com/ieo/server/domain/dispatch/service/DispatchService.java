@@ -20,6 +20,8 @@ import com.ieo.server.domain.document.service.DriverVerification;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.recommendation.dto.ProfitEstimateResponse;
+import com.ieo.server.domain.recommendation.service.DriverOrigins;
+import com.ieo.server.domain.recommendation.service.OrderProfits;
 import com.ieo.server.domain.recommendation.service.ProfitEstimator;
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.trip.entity.Trip;
@@ -73,6 +75,8 @@ public class DispatchService {
 	private final OrderReportRepository reportRepository;
 	private final BrokerMetricsService metricsService;
 	private final ProfitEstimator profitEstimator;
+	private final DriverOrigins driverOrigins;
+	private final OrderProfits orderProfits;
 	private final Clock clock;
 	private final ApplicationEventPublisher events;
 	private final DriverVerification driverVerification;
@@ -162,15 +166,18 @@ public class DispatchService {
 		}
 	}
 
-	/** 오더 상세의 실수익 내역 (DSP-011). 지금 위치에서 출발한다고 치고 실제 경로로 계산한다 */
+	/**
+	 * 오더 상세의 실수익 내역 (DSP-011). 상차지·하차지에 도착해 있으면 그곳에서, 아니면 지금 위치에서 출발한다고 치고
+	 * 실제 경로로 계산한다. 같은 곳에서 이미 잰 것은 다시 쓴다 (OrderProfits)
+	 */
 	@Transactional(readOnly = true)
 	public ProfitEstimateResponse estimateProfit(Long userId, Long orderId, double lat, double lng) {
 		requireDriver(userId);
 		Site.validateLocation(lat, lng);
 		Order order = findVisible(userId, orderId);
 		Vehicle vehicle = vehicleFor(order, vehicleRepository.findAllByDriverUserIdOrderByCreatedAtAsc(userId));
-		return ProfitEstimateResponse.from(
-				profitEstimator.exact(List.of(target(order, lat, lng)), vehicle).get(order.getId()));
+		DriverOrigins.DriverOrigin origin = driverOrigins.of(userId, lat, lng);
+		return ProfitEstimateResponse.from(orderProfits.of(userId, order, vehicle, origin), origin.siteName());
 	}
 
 	/** 맡을 수 있는 내 첫 차량 */

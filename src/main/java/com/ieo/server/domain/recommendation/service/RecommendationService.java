@@ -20,10 +20,7 @@ import com.ieo.server.domain.recommendation.repository.RecommendationShownReposi
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.site.entity.SiteStats;
 import com.ieo.server.domain.site.repository.SiteStatsRepository;
-import com.ieo.server.domain.trip.entity.Trip;
-import com.ieo.server.domain.trip.enums.StopType;
-import com.ieo.server.domain.trip.enums.TripStatus;
-import com.ieo.server.domain.trip.repository.TripRepository;
+import com.ieo.server.domain.recommendation.service.DriverOrigins.DriverOrigin;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.vehicle.entity.Vehicle;
 import com.ieo.server.domain.vehicle.repository.VehicleRepository;
@@ -76,7 +73,7 @@ public class RecommendationService {
 	private final SiteStatsRepository siteStatsRepository;
 	private final RecommendationPreferenceRepository preferenceRepository;
 	private final RecommendationShownRepository shownRepository;
-	private final TripRepository tripRepository;
+	private final DriverOrigins origins;
 	private final BrokerMetricsService metricsService;
 	private final ProfitEstimator profitEstimator;
 	private final RecommendationProperties properties;
@@ -96,8 +93,8 @@ public class RecommendationService {
 		if (!preference.isEnabled() || found.isEmpty()) {
 			return RecommendationListResponse.none();
 		}
-		Origin origin = originOf(userId, lat, lng);
-		if (origin == null) {
+		DriverOrigin origin = origins.of(userId, lat, lng);
+		if (origin.driving()) {
 			return RecommendationListResponse.none();
 		}
 		Instant now = clock.instant();
@@ -139,22 +136,8 @@ public class RecommendationService {
 		return new RecommendationListResponse(List.of(responseOf(chosen.order(), estimate, now, userId)), true);
 	}
 
-	/** 어디 근처를 찾을지. 추천하지 않는 때면 null */
-	private Origin originOf(Long userId, double lat, double lng) {
-		Optional<Trip> current = tripRepository.findFirstByDriverUserIdAndStatusInOrderByCreatedAtDesc(userId, TripStatus.IN_PROGRESS);
-		if (current.isEmpty()) {
-			return new Origin(null, null, lat, lng);
-		}
-		Trip trip = current.get();
-		return switch (trip.getStatus()) {
-			case AT_PICKUP -> new Origin(trip.getId(), StopType.PICKUP, trip.pickup().getSite().getLat(), trip.pickup().getSite().getLng());
-			case AT_DROPOFF -> new Origin(trip.getId(), StopType.DROPOFF, trip.dropoff().getSite().getLat(), trip.dropoff().getSite().getLng());
-			default -> null;
-		};
-	}
-
-	private Optional<RecommendationShown> earlierShown(Long userId, Origin origin, double lat, double lng, Instant now) {
-		if (origin.tripId() != null) {
+	private Optional<RecommendationShown> earlierShown(Long userId, DriverOrigin origin, double lat, double lng, Instant now) {
+		if (origin.atStop()) {
 			return shownRepository.findFirstByDriverUserIdAndTripIdAndStopTypeOrderByShownAtDesc(userId, origin.tripId(), origin.stopType());
 		}
 		return shownRepository.findFirstByDriverUserIdAndTripIdIsNullAndShownAtAfterOrderByShownAtDesc(userId, now.minus(REUSE_FOR))
@@ -230,10 +213,6 @@ public class RecommendationService {
 			throw new BusinessException(ErrorCode.USER_NOT_FOUND);
 		}
 		return driver;
-	}
-
-	/** 빈 차 거리를 재는 출발점. 운행이 없으면 tripId·stopType이 비어 있다 */
-	private record Origin(Long tripId, StopType stopType, double lat, double lng) {
 	}
 
 	private record Candidate(Order order, ProfitEstimator.Target target, ProfitEstimator.Estimate estimate) {

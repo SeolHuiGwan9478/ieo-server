@@ -3,6 +3,7 @@ package com.ieo.server.domain.recommendation.entity;
 import com.ieo.server.domain.dispatch.entity.Order;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.trip.enums.StopType;
+import com.ieo.server.global.geo.GeoDistance;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -94,10 +95,8 @@ public class RecommendationShown {
 		return shown;
 	}
 
-	/** 출발점에서 (lat, lng)까지 [meters] 안인지. 짧은 거리라 평면으로 어림한다 */
+	/** 출발점에서 (lat, lng)까지 [meters] 안인지 */
 	public boolean isWithin(double lat, double lng, double meters) {
-		double dy = (lat - originLat) * 111_320;
-		double dx = (lng - originLng) * 111_320 * Math.cos(Math.toRadians(originLat));
-		return Math.hypot(dx, dy) <= meters;
+		return GeoDistance.approxMeters(originLat, originLng, lat, lng) <= meters;
 	}
 }
