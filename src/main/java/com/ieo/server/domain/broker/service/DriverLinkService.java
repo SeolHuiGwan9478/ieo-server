@@ -1,5 +1,9 @@
 package com.ieo.server.domain.broker.service;
 
+import java.util.Map;
+import com.ieo.server.domain.trip.repository.TripRepository;
+import com.ieo.server.domain.trip.enums.TripStatus;
+import com.ieo.server.domain.broker.dto.BrokerMetricsResponse;
 import com.ieo.server.domain.broker.dto.DriverLinkResponse;
 import com.ieo.server.domain.broker.entity.BrokerDriverLink;
 import com.ieo.server.domain.broker.enums.DriverLinkStatus;
@@ -35,17 +39,19 @@ public class DriverLinkService {
 	private final DriverRepository driverRepository;
 	private final UserRepository userRepository;
 	private final Clock clock;
+	private final BrokerMetricsService metricsService;
+	private final TripRepository tripRepository;
 
 	/** 내 번호로 온, 수락을 기다리는 요청 */
 	@Transactional(readOnly = true)
 	public List<DriverLinkResponse> getInvitations(Long userId) {
 		Driver driver = requireDriver(userId);
 		Instant now = clock.instant();
-		return linkRepository.findAllByPhoneAndStatusOrderByCreatedAtDesc(
+		List<BrokerDriverLink> pending = linkRepository.findAllByPhoneAndStatusOrderByCreatedAtDesc(
 						driver.getUser().getPhone(), DriverLinkStatus.PENDING).stream()
 				.filter(link -> link.isPendingAt(now))
-				.map(link -> DriverLinkResponse.from(link, now))
 				.toList();
+		return withRecord(userId, pending, now);
 	}
 
 	/** 내가 단골로 연결된 회사 */
@@ -53,8 +59,16 @@ public class DriverLinkService {
 	public List<DriverLinkResponse> getLinks(Long userId) {
 		requireDriver(userId);
 		Instant now = clock.instant();
-		return linkRepository.findAllByDriverUserIdAndStatusOrderByLinkedAtDesc(userId, DriverLinkStatus.LINKED).stream()
-				.map(link -> DriverLinkResponse.from(link, now))
+		return withRecord(userId, linkRepository.findAllByDriverUserIdAndStatusOrderByLinkedAtDesc(userId, DriverLinkStatus.LINKED), now);
+	}
+
+	/** 회사마다 신뢰 지표와 이 기사님과 끝낸 운행 수를 붙인다. 지표는 한 번에 모아 읽는다 */
+	private List<DriverLinkResponse> withRecord(Long userId, List<BrokerDriverLink> links, Instant now) {
+		Map<Long, BrokerMetricsResponse> metrics = metricsService.getAll(
+				links.stream().map(link -> link.getBroker().getId()).distinct().toList());
+		return links.stream()
+				.map(link -> DriverLinkResponse.from(link, now, metrics.get(link.getBroker().getId()),
+						tripRepository.countByDriverUserIdAndBrokerIdAndStatus(userId, link.getBroker().getId(), TripStatus.COMPLETED)))
 				.toList();
 	}
 

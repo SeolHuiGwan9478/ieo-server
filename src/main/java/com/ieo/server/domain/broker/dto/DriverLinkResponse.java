@@ -6,7 +6,8 @@ import java.time.Instant;
 
 /**
  * 차주 쪽에서 보는 단골 연결. 받은 요청(PENDING)이면 expiresAt, 연결됨(LINKED)이면 linkedAt이 있다.
- * 차량 앱은 수락 화면에 "○○물류 일을 하는 동안 위치와 도착 예정 시각이 ○○물류에 공유돼요"를 보여 준다.
+ * 휴대폰이 수락·거절을 고를 수 있게 그 회사의 신뢰 지표(brokerMetrics)와 함께 끝낸 운행 수(tripsTogether)를 붙인다.
+ * 수락·거절·해제는 휴대폰에서만 한다 (2026-11-13).
  */
 public record DriverLinkResponse(
 		Long id,
@@ -16,9 +17,15 @@ public record DriverLinkResponse(
 		String statusLabel,
 		Instant createdAt,
 		Instant expiresAt,
-		Instant linkedAt) {
+		Instant linkedAt,
+		BrokerMetricsResponse brokerMetrics,
+		long tripsTogether) {
 
 	public static DriverLinkResponse from(BrokerDriverLink link, Instant now) {
+		return from(link, now, null, 0);
+	}
+
+	public static DriverLinkResponse from(BrokerDriverLink link, Instant now, BrokerMetricsResponse metrics, long tripsTogether) {
 		DriverLinkStatus status = link.statusAt(now);
 		return new DriverLinkResponse(
 				link.getId(),
@@ -28,6 +35,8 @@ public record DriverLinkResponse(
 				status.getLabel(),
 				link.getCreatedAt(),
 				status == DriverLinkStatus.PENDING ? link.expiresAt() : null,
-				link.getLinkedAt());
+				link.getLinkedAt(),
+				metrics,
+				tripsTogether);
 	}
 }

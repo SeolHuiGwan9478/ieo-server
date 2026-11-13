@@ -88,7 +88,10 @@ class BrokerDriverControllerTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].id").value(linkId))
 				.andExpect(jsonPath("$[0].brokerName").value("한빛로지스"))
-				.andExpect(jsonPath("$[0].expiresAt").exists());
+				.andExpect(jsonPath("$[0].expiresAt").exists())
+				// 고를 근거: 회사 신뢰 지표(끝난 운행이 적어 아직 공개 전)와 같이 끝낸 운행 수
+				.andExpect(jsonPath("$[0].brokerMetrics.published").value(false))
+				.andExpect(jsonPath("$[0].tripsTogether").value(0));
 
 		perform(post("/api/driver-links/invitations/{id}/accept", linkId), driver)
 				.andExpect(status().isOk())
