@@ -1,6 +1,7 @@
 package com.ieo.server.domain.dispatch.controller;
 
 import com.ieo.server.domain.dispatch.entity.Order;
+import com.ieo.server.domain.dispatch.enums.OrderStatus;
 import com.ieo.server.domain.dispatch.repository.OrderRepository;
 import java.time.Instant;
 import java.util.List;
@@ -20,8 +21,14 @@ public class AdminOrderController {
 
 	private final OrderRepository orderRepository;
 
+	/**
+	 * 의심 오더 한 줄. source* 는 먼저 올라온 오더라 운영자가 두 오더를 나란히 견준다 (운영자에겐 오더 상세 화면이 없다).
+	 * 먼저 올라온 오더를 찾지 못하면 source* 는 null
+	 */
 	public record SuspectedOrder(Long orderId, String brokerName, Long sourceOrderId, String sourceBrokerName,
-			String pickupAddress, String dropoffAddress, Instant pickupFrom, int fare, Instant createdAt) {
+			String pickupAddress, String dropoffAddress, Instant pickupFrom, int fare, Instant createdAt, OrderStatus status,
+			String cargoType, String sourcePickupAddress, String sourceDropoffAddress, Instant sourcePickupFrom,
+			Integer sourceFare, Instant sourceCreatedAt, OrderStatus sourceStatus, String sourceCargoType) {
 	}
 
 	@GetMapping("/suspected-orders")
@@ -36,8 +43,14 @@ public class AdminOrderController {
 
 	private SuspectedOrder toRow(Order order) {
 		Order source = orderRepository.findById(order.getReconsignmentSuspectOf()).orElse(null);
+		boolean found = source != null;
 		return new SuspectedOrder(order.getId(), order.getBroker().getName(), order.getReconsignmentSuspectOf(),
-				source == null ? null : source.getBroker().getName(), order.getPickupSite().getAddress(),
-				order.getDropoffSite().getAddress(), order.getPickupFrom(), order.getFare(), order.getCreatedAt());
+				found ? source.getBroker().getName() : null, order.getPickupSite().getAddress(),
+				order.getDropoffSite().getAddress(), order.getPickupFrom(), order.getFare(), order.getCreatedAt(),
+				order.getStatus(), order.getCargoType(),
+				found ? source.getPickupSite().getAddress() : null, found ? source.getDropoffSite().getAddress() : null,
+				found ? source.getPickupFrom() : null, found ? source.getFare() : null,
+				found ? source.getCreatedAt() : null, found ? source.getStatus() : null,
+				found ? source.getCargoType() : null);
 	}
 }
