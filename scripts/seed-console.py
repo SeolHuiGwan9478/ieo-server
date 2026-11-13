@@ -264,6 +264,14 @@ class Seed:
                 rid = int(record['id'])
                 self.db.run(f'INSERT INTO extra_incomes (ledger_entry_id,wait_record_id,amount,paid_at,created_at,updated_at)\n      SELECT id,{rid},{amount},paid_at,created_at,updated_at FROM ledger_entries WHERE trip_id={tid} AND broker_id={self.bid}\n      ON CONFLICT (wait_record_id) DO UPDATE SET amount=EXCLUDED.amount,paid_at=EXCLUDED.paid_at;')
 
+    def arrived(self, driver, tid):
+        """상차지 대기 기록의 진입 시각. 없으면 None"""
+        records = api('GET', f'/api/trips/{tid}/waits', token=driver['token'])
+        record = next((r for r in records if r['stopType'] == 'PICKUP'), None)
+        if not record or not record.get('arrivedAt'):
+            return None
+        return datetime.fromisoformat(record['arrivedAt'].replace('Z', '+00:00')).astimezone(KST)
+
     def receipt(self, driver, tid, pickup, i):
         """최근 완료 운행 6건: 기사님이 휴대폰으로 종이 인수증을 찍어 보낸다 (04 인수증)"""
         if i >= 6:
@@ -282,6 +290,10 @@ class Seed:
             trip = self.trip(oid, driver)
             tid = trip['id']
             pickup = (self.now - timedelta(days=days)).replace(hour=7, minute=0)
+            if trip['status'] == 'COMPLETED':
+                # 이미 끝난 운행은 처음 상차지에 들어간 날에 맞춘다. 다른 날 다시 돌릴 때 예정 시각만 오늘 기준으로 밀리면
+                # 대기 기록보다 예정이 늦어져 청구 대기비가 0원이 된다 (대기비는 max(진입, 예정)부터 센다)
+                pickup = self.arrived(driver, tid) or pickup
             self.timeline(oid, tid, pickup)
             if trip['status'] == 'COMPLETED':
                 # 예전 시드로 이미 끝난 운행에도 인수증 사진을 채운다 (서명 방식 때 만든 데이터에는 사진이 없다)
