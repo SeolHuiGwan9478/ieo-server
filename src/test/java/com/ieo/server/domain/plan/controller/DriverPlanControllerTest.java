@@ -69,7 +69,7 @@ class DriverPlanControllerTest {
 				.andExpect(jsonPath("$.usage.waitProofLimit").value(3))
 				.andExpect(jsonPath("$.usage.taxInvoiceLimit").value(10))
 				.andExpect(jsonPath("$.plans.length()").value(2))
-				.andExpect(jsonPath("$.plans[1].price").value(14400))
+				.andExpect(jsonPath("$.plans[1].price").value(30000))
 				.andExpect(jsonPath("$.demoPayment").value(true));
 	}
 
@@ -94,7 +94,7 @@ class DriverPlanControllerTest {
 				.andExpect(jsonPath("$.renews").value(true));
 		assertThat(paymentRepository.findAllByOwnerTypeAndOwnerIdOrderByPaidAtDesc(PlanOwnerType.DRIVER, userId))
 				.singleElement()
-				.satisfies(payment -> assertThat(payment.getAmount()).isEqualTo(14_400));
+				.satisfies(payment -> assertThat(payment.getAmount()).isEqualTo(30_000));
 
 		choose("BASIC")
 				.andExpect(jsonPath("$.plan").value("PRO"))

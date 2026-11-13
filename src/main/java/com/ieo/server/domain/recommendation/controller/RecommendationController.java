@@ -23,7 +23,7 @@ public class RecommendationController {
 
 	private final RecommendationService recommendationService;
 
-	/** 차를 세운 자리 근처 추천 3건 (REC-001). 차량 앱이 기어 P·주차 브레이크가 들어온 순간 부른다 */
+	/** 추천 1건 (REC-001). 차량 앱이 기어 P·주차 브레이크가 들어온 순간 부른다. 상하차지에 있으면 그곳 근처, 운행이 없으면 세운 자리 근처 */
 	@GetMapping("/recommendations")
 	public RecommendationListResponse recommend(
 			@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @RequestParam double lat, @RequestParam double lng) {

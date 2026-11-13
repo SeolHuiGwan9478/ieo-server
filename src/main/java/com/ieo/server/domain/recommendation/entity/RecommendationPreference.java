@@ -16,6 +16,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.MapsId;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.Set;
 import lombok.AccessLevel;
@@ -62,6 +63,9 @@ public class RecommendationPreference {
 	@Column(name = "cargo_category", nullable = false, length = 20)
 	private Set<CargoCategory> excludedCargoCategories = EnumSet.noneOf(CargoCategory.class);
 
+	/** 마지막으로 설정을 바꾼 때. 이보다 먼저 받은 추천은 다시 쓰지 않는다 */
+	private Instant changedAt;
+
 	private RecommendationPreference(Driver driver) {
 		this.driver = driver;
 		this.enabled = true;
@@ -79,7 +83,8 @@ public class RecommendationPreference {
 	}
 
 	/** excludedCargoCategories가 null이면 제외 화물은 그대로 둔다 */
-	public void change(boolean enabled, int radiusKm, Integer minNetProfit, Set<CargoCategory> excludedCargoCategories) {
+	public void change(boolean enabled, int radiusKm, Integer minNetProfit, Set<CargoCategory> excludedCargoCategories,
+			Instant now) {
 		if (radiusKm < MIN_RADIUS_KM || radiusKm > MAX_RADIUS_KM) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT, "추천 반경은 5km에서 100km 사이로 정해 주세요.");
 		}
@@ -93,5 +98,6 @@ public class RecommendationPreference {
 			this.excludedCargoCategories.clear();
 			this.excludedCargoCategories.addAll(excludedCargoCategories);
 		}
+		this.changedAt = now;
 	}
 }

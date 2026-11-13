@@ -14,16 +14,23 @@ import com.ieo.server.domain.recommendation.dto.RecommendationPreferenceRequest;
 import com.ieo.server.domain.recommendation.dto.RecommendationPreferenceResponse;
 import com.ieo.server.domain.recommendation.dto.RecommendationResponse;
 import com.ieo.server.domain.recommendation.entity.RecommendationPreference;
+import com.ieo.server.domain.recommendation.entity.RecommendationShown;
 import com.ieo.server.domain.recommendation.repository.RecommendationPreferenceRepository;
+import com.ieo.server.domain.recommendation.repository.RecommendationShownRepository;
 import com.ieo.server.domain.site.entity.Site;
 import com.ieo.server.domain.site.entity.SiteStats;
 import com.ieo.server.domain.site.repository.SiteStatsRepository;
+import com.ieo.server.domain.trip.entity.Trip;
+import com.ieo.server.domain.trip.enums.StopType;
+import com.ieo.server.domain.trip.enums.TripStatus;
+import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.vehicle.entity.Vehicle;
 import com.ieo.server.domain.vehicle.repository.VehicleRepository;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -36,21 +43,28 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 배차 추천 (03, 2026-11-11 단순화). 차를 세우면(기어 P 또는 주차 브레이크) 차량 앱이 세운 자리를 보내고,
- * 그 근처에서 모집 중인 오더를 실수익 높은 순으로 3건 돌려준다. 운행 상태와 상관없이 같다.
- * 무엇을 보여 줬는지는 기록하지 않는다. 기사님이 눌러 배차를 요청하면 그 요청에 isRecommendation만 남는다.
- *
- * 먼저 직선거리로 어림해 상위 10건을 고르고, 그 10건만 TMAP 실제 경로로 다시 계산해 3건을 고른다 (TMAP 호출을 아낀다)
+ * 배차 추천 (03, 2026-11-13 TMAP 호출 줄이기). 차를 세우면(기어 P 또는 주차 브레이크) 차량 앱이 세운 자리를 보낸다.
+ * 서버가 지금 운행을 보고 어디 근처를 찾을지 정한다.
+ * <ul>
+ *   <li>상차지에서 대기·상차 중: 상차지 근처</li>
+ *   <li>하차지에서 대기·하차 중: 하차지 근처</li>
+ *   <li>출발한 운행이 없음: 세운 자리 근처</li>
+ *   <li>그 밖(상차지로 가는 중, 운송 중): 추천하지 않는다</li>
+ * </ul>
+ * 직선거리로 어림해 상위 3건만 TMAP 실제 경로로 다시 계산하고, 실수익 1등 1건만 준다.
+ * 준 것은 recommendation_shown에 적고, 같은 운행의 같은 상하차지(운행이 없으면 10분 안, 1km 안)에서는 그 기록을 다시 돌려준다.
+ * 다시 돌려줄 때는 fresh=false라 차량 앱이 큰 창을 다시 띄우지 않는다
  */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class RecommendationService {
 
-	/** 보여 주는 추천 수 */
-	static final int MAX_ITEMS = 3;
-	/** 실제 경로로 다시 계산하는 후보 수 */
-	static final int EXACT_CANDIDATES = 10;
+	/** 실제 경로로 다시 계산하는 후보 수. TMAP 호출 수와 같다 */
+	static final int EXACT_CANDIDATES = 3;
+	/** 운행이 없을 때 이전 추천을 다시 쓰는 시간과 거리 */
+	static final Duration REUSE_FOR = Duration.ofMinutes(10);
+	static final double REUSE_METERS = 1_000;
 	private static final int CANDIDATE_LIMIT = 100;
 	private static final Comparator<Candidate> BY_PROFIT = Comparator.comparingInt(Candidate::netProfit).reversed()
 			.thenComparingLong(candidate -> candidate.estimate().emptyMeters());
@@ -61,6 +75,8 @@ public class RecommendationService {
 	private final DispatchRequestRepository requestRepository;
 	private final SiteStatsRepository siteStatsRepository;
 	private final RecommendationPreferenceRepository preferenceRepository;
+	private final RecommendationShownRepository shownRepository;
+	private final TripRepository tripRepository;
 	private final BrokerMetricsService metricsService;
 	private final ProfitEstimator profitEstimator;
 	private final RecommendationProperties properties;
@@ -68,9 +84,10 @@ public class RecommendationService {
 	private final DriverVerification driverVerification;
 
 	/**
-	 * 세운 자리([lat], [lng]) 근처 추천 (REC-001). 기본 차량에 맞고, 제외할 화물이 아니고, 아직 걸어 둔 요청이 없는 오더만.
-	 * 추천을 껐거나 기본 차량이 없으면 빈 목록
+	 * 추천 1건 (REC-001). 기본 차량에 맞고, 제외할 화물이 아니고, 아직 걸어 둔 요청이 없는 오더만.
+	 * 추천을 껐거나 기본 차량이 없거나 추천하지 않는 때면 빈 목록
 	 */
+	@Transactional
 	public RecommendationListResponse recommend(Long userId, double lat, double lng) {
 		Driver driver = requireDriver(userId);
 		Site.validateLocation(lat, lng);
@@ -79,7 +96,10 @@ public class RecommendationService {
 		if (!preference.isEnabled() || found.isEmpty()) {
 			return RecommendationListResponse.none();
 		}
-		Vehicle vehicle = found.get();
+		Origin origin = originOf(userId, lat, lng);
+		if (origin == null) {
+			return RecommendationListResponse.none();
+		}
 		Instant now = clock.instant();
 		// 대기 중·확정·확정 뒤 취소한 요청이 있는 오더는 뺀다. 철회·만료된 것은 다시 보여 준다
 		Set<Long> requested = requestRepository.findAllByDriverUserIdOrderByCreatedAtDesc(userId).stream()
@@ -87,32 +107,77 @@ public class RecommendationService {
 				.map(request -> request.getOrder().getId())
 				.collect(Collectors.toSet());
 
-		List<Candidate> candidates = orderRepository.findOpenNear(userId, now, lat, lng,
+		Optional<RecommendationShown> earlier = earlierShown(userId, origin, lat, lng, now)
+				.filter(shown -> preference.getChangedAt() == null || shown.getShownAt().isAfter(preference.getChangedAt()));
+		if (earlier.isPresent()) {
+			return replay(earlier.get(), requested, now, userId);
+		}
+
+		Vehicle vehicle = found.get();
+		List<Candidate> candidates = orderRepository.findOpenNear(userId, now, origin.lat(), origin.lng(),
 						preference.getRadiusKm() * 1000.0, CANDIDATE_LIMIT).stream()
 				.filter(order -> !requested.contains(order.getId()))
 				.filter(order -> order.fits(vehicle))
 				.filter(order -> !preference.excludes(order.getCargoCategory()))
-				.map(order -> candidate(order, lat, lng, vehicle))
+				.map(order -> candidate(order, origin.lat(), origin.lng(), vehicle))
 				.filter(candidate -> meetsMinimum(candidate, preference))
 				.sorted(BY_PROFIT)
 				.limit(EXACT_CANDIDATES)
 				.toList();
-		candidates = withExactRoutes(candidates, vehicle).stream()
+		Optional<Candidate> best = withExactRoutes(candidates, vehicle).stream()
 				.filter(candidate -> meetsMinimum(candidate, preference))
-				.sorted(BY_PROFIT)
-				.limit(MAX_ITEMS)
-				.toList();
+				.min(BY_PROFIT);
 
-		Map<Long, BrokerMetricsResponse> metrics = metricsService.getAll(
-				candidates.stream().map(candidate -> candidate.order().getBroker().getId()).toList());
+		if (best.isEmpty()) {
+			shownRepository.save(RecommendationShown.nothing(driver, origin.tripId(), origin.stopType(), origin.lat(), origin.lng(), now));
+			return new RecommendationListResponse(List.of(), true);
+		}
+		Candidate chosen = best.get();
+		ProfitEstimator.Estimate estimate = chosen.estimate();
+		shownRepository.save(RecommendationShown.of(driver, origin.tripId(), origin.stopType(), origin.lat(), origin.lng(),
+				chosen.order(), estimate.netProfit(), estimate.fuelCost(), estimate.tollFare(), estimate.emptyMeters(), now));
+		return new RecommendationListResponse(List.of(responseOf(chosen.order(), estimate, now, userId)), true);
+	}
+
+	/** 어디 근처를 찾을지. 추천하지 않는 때면 null */
+	private Origin originOf(Long userId, double lat, double lng) {
+		Optional<Trip> current = tripRepository.findFirstByDriverUserIdAndStatusInOrderByCreatedAtDesc(userId, TripStatus.IN_PROGRESS);
+		if (current.isEmpty()) {
+			return new Origin(null, null, lat, lng);
+		}
+		Trip trip = current.get();
+		return switch (trip.getStatus()) {
+			case AT_PICKUP -> new Origin(trip.getId(), StopType.PICKUP, trip.pickup().getSite().getLat(), trip.pickup().getSite().getLng());
+			case AT_DROPOFF -> new Origin(trip.getId(), StopType.DROPOFF, trip.dropoff().getSite().getLat(), trip.dropoff().getSite().getLng());
+			default -> null;
+		};
+	}
+
+	private Optional<RecommendationShown> earlierShown(Long userId, Origin origin, double lat, double lng, Instant now) {
+		if (origin.tripId() != null) {
+			return shownRepository.findFirstByDriverUserIdAndTripIdAndStopTypeOrderByShownAtDesc(userId, origin.tripId(), origin.stopType());
+		}
+		return shownRepository.findFirstByDriverUserIdAndTripIdIsNullAndShownAtAfterOrderByShownAtDesc(userId, now.minus(REUSE_FOR))
+				.filter(shown -> shown.isWithin(lat, lng, REUSE_METERS));
+	}
+
+	/** 이미 준 추천을 TMAP 없이 다시 돌려준다. 그새 마감됐거나 요청을 걸었으면 비운다 */
+	private RecommendationListResponse replay(RecommendationShown shown, Set<Long> requested, Instant now, Long userId) {
+		Order order = shown.getOrder();
+		if (order == null || !order.isOpenAt(now) || requested.contains(order.getId())) {
+			return RecommendationListResponse.none();
+		}
+		ProfitEstimator.Estimate estimate = new ProfitEstimator.Estimate(shown.getNetProfit(), shown.getFuelCost(),
+				shown.getTollFare(), shown.getEmptyMeters());
+		return new RecommendationListResponse(List.of(responseOf(order, estimate, now, userId)), false);
+	}
+
+	private RecommendationResponse responseOf(Order order, ProfitEstimator.Estimate estimate, Instant now, Long userId) {
+		BrokerMetricsResponse metrics = metricsService.getAll(List.of(order.getBroker().getId())).get(order.getBroker().getId());
 		boolean verified = driverVerification.isVerified(userId);
-		return new RecommendationListResponse(candidates.stream()
-				.map(candidate -> new RecommendationResponse(
-						limitUnless(verified, OrderResponse.of(candidate.order(), now, candidate.estimate().emptyMeters(), null, null,
-								metrics.get(candidate.order().getBroker().getId()))),
-						candidate.estimate().emptyMeters(), candidate.estimate().fuelCost(), candidate.netProfit(),
-						isLongWait(candidate.order().getPickupSite()), candidate.estimate().tollFare()))
-				.toList());
+		return new RecommendationResponse(
+				limitUnless(verified, OrderResponse.of(order, now, estimate.emptyMeters(), null, null, metrics)),
+				estimate.emptyMeters(), estimate.fuelCost(), estimate.netProfit(), isLongWait(order.getPickupSite()), estimate.tollFare());
 	}
 
 	public RecommendationPreferenceResponse getPreference(Long userId) {
@@ -125,11 +190,11 @@ public class RecommendationService {
 		RecommendationPreference preference = preferenceRepository.findById(userId)
 				.orElseGet(() -> preferenceRepository.save(RecommendationPreference.defaults(driver)));
 		preference.change(request.enabled(), request.radiusKm(), request.minNetProfit(),
-				request.excludedCargoCategories());
+				request.excludedCargoCategories(), clock.instant());
 		return RecommendationPreferenceResponse.from(preference);
 	}
 
-	/** 공차는 세운 자리에서 시작한다. 경유가는 상차지 시도 평균 */
+	/** 공차는 출발점(상하차지 또는 세운 자리)에서 시작한다. 경유가는 상차지 시도 평균 */
 	private Candidate candidate(Order order, double lat, double lng, Vehicle vehicle) {
 		ProfitEstimator.Target target = new ProfitEstimator.Target(order, lat, lng, order.getPickupSite().getAddress());
 		return new Candidate(order, target, profitEstimator.rough(target, vehicle));
@@ -165,6 +230,10 @@ public class RecommendationService {
 			throw new BusinessException(ErrorCode.USER_NOT_FOUND);
 		}
 		return driver;
+	}
+
+	/** 빈 차 거리를 재는 출발점. 운행이 없으면 tripId·stopType이 비어 있다 */
+	private record Origin(Long tripId, StopType stopType, double lat, double lng) {
 	}
 
 	private record Candidate(Order order, ProfitEstimator.Target target, ProfitEstimator.Estimate estimate) {

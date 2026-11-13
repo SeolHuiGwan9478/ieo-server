@@ -2,6 +2,15 @@ package com.ieo.server.domain.recommendation.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import com.ieo.server.domain.recommendation.repository.RecommendationShownRepository;
+import com.ieo.server.domain.trip.entity.Trip;
+import com.ieo.server.domain.trip.enums.PaymentType;
+import com.ieo.server.domain.trip.enums.TripSource;
+import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.recommendation.service.TruckRouteEstimator;
 import java.util.Collection;
 import java.util.HashMap;
@@ -85,11 +94,19 @@ class RecommendationControllerTest {
 	private JwtProvider jwtProvider;
 
 	@Autowired
+	private TripRepository tripRepository;
+
+	@Autowired
+	private RecommendationShownRepository shownRepository;
+
+	@Autowired
 	private Clock clock;
 
 	private MockMvc mockMvc;
 	private String broker;
 	private String driver;
+	private Driver driverEntity;
+	private Vehicle vehicleEntity;
 	private Instant now;
 	/** 지금 운행의 하차지 */
 	private Site seongseo;
@@ -112,7 +129,8 @@ class RecommendationControllerTest {
 		Driver created = driverRepository.save(Driver.of(driverUser));
 		Vehicle vehicle = Vehicle.create(created, "경기82사1602", Tonnage.TON_11, BodyType.WING, null);
 		vehicle.markDefault();
-		vehicleRepository.save(vehicle);
+		vehicleEntity = vehicleRepository.save(vehicle);
+		driverEntity = created;
 		driver = bearer(driverUser.getId());
 
 		seongseo = siteRepository.save(Site.create("대구 성서 공단", "대구 달서구", 35.84, 128.49, null));
@@ -123,21 +141,20 @@ class RecommendationControllerTest {
 	}
 
 	@Test
-	void 세운_자리_근처에서_내_차에_실리는_오더를_실수익_순으로_3건까지_준다() throws Exception {
+	void 운행이_없으면_세운_자리_근처에서_내_차에_실리는_오더_중_실수익_1등_1건만_준다() throws Exception {
 		Integer first = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
-		Integer second = order(chilgok, 290_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
-		Integer third = order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
-		order(bukgu, 270_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));               // 4등이라 빠진다
+		order(chilgok, 290_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		order(bukgu, 270_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));               // 4등이라 경로도 재지 않는다
 		order(busan, 900_000, "TON_5", "WING", now.plus(Duration.ofHours(3)));               // 30km 밖
 		order(chilgok, 500_000, "TON_25", "WING", now.plus(Duration.ofHours(2)));            // 톤수 부족
 		order(chilgok, 500_000, "TON_5", "CARGO", now.plus(Duration.ofHours(2)));            // 차종 다름
 
 		String body = recommend()
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.items.length()").value(3))
+				.andExpect(jsonPath("$.fresh").value(true))
+				.andExpect(jsonPath("$.items.length()").value(1))
 				.andExpect(jsonPath("$.items[0].order.id").value(first))
-				.andExpect(jsonPath("$.items[1].order.id").value(second))
-				.andExpect(jsonPath("$.items[2].order.id").value(third))
 				.andExpect(jsonPath("$.items[0].order.pickup.name").value("칠곡 물류센터"))
 				.andExpect(jsonPath("$.items[0].longWait").value(false))
 				.andReturn().getResponse().getContentAsString();
@@ -151,6 +168,53 @@ class RecommendationControllerTest {
 		assertThat(netProfit).isEqualTo(300_000 - fuelCost);
 		assertThat((Object) JsonPath.read(body, "$.items[0].tollFare")).isNull();
 		assertThat(((Number) JsonPath.read(body, "$.items[0].order.distanceM")).longValue()).isEqualTo(emptyMeters);
+		// TMAP에는 직선 상위 3건만 묻는다
+		verify(truckRoutes).routes(org.mockito.ArgumentMatchers.argThat(legs -> legs.size() <= 6), any());
+	}
+
+	@Test
+	void 같은_자리에서_다시_세우면_적어_둔_추천을_TMAP_없이_돌려주고_1km_넘게_옮기면_새로_계산한다() throws Exception {
+		Integer first = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		recommend().andExpect(jsonPath("$.fresh").value(true));
+		clearInvocations(truckRoutes);
+
+		mockMvc.perform(get("/api/recommendations").param("lat", "35.843").param("lng", "128.492").header("Authorization", driver))
+				.andExpect(jsonPath("$.fresh").value(false))
+				.andExpect(jsonPath("$.items[0].order.id").value(first));
+		verify(truckRoutes, never()).routes(any(), any());
+		assertThat(shownRepository.count()).isEqualTo(1);
+
+		mockMvc.perform(get("/api/recommendations").param("lat", "35.86").param("lng", "128.49").header("Authorization", driver))
+				.andExpect(jsonPath("$.fresh").value(true));
+		verify(truckRoutes, times(1)).routes(any(), any());
+		assertThat(shownRepository.count()).isEqualTo(2);
+	}
+
+	@Test
+	void 상차지에서는_상차지_근처_운송_중에는_없음_하차지에서는_하차지_근처를_한_번씩_준다() throws Exception {
+		Integer nearBusan = order(busan, 400_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		Integer nearChilgok = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		Trip trip = Trip.create(driverEntity, vehicleEntity, null, null, 450_000, PaymentType.RECEIPT, TripSource.MANUAL,
+				busan, now, chilgok, now.plus(Duration.ofHours(5)));
+		trip.start(now);
+		trip.arriveAtPickup();
+		tripRepository.save(trip);
+
+		// 성서에 세웠다고 보내도 상차지(부산 신항) 근처를 준다
+		recommend().andExpect(jsonPath("$.fresh").value(true))
+				.andExpect(jsonPath("$.items[0].order.id").value(nearBusan));
+		recommend().andExpect(jsonPath("$.fresh").value(false))
+				.andExpect(jsonPath("$.items[0].order.id").value(nearBusan));
+
+		trip.departPickup();
+		recommend().andExpect(jsonPath("$.items.length()").value(0));
+
+		trip.arriveAtDropoff();
+		recommend().andExpect(jsonPath("$.fresh").value(true))
+				.andExpect(jsonPath("$.items[0].order.id").value(nearChilgok));
+		assertThat(shownRepository.findAll()).extracting(shown -> shown.getStopType().name())
+				.containsExactly("PICKUP", "DROPOFF");
 	}
 
 	@Test
@@ -173,7 +237,7 @@ class RecommendationControllerTest {
 	}
 
 	@Test
-	void 운행_상태와_상관없이_세운_자리_기준이고_요청을_걸어_둔_오더는_뺀다() throws Exception {
+	void 요청을_걸어_둔_오더는_뺀다() throws Exception {
 		Integer requested = order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
 		Integer other = order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
 
@@ -185,7 +249,14 @@ class RecommendationControllerTest {
 
 		recommend().andExpect(jsonPath("$.items.length()").value(1))
 				.andExpect(jsonPath("$.items[0].order.id").value(other));
-		// 운행이 없어도, 다른 곳에 세워도 그 자리 근처를 준다 (부산 신항 근처에는 없다)
+		// 추천받은 오더에 요청을 걸면 같은 자리에서 다시 받을 때 비운다
+		mockMvc.perform(post("/api/orders/" + other + "/requests").header("Authorization", driver)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"isRecommendation\": true}"))
+				.andExpect(status().isCreated());
+		recommend().andExpect(jsonPath("$.fresh").value(false))
+				.andExpect(jsonPath("$.items.length()").value(0));
+
+		// 운행이 없으면 세운 자리 근처를 준다 (부산 신항 근처에는 없다)
 		mockMvc.perform(get("/api/recommendations").param("lat", "35.08").param("lng", "128.83").header("Authorization", driver))
 				.andExpect(jsonPath("$.items.length()").value(0));
 	}
@@ -221,7 +292,7 @@ class RecommendationControllerTest {
 
 		mockMvc.perform(get("/api/recommendation-preference").header("Authorization", driver))
 				.andExpect(jsonPath("$.excludedCargoCategories.length()").value(0));
-		recommend().andExpect(jsonPath("$.items.length()").value(2));
+		recommend().andExpect(jsonPath("$.items[0].order.pickup.name").value("칠곡 물류센터"));
 
 		preference("{\"enabled\": true, \"radiusKm\": 30, \"excludedCargoCategories\": [\"MOVING\", \"COLD\"]}")
 				.andExpect(status().isOk())
@@ -235,7 +306,7 @@ class RecommendationControllerTest {
 				.andExpect(jsonPath("$.excludedCargoCategories.length()").value(2));
 
 		preference("{\"enabled\": true, \"radiusKm\": 30, \"excludedCargoCategories\": []}");
-		recommend().andExpect(jsonPath("$.items.length()").value(2));
+		recommend().andExpect(jsonPath("$.items[0].order.pickup.name").value("칠곡 물류센터"));
 
 		preference("{\"enabled\": true, \"radiusKm\": 30, \"excludedCargoCategories\": [\"FROZEN\"]}")
 				.andExpect(status().isBadRequest());
@@ -245,7 +316,7 @@ class RecommendationControllerTest {
 	void 새로_더한_화물_종류도_올리고_제외할_수_있다() throws Exception {
 		order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)), "WASTE");
 		order(bukgu, 280_000, "TON_5", "WING", now.plus(Duration.ofHours(2)), "HEAVY");
-		recommend().andExpect(jsonPath("$.items.length()").value(2))
+		recommend().andExpect(jsonPath("$.items.length()").value(1))
 				.andExpect(jsonPath("$.items[0].order.cargoCategoryLabel").value("폐기물"));
 
 		preference("{\"enabled\": true, \"radiusKm\": 30, \"excludedCargoCategories\": [\"WASTE\", \"HEAVY\"]}")
