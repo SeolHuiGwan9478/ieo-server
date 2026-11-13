@@ -51,3 +51,5 @@ data/
 
 # Python seed scripts
 __pycache__/
+firebase-admin.json
+*-firebase-adminsdk-*.json

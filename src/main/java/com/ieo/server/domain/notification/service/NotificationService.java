@@ -42,6 +42,7 @@ public class NotificationService {
 	private final NotificationRepository notificationRepository;
 	private final DispatchRequestRepository requestRepository;
 	private final NotificationHub hub;
+	private final PushTokenService pushTokenService;
 	private final Clock clock;
 
 	@EventListener
@@ -65,7 +66,7 @@ public class NotificationService {
 	public void linkRequested(BrokerDriverLink link, Long driverUserId) {
 		Notification saved = notificationRepository.save(Notification.aboutLink(link, driverUserId, clock.instant()));
 		NotificationResponse response = NotificationResponse.of(saved);
-		afterCommit(() -> hub.push(driverUserId, response));
+		afterCommit(() -> deliver(driverUserId, response));
 	}
 
 	/** after 다음 알림. after가 없으면 최근 20건 */
@@ -104,7 +105,13 @@ public class NotificationService {
 		Notification saved = notificationRepository.save(Notification.about(request, type, clock.instant()));
 		NotificationResponse response = NotificationResponse.of(saved);
 		Long userId = saved.getUserId();
-		afterCommit(() -> hub.push(userId, response));
+		afterCommit(() -> deliver(userId, response));
+	}
+
+	/** 앱이 켜져 있으면 SSE로, 휴대폰에는 푸시로도 보낸다 */
+	private void deliver(Long userId, NotificationResponse response) {
+		hub.push(userId, response);
+		pushTokenService.push(userId, response);
 	}
 
 	private static void afterCommit(Runnable action) {

@@ -3,6 +3,7 @@ package com.ieo.server.domain.user.service;
 import com.ieo.server.domain.user.dto.ChangePhoneRequest;
 import com.ieo.server.domain.broker.repository.BrokerDriverLinkRepository;
 import com.ieo.server.domain.notification.repository.NotificationRepository;
+import com.ieo.server.domain.notification.service.PushTokenService;
 import com.ieo.server.domain.broker.repository.BrokerInvitationRepository;
 import com.ieo.server.domain.broker.service.BrokerMemberService;
 import com.ieo.server.domain.document.service.DriverDocumentService;
@@ -44,6 +45,7 @@ public class UserService {
 	private final BrokerInvitationRepository brokerInvitationRepository;
 	private final BrokerDriverLinkRepository brokerDriverLinkRepository;
 	private final NotificationRepository notificationRepository;
+	private final PushTokenService pushTokenService;
 	private final CarSessionService carSessionService;
 	private final DriverDocumentService driverDocumentService;
 	private final Clock clock;
@@ -100,6 +102,7 @@ public class UserService {
 		user.withdraw(request == null ? null : request.reason(), clock.instant());
 		driverRepository.findById(userId).ifPresent(Driver::clearPersonalInfo);
 		carSessionService.revokeAll(userId);
+		pushTokenService.removeAll(userId);
 		// 면허증·사업자등록증 같은 심사 서류는 민감 정보라 파일과 이력을 모두 지운다
 		driverDocumentService.deleteAllOf(userId);
 		siteRepository.detachCreator(userId);

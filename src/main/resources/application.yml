@@ -34,6 +34,9 @@ ieo:
   kakao:
     rest-api-key: ${KAKAO_REST_API_KEY:}
   # 오피넷 유가정보 (시도별 경유 평균). 키가 없으면 diesel-price-won을 쓴다
+  # 휴대폰 푸시 (FCM, 09 알림). 서비스 계정 키 JSON 내용이나 파일 경로. 비어 있으면 푸시는 보내지 않고 앱 안 알림(SSE)만 간다
+  push:
+    firebase-credentials: ${FIREBASE_CREDENTIALS:}
   # TMAP 화물차 경로 (거리·통행료). 키가 없으면 직선거리 어림으로 계산한다
   tmap:
     app-key: ${TMAP_APP_KEY:}
