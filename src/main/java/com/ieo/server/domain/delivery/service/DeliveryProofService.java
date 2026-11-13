@@ -10,7 +10,6 @@ import com.ieo.server.domain.delivery.repository.ProofPhotoRepository;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
 import com.ieo.server.domain.ledger.service.LedgerRecorder;
-import com.ieo.server.domain.notification.service.BrokerNotifier;
 import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.trip.enums.PaymentType;
 import com.ieo.server.domain.trip.enums.TripStatus;
@@ -32,7 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * 인수증 (04 인수증). 결제 방식이 인수증인 운행만 받는다.
  * 차주가 하차지에 도착한 뒤 종이 인수증 사진을 휴대폰으로 올리고(5장까지), [주선사에게 보내기]를 누른다.
- * 보내면 장부의 지급 예정일을 보낸 날부터 다시 세고(LEDG-020), 주선사에게 문자로 알린다. 주선사는 콘솔에서 사진을 본다
+ * 보내면 장부의 지급 예정일을 보낸 날부터 다시 센다(LEDG-020). 주선사는 콘솔에서 사진을 본다. 문자·알림톡은 보내지 않는다 (2026-11-13)
  */
 @Service
 @RequiredArgsConstructor
@@ -46,7 +45,6 @@ public class DeliveryProofService {
 	private final TripRepository tripRepository;
 	private final DriverRepository driverRepository;
 	private final LedgerRecorder ledgerRecorder;
-	private final BrokerNotifier brokerNotifier;
 	private final FileStorage fileStorage;
 	private final Clock clock;
 
@@ -97,10 +95,6 @@ public class DeliveryProofService {
 		Instant now = clock.instant();
 		proof.send(now);
 		ledgerRecorder.onReceiptSent(trip, KoreanDate.of(now));
-		if (trip.getBroker() != null) {
-			brokerNotifier.send(trip.getBroker(), "[이에오] " + trip.getVehicle().getPlateNumber()
-					+ " 차량의 인수증 사진이 도착했어요. 콘솔 운행 상세에서 볼 수 있어요.");
-		}
 		return toResponse(trip, proof);
 	}
 

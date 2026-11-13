@@ -14,7 +14,6 @@ import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.user.repository.UserRepository;
 import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
-import com.ieo.server.global.sms.SmsSender;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -37,7 +36,6 @@ public class BrokerMemberService {
 	private final BrokerMemberRepository memberRepository;
 	private final BrokerInvitationRepository invitationRepository;
 	private final UserRepository userRepository;
-	private final SmsSender smsSender;
 	private final BrokerPlanService planService;
 	private final Clock clock;
 
@@ -95,7 +93,7 @@ public class BrokerMemberService {
 
 	/**
 	 * 번호로 초대한다. 그 번호가 가입했는지, 다른 회사 소속인지는 알려 주지 않는다 (수락할 때 막는다).
-	 * 문자는 지금 로그로만 남는다 (LogSmsSender).
+	 * 문자는 보내지 않는다. 초대받은 사람은 콘솔에 로그인하면 초대를 본다 (2026-11-13).
 	 */
 	public SentInvitationResponse invite(Long userId, String phone) {
 		BrokerMember owner = requireOwnerAndLock(userId);
@@ -121,8 +119,6 @@ public class BrokerMemberService {
 		planService.requireMemberRoom(brokerId);
 
 		BrokerInvitation invitation = invitationRepository.save(BrokerInvitation.create(owner, phone));
-		smsSender.send(phone, "[Ieo] %s에서 담당자로 초대했어요. 7일 안에 이 번호로 Ieo 콘솔에 로그인해 수락해 주세요."
-				.formatted(owner.getBroker().getName()));
 		return SentInvitationResponse.from(invitation, now);
 	}
 

@@ -170,46 +170,6 @@ class TripLocationControllerTest {
 				.andExpect(jsonPath("$.code").value("TRIP_404"));
 	}
 
-	@Test
-	void 주선사에게_출발_50퍼센트_도착_30분_전에_도착_시각을_알린다() throws Exception {
-		Broker broker = brokerRepository.save(Broker.create("대한운송", "1234567891", "제2026-002호", null));
-		User owner = userRepository.save(User.create("01090001777", UserRole.BROKER));
-		brokerMemberRepository.save(BrokerMember.of(owner, broker, BrokerMemberPosition.OWNER));
-		trip = tripRepository.save(Trip.create(trip.getDriver(), trip.getVehicle(), broker, null, 450_000, PaymentType.RECEIPT,
-				TripSource.MANUAL, trip.pickup().getSite(), now, trip.dropoff().getSite(), now.plusSeconds(36_000)));
-		consentRepository.save(UserConsent.of(trip.getDriver().getUser(), ConsentType.BROKER_SHARE, "2026-11", true));
-		toInTransit();
-
-		send(points(point(now.minusSeconds(150), 36.9, 126.9, 300_000, 12_000)));
-		send(points(point(now.minusSeconds(120), 36.7, 127.2, 200_000, 8_000)));
-		send(points(point(now.minusSeconds(90), 36.5, 127.5, 140_000, 6_000)));
-		send(points(point(now.minusSeconds(60), 36.0, 128.2, 30_000, 2_000)));
-		send(points(point(now.minusSeconds(30), 35.9, 128.4, 25_000, 1_700)));
-
-		verify(smsSender, times(3)).send(eq("01090001777"), contains("도착해요"));
-	}
-
-	@Test
-	void 주선사_공유에_동의하지_않으면_도착_시각을_보내지_않는다() throws Exception {
-		Broker broker = brokerRepository.save(Broker.create("대한운송", "1234567891", "제2026-002호", null));
-		User owner = userRepository.save(User.create("01090001778", UserRole.BROKER));
-		brokerMemberRepository.save(BrokerMember.of(owner, broker, BrokerMemberPosition.OWNER));
-		trip = tripRepository.save(Trip.create(trip.getDriver(), trip.getVehicle(), broker, null, 450_000, PaymentType.RECEIPT,
-				TripSource.MANUAL, trip.pickup().getSite(), now, trip.dropoff().getSite(), now.plusSeconds(36_000)));
-		toInTransit();
-
-		send(points(point(now.minusSeconds(60), 36.9, 126.9, 300_000, 12_000)));
-
-		verifyNoInteractions(smsSender);
-	}
-
-	@Test
-	void 이름만_적은_주선사에게는_도착_시각을_보내지_않는다() throws Exception {
-		toInTransit();
-		send(points(point(now.minusSeconds(60), 36.9, 126.9, 300_000, 12_000)));
-		verifyNoInteractions(smsSender);
-	}
-
 	private void toInTransit() {
 		trip.start(now);
 		trip.arriveAtPickup();

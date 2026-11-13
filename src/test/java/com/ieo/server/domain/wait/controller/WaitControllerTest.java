@@ -284,7 +284,7 @@ class WaitControllerTest {
 	}
 
 	@Test
-	void 증빙은_주선사에게_한_번만_보내고_다시_눌러도_문자가_늘지_않는다() throws Exception {
+	void 증빙은_주선사에게_한_번만_보내고_문자는_보내지_않는다() throws Exception {
 		event("PICKUP", "arrive", PLANNED);
 		String url = "/api/trips/" + trip.getId() + "/wait-proof/send";
 
@@ -294,7 +294,7 @@ class WaitControllerTest {
 				.andExpect(jsonPath("$.sentAt").exists());
 		mockMvc.perform(post(url).header("Authorization", bearer)).andExpect(status().isOk());
 
-		verify(smsSender, times(1)).send(eq("01090001002"), contains("대기 증빙"));
+		verifyNoInteractions(smsSender);
 	}
 
 	@Test

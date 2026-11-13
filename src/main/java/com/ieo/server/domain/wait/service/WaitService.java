@@ -11,7 +11,6 @@ import com.ieo.server.domain.trip.repository.TripRepository;
 import com.ieo.server.domain.trip.service.TripLocationService;
 import com.ieo.server.domain.user.enums.UserStatus;
 import com.ieo.server.domain.wait.dto.EditWaitRequest;
-import com.ieo.server.domain.notification.service.BrokerNotifier;
 import com.ieo.server.domain.wait.dto.WaitProofLinkResponse;
 import com.ieo.server.domain.wait.dto.WaitProofResponse;
 import com.ieo.server.domain.wait.dto.WaitRecordResponse;
@@ -63,7 +62,6 @@ public class WaitService {
 	private final SiteStatsCalculator siteStatsCalculator;
 	private final BrokerMetricsCalculator metricsCalculator;
 	private final LedgerRecorder ledgerRecorder;
-	private final BrokerNotifier brokerNotifier;
 	private final TripLocationService locationService;
 	private final Clock clock;
 	private final DriverPlanService driverPlanService;
@@ -180,7 +178,7 @@ public class WaitService {
 	}
 
 	/**
-	 * 증빙 링크를 주선사에게 문자로 보낸다 (WAIT-022). 이미 보냈으면 다시 보내지 않는다 (NOTI-003).
+	 * 증빙을 주선사에게 보낸다 (WAIT-022). 보낸 때만 남기고 주선사는 콘솔 운행 상세에서 본다. 문자·알림톡은 보내지 않는다 (2026-11-13).
 	 * 차주가 이름만 적은 주선사는 연락처를 모르므로 보낼 수 없다
 	 */
 	public WaitProofLinkResponse sendProof(Long userId, Long tripId) {
@@ -192,9 +190,6 @@ public class WaitService {
 		WaitProof proof = proofOf(trip);
 		if (proof.getSentAt() == null) {
 			driverPlanService.requireWaitProofRoom(userId); // 베이직 30일 3건 (12장)
-			brokerNotifier.send(trip.getBroker(), "[이에오] " + trip.getVehicle().getPlateNumber()
-					+ " 차량의 대기 증빙이 도착했어요. " + publicBaseUrl.replaceAll("/+$", "")
-					+ WaitProofLinkResponse.from(proof, true).path());
 			proof.markSent(clock.instant());
 		}
 		return WaitProofLinkResponse.from(proof, true);

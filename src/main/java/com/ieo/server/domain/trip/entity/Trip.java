@@ -101,11 +101,6 @@ public class Trip extends BaseTimeEntity {
 
 	private Instant canceledAt;
 
-	/** 주선사에게 마지막으로 알린 도착 예정 시각과 알린 때. 변경 재알림을 가르는 기준이다 (TRIP-022) */
-	private Instant notifiedEta;
-
-	private Instant etaSharedAt;
-
 	@OneToMany(mappedBy = "trip", cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<TripStop> stops = new ArrayList<>();
 
@@ -122,11 +117,6 @@ public class Trip extends BaseTimeEntity {
 	}
 
 	/** 상차지·하차지와 함께 예약 상태로 만든다. 차량은 이 차주의 차량이어야 한다 */
-	public void markEtaShared(Instant eta, Instant now) {
-		this.notifiedEta = eta;
-		this.etaSharedAt = now;
-	}
-
 	public static Trip create(Driver driver, Vehicle vehicle, Broker broker, String brokerName,
 			int fare, PaymentType paymentType, TripSource source,
 			Site pickupSite, Instant pickupPlannedAt, Site dropoffSite, Instant dropoffPlannedAt) {
