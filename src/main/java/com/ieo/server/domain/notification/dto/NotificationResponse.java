@@ -29,7 +29,7 @@ public record NotificationResponse(
 		Order targeted = notification.getOrder();
 		if (targeted != null) {
 			return new NotificationResponse(notification.getId(), notification.getType(),
-					targeted.getBroker().getName() + "에서 나에게만 보이는 오더를 보냈어요. "
+					targeted.getBroker().getName() + "에서 단골 오더를 보냈어요. "
 							+ targeted.getPickupSite().getName() + "에서 " + targeted.getDropoffSite().getName() + "까지예요",
 					null, targeted.getId(), null, notification.getCreatedAt());
 		}
@@ -45,6 +45,7 @@ public record NotificationResponse(
 			case DISPATCH_CONFIRMED -> order.getBroker().getName() + "에서 배차를 확정했어요. " + route + "까지, 내 배차에 넣었어요";
 			case DISPATCH_DECLINED -> route + "까지 가는 배차는 마감됐어요";
 			case DISPATCH_EXPIRED -> route + "까지 가는 배차 요청이 10분 안에 확정되지 않았어요";
+			case DISPATCH_CANCELED -> order.getBroker().getName() + "에서 배차를 취소했어요. " + route + "까지, 내 배차에서 뺐어요";
 			case DRIVER_LINK_REQUESTED, ORDER_TARGETED -> throw new IllegalStateException("단골 요청·지정 오더 알림은 위에서 만든다");
 		};
 	}

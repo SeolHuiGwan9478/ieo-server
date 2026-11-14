@@ -3,6 +3,7 @@ package com.ieo.server.domain.notification.service;
 import com.ieo.server.domain.broker.entity.BrokerDriverLink;
 import com.ieo.server.domain.dispatch.entity.DispatchRequest;
 import com.ieo.server.domain.dispatch.enums.DispatchRequestStatus;
+import com.ieo.server.domain.dispatch.event.DispatchCanceled;
 import com.ieo.server.domain.dispatch.event.DispatchConfirmed;
 import com.ieo.server.domain.dispatch.event.DispatchDeclined;
 import com.ieo.server.domain.dispatch.repository.DispatchRequestRepository;
@@ -25,7 +26,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
- * 차주 앱 알림 (09 알림: 배차 확정·거절·만료). 다른 도메인은 이벤트만 내고, 기록과 보내기는 여기서 한다 (NOTI-001).
+ * 차주 앱 알림 (09 알림: 배차 확정·거절·만료·취소, 단골 요청, 지정 오더). 다른 도메인은 이벤트만 내고, 기록과 보내기는 여기서 한다 (NOTI-001).
  * 알림은 배차와 같은 트랜잭션에서 저장하고, 커밋된 뒤에 연결된 앱으로 보낸다. 앱이 꺼져 있어도
  * 다음에 붙을 때 마지막으로 받은 id 다음부터 받는다
  */
@@ -53,6 +54,11 @@ public class NotificationService {
 	@EventListener
 	public void on(DispatchDeclined event) {
 		requestRepository.findById(event.requestId()).ifPresent(request -> record(request, NotificationType.DISPATCH_DECLINED));
+	}
+
+	@EventListener
+	public void on(DispatchCanceled event) {
+		requestRepository.findById(event.requestId()).ifPresent(request -> record(request, NotificationType.DISPATCH_CANCELED));
 	}
 
 	/** 만료 시각에 부른다. 그때까지 확정·철회·마감되지 않았으면 만료 알림 */

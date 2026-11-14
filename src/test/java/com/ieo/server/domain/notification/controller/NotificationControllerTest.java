@@ -139,6 +139,35 @@ class NotificationControllerTest {
 	}
 
 	@Test
+	void 주선사가_확정된_배차를_취소하면_차주에게_알리고_차주가_취소하면_알리지_않는다() throws Exception {
+		Integer orderId = registerOrder("SELECT");
+		Integer mine = requestDispatch(driver, orderId);
+		mockMvc.perform(post("/api/broker/orders/" + orderId + "/requests/" + mine + "/confirm").header("Authorization", broker))
+				.andExpect(status().isOk());
+
+		mockMvc.perform(post("/api/broker/orders/" + orderId + "/cancel").header("Authorization", broker)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"reason\": \"SHIPPER_CANCELED\"}"))
+				.andExpect(status().isOk());
+
+		notifications(driver)
+				.andExpect(jsonPath("$.length()").value(2))
+				.andExpect(jsonPath("$[1].type").value("DISPATCH_CANCELED"))
+				.andExpect(jsonPath("$[1].dispatchRequestId").value(mine))
+				.andExpect(jsonPath("$[1].message").value(
+						"한빛로지스에서 배차를 취소했어요. 평택 포승 물류센터에서 대구 성서 공단까지, 내 배차에서 뺐어요"));
+
+		// 기사님이 스스로 취소하면 기사님에게는 알리지 않는다
+		String self = bearer(newDriver());
+		Integer next = registerOrder("FIRST");
+		Integer tripId = JsonPath.read(mockMvc.perform(post("/api/orders/" + next + "/requests").header("Authorization", self))
+				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.tripId");
+		mockMvc.perform(post("/api/trips/" + tripId + "/cancel").header("Authorization", self)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"reason\": \"VEHICLE_PROBLEM\"}"))
+				.andExpect(status().isOk());
+		notifications(self).andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].type").value("DISPATCH_CONFIRMED"));
+	}
+
+	@Test
 	void 오더를_내리면_기다리던_요청에만_마감을_알리고_이미_만료된_요청에는_만료만_알린다() throws Exception {
 		Integer orderId = registerOrder("SELECT");
 		Integer mine = requestDispatch(driver, orderId);

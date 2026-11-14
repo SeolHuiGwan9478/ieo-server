@@ -568,7 +568,7 @@ class DispatchControllerTest {
 		mockMvc.perform(get("/api/notifications").header("Authorization", bearer(regular)))
 				.andExpect(jsonPath("$[0].type").value("ORDER_TARGETED"))
 				.andExpect(jsonPath("$[0].orderId").value(targeted))
-				.andExpect(jsonPath("$[0].message").value(org.hamcrest.Matchers.containsString("나에게만 보이는 오더를 보냈어요")));
+				.andExpect(jsonPath("$[0].message").value(org.hamcrest.Matchers.containsString("에서 단골 오더를 보냈어요")));
 		// 마켓 공개 오더는 알리지 않는다
 		Long other = newDriver(Tonnage.TON_5, BodyType.WING);
 		registerOrder(orderJson("TON_5", "WING", "SELECT", null));
