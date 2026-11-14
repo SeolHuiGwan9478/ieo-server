@@ -6,6 +6,9 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import com.ieo.server.domain.plan.entity.DriverSubscription;
+import com.ieo.server.domain.plan.enums.DriverPlan;
+import com.ieo.server.domain.plan.repository.DriverSubscriptionRepository;
 import com.ieo.server.domain.recommendation.repository.RecommendationShownRepository;
 import com.ieo.server.domain.trip.entity.Trip;
 import com.ieo.server.domain.trip.enums.PaymentType;
@@ -102,6 +105,9 @@ class RecommendationControllerTest {
 	@Autowired
 	private Clock clock;
 
+	@Autowired
+	private DriverSubscriptionRepository subscriptionRepository;
+
 	private MockMvc mockMvc;
 	private String broker;
 	private String driver;
@@ -132,12 +138,35 @@ class RecommendationControllerTest {
 		vehicleEntity = vehicleRepository.save(vehicle);
 		driverEntity = created;
 		driver = bearer(driverUser.getId());
+		// 배차 추천은 프로만 (2026-11-14). 베이직은 맨 아래 테스트에서 따로 본다
+		DriverSubscription pro = DriverSubscription.basic(created);
+		pro.subscribe(DriverPlan.PRO, now);
+		subscriptionRepository.save(pro);
 
 		seongseo = siteRepository.save(Site.create("대구 성서 공단", "대구 달서구", 35.84, 128.49, null));
 		chilgok = siteRepository.save(Site.create("칠곡 물류센터", "경북 칠곡군", 35.955, 128.528, null));
 		bukgu = siteRepository.save(Site.create("대구 북구 창고", "대구 북구", 35.90, 128.58, null));
 		busan = siteRepository.save(Site.create("부산 신항", "부산 강서구", 35.08, 128.83, null));
 
+	}
+
+	@Test
+	void 베이직은_추천을_받지_않고_설정에_받을_수_없다고_나온다() throws Exception {
+		order(chilgok, 300_000, "TON_5", "WING", now.plus(Duration.ofHours(2)));
+		User basicUser = userRepository.save(User.create("01090001603", UserRole.DRIVER));
+		Driver basic = driverRepository.save(Driver.of(basicUser));
+		Vehicle vehicle = Vehicle.create(basic, "경기82사1603", Tonnage.TON_11, BodyType.WING, null);
+		vehicle.markDefault();
+		vehicleRepository.save(vehicle);
+		String bearer = bearer(basicUser.getId());
+
+		mockMvc.perform(get("/api/recommendations").param("lat", "35.84").param("lng", "128.49").header("Authorization", bearer))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.items.length()").value(0));
+		mockMvc.perform(get("/api/recommendation-preference").header("Authorization", bearer))
+				.andExpect(jsonPath("$.available").value(false));
+		mockMvc.perform(get("/api/recommendation-preference").header("Authorization", driver))
+				.andExpect(jsonPath("$.available").value(true));
 	}
 
 	@Test

@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 우리 회사 담당자 관리 (BRK-001 담당자 여러 명).
  * 목록과 보낸 초대는 담당자 모두 볼 수 있고, 초대·직책 변경·내보내기는 대표만 한다.
  * 대표는 여러 명 둘 수 있지만, 마지막 대표는 강등·내보내기·나가기·탈퇴할 수 없다.
- * 담당자 수는 플랜 한도(BrokerPlan.memberLimit)로 막는다. 초대 보낼 때 "담당자 + 대기 중 초대"가 한도 이상이면 403.
+ * 담당자 수는 플랜과 상관없이 무제한이다 (2026-11-14).
  */
 @Service
 @RequiredArgsConstructor
@@ -36,7 +36,6 @@ public class BrokerMemberService {
 	private final BrokerMemberRepository memberRepository;
 	private final BrokerInvitationRepository invitationRepository;
 	private final UserRepository userRepository;
-	private final BrokerPlanService planService;
 	private final Clock clock;
 
 	@Transactional(readOnly = true)
@@ -116,8 +115,6 @@ public class BrokerMemberService {
 		if (alreadyInvited) {
 			throw new BusinessException(ErrorCode.BROKER_INVITATION_DUPLICATE);
 		}
-		planService.requireMemberRoom(brokerId);
-
 		BrokerInvitation invitation = invitationRepository.save(BrokerInvitation.create(owner, phone));
 		return SentInvitationResponse.from(invitation, now);
 	}

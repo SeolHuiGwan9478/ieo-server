@@ -57,7 +57,6 @@ public class BrokerInvitationService {
 			throw new BusinessException(
 					member.isActive() ? ErrorCode.BROKER_ALREADY_MEMBER : ErrorCode.BROKER_MEMBER_REMOVED);
 		});
-		planService.requireMemberRoomForAccept(invitation.getBroker().getId());
 		invitation.accept(clock.instant());
 		BrokerMember member = memberRepository.save(
 				BrokerMember.of(user, invitation.getBroker(), BrokerMemberPosition.STAFF));

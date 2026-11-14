@@ -95,7 +95,7 @@ public class BrokerService {
 		return toResponse(member);
 	}
 
-	/** 플랜 바꾸기 (대표만). 결제가 없어 바로 적용된다 (BILL-007) */
+	/** 플랜 고르기 (대표만). 프로는 30일 구독, 베이직은 해지 (BrokerPlanService.change, BILL-004, 007) */
 	public MyBrokerResponse changePlan(Long userId, BrokerPlan plan) {
 		BrokerMember member = requireActiveMember(userId);
 		if (!member.isOwner()) {

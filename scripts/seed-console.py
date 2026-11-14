@@ -144,7 +144,7 @@ class Seed:
             prefix = '811110001'
             total = sum((int(d) * w for d, w in zip(prefix, [1, 3, 7, 1, 3, 7, 1, 3, 5]))) + int(prefix[-1]) * 5 // 10
             self.bid = api('POST', '/api/brokers', {'name': COMPANY, 'businessNumber': prefix + str((10 - total % 10) % 10), 'licenseNumber': '시연-2026-001', 'representativeName': '시연 대표', 'settlementDays': 30, 'defaultFeeRate': 10}, self.owner)['id']
-        api('PUT', '/api/brokers/me/plan', {'plan': 'PRO_PLUS'}, self.owner)
+        api('PUT', '/api/brokers/me/plan', {'plan': 'PRO'}, self.owner)
         api('PUT', '/api/brokers/me/wait-policy', {'freeMinutes': 60, 'unitMinutes': 30, 'unitAmount': 10000, 'maxAmount': 60000, 'rounding': 'UP'}, self.owner)
         self.verify_company(db)
         self.second_broker(db)

@@ -8,7 +8,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ieo.server.domain.broker.dto.CreateBrokerRequest;
-import com.ieo.server.domain.broker.enums.BrokerPlan;
 import com.ieo.server.domain.broker.entity.BrokerInvitation;
 import com.ieo.server.domain.broker.repository.BrokerInvitationRepository;
 import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
@@ -68,8 +67,6 @@ class BrokerMemberControllerTest {
 		mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
 		owner = brokerUser("01090005001", "김대표");
 		brokerService.register(owner.getId(), new CreateBrokerRequest("한빛로지스", "1234567891", "제2026-001호", null));
-		// 담당자 수 한도는 BrokerPlanControllerTest에서 본다. 여기서는 무제한 플랜으로
-		brokerService.changePlan(owner.getId(), BrokerPlan.PRO_PLUS);
 		staff = brokerUser(STAFF_PHONE, "이담당");
 	}
 

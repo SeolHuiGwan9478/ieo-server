@@ -76,7 +76,6 @@ public enum ErrorCode {
 	BROKER_INVITATION_NOT_BROKER(HttpStatus.BAD_REQUEST, "BROKER_INVITATION_400_ROLE", "차주로 가입된 번호예요. 담당자는 주선사 계정만 될 수 있어요."),
 	PLAN_INVALID(HttpStatus.BAD_REQUEST, "PLAN_400", "플랜을 골라 주세요."),
 	PLAN_UPGRADE_REQUIRED(HttpStatus.FORBIDDEN, "PLAN_403_UPGRADE", "지금 플랜에서는 쓸 수 없는 기능입니다. 플랜을 올려 주세요."),
-	PLAN_MEMBER_LIMIT(HttpStatus.FORBIDDEN, "PLAN_403_MEMBER_LIMIT", "지금 플랜의 담당자 수 한도에 도달했어요."),
 	PLAN_LIMIT_REACHED(HttpStatus.FORBIDDEN, "PLAN_403_LIMIT", "지금 플랜의 한도를 다 썼어요. 플랜을 올려 주세요."),
 	PLAN_TRIAL_USED(HttpStatus.CONFLICT, "PLAN_409_TRIAL", "무료 체험은 한 번만 쓸 수 있어요."),
 	COUPON_NOT_FOUND(HttpStatus.NOT_FOUND, "COUPON_404", "쿠폰을 찾을 수 없어요."),

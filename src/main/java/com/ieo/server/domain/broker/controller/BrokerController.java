@@ -54,7 +54,10 @@ public class BrokerController {
 		return brokerService.update(userId, request);
 	}
 
-	/** 플랜 바꾸기 (대표만, 12장 BILL-007 테스트 모드). 결제가 없어 바로 적용된다. 담당자면 403 BROKER_403_OWNER */
+	/**
+	 * 플랜 고르기 (대표만, 12장 BILL-007 데모 결제). 프로는 지금부터 30일, 해지한 프로를 다시 고르면 해지 취소.
+	 * 베이직은 해지: 남은 날까지 프로를 쓴다. 담당자면 403 BROKER_403_OWNER
+	 */
 	@PutMapping("/me/plan")
 	public MyBrokerResponse changePlan(
 			@RequestAttribute(AuthInterceptor.USER_ID) Long userId, @Valid @RequestBody ChangePlanRequest request) {

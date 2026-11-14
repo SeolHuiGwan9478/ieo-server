@@ -4,37 +4,26 @@ import java.util.Set;
 import lombok.Getter;
 
 /**
- * 주선사 플랜 (12장). 기능 목록·한도·30일 가격(원, 가정값)은 여기 코드에 둔다. 결제는 데모다 (BILL-007).
- * 한도가 null이면 무제한. 담당자 한도와 리포트만 지금 실제로 검사하고,
- * 화주 공유 링크·오더 템플릿은 기능이 생길 때 검사를 붙인다.
+ * 주선사 플랜 (12장). 30일 가격(원, 가정값)은 여기 코드에 둔다. 결제는 데모다 (BILL-007).
+ * 2026-11-14: 베이직·프로 둘만 둔다. 담당자 수는 두 플랜 모두 무제한이고, 돈은 리포트(와 나중에 붙일 에이전트)에만 받는다.
+ * 프로 플러스는 담당자 무제한 말고 줄 것이 없어 뺐다
  *
  * 기사님 플랜은 plan 도메인의 DriverPlan
  */
 @Getter
 public enum BrokerPlan {
-	BASIC("베이직", 0, Set.of(), 1, 20, 5),
-	PRO("프로", 39_000, Set.of(BrokerFeature.REPORTS, BrokerFeature.DRIVER_RECORDS), 10, null, null),
-	PRO_PLUS("프로 플러스", 99_000, Set.of(BrokerFeature.values()), null, null, null);
+	BASIC("베이직", 0, Set.of()),
+	PRO("프로", 39_000, Set.of(BrokerFeature.REPORTS, BrokerFeature.DRIVER_RECORDS));
 
 	private final String label;
 	/** 30일 가격 (원) */
 	private final int price;
 	private final Set<BrokerFeature> features;
-	/** 담당자(대표 포함) 수. null이면 무제한 */
-	private final Integer memberLimit;
-	/** 화주 공유 링크 월 건수 (BRK-022, 기능 아직 없음) */
-	private final Integer shareLinkMonthlyLimit;
-	/** 오더 템플릿 수 (기능 아직 없음) */
-	private final Integer orderTemplateLimit;
 
-	BrokerPlan(String label, int price, Set<BrokerFeature> features, Integer memberLimit, Integer shareLinkMonthlyLimit,
-			Integer orderTemplateLimit) {
+	BrokerPlan(String label, int price, Set<BrokerFeature> features) {
 		this.label = label;
 		this.price = price;
 		this.features = features;
-		this.memberLimit = memberLimit;
-		this.shareLinkMonthlyLimit = shareLinkMonthlyLimit;
-		this.orderTemplateLimit = orderTemplateLimit;
 	}
 
 	public boolean allows(BrokerFeature feature) {

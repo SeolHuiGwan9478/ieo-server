@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum DriverFeature {
+	/** 상하차지에 세우면 근처 실수익 1등 오더를 추천 (REC-001). 추천 TMAP 원가가 커서 프로만 (2026-11-14) */
+	RECOMMENDATION("배차 추천"),
 	/** 이번 달보다 앞선 장부 보기 (LEDG) */
 	LEDGER_HISTORY("지난 장부 보기"),
 	/** 장부 엑셀·PDF 내보내기 (LEDG-033, 034) */

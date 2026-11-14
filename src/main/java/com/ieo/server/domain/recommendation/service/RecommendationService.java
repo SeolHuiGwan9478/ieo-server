@@ -9,6 +9,8 @@ import com.ieo.server.domain.dispatch.repository.OrderRepository;
 import com.ieo.server.domain.document.service.DriverVerification;
 import com.ieo.server.domain.driver.entity.Driver;
 import com.ieo.server.domain.driver.repository.DriverRepository;
+import com.ieo.server.domain.plan.enums.DriverFeature;
+import com.ieo.server.domain.plan.service.DriverPlanService;
 import com.ieo.server.domain.recommendation.dto.RecommendationListResponse;
 import com.ieo.server.domain.recommendation.dto.RecommendationPreferenceRequest;
 import com.ieo.server.domain.recommendation.dto.RecommendationPreferenceResponse;
@@ -79,15 +81,19 @@ public class RecommendationService {
 	private final RecommendationProperties properties;
 	private final Clock clock;
 	private final DriverVerification driverVerification;
+	private final DriverPlanService planService;
 
 	/**
 	 * 추천 1건 (REC-001). 기본 차량에 맞고, 제외할 화물이 아니고, 아직 걸어 둔 요청이 없는 오더만.
-	 * 추천을 껐거나 기본 차량이 없거나 추천하지 않는 때면 빈 목록
+	 * 프로가 아니거나(2026-11-14), 추천을 껐거나, 기본 차량이 없거나, 추천하지 않는 때면 빈 목록. 베이직은 TMAP을 부르지 않는다
 	 */
 	@Transactional
 	public RecommendationListResponse recommend(Long userId, double lat, double lng) {
 		Driver driver = requireDriver(userId);
 		Site.validateLocation(lat, lng);
+		if (!planService.planOf(userId).allows(DriverFeature.RECOMMENDATION)) {
+			return RecommendationListResponse.none();
+		}
 		RecommendationPreference preference = preferenceOf(driver);
 		Optional<Vehicle> found = vehicleRepository.findByDriverUserIdAndDefaultVehicleTrue(userId);
 		if (!preference.isEnabled() || found.isEmpty()) {
@@ -164,7 +170,7 @@ public class RecommendationService {
 	}
 
 	public RecommendationPreferenceResponse getPreference(Long userId) {
-		return RecommendationPreferenceResponse.from(preferenceOf(requireDriver(userId)));
+		return RecommendationPreferenceResponse.from(preferenceOf(requireDriver(userId)), available(userId));
 	}
 
 	@Transactional
@@ -174,7 +180,12 @@ public class RecommendationService {
 				.orElseGet(() -> preferenceRepository.save(RecommendationPreference.defaults(driver)));
 		preference.change(request.enabled(), request.radiusKm(), request.minNetProfit(),
 				request.excludedCargoCategories(), clock.instant());
-		return RecommendationPreferenceResponse.from(preference);
+		return RecommendationPreferenceResponse.from(preference, available(userId));
+	}
+
+	/** 지금 플랜으로 추천을 받을 수 있는지. 앱이 설정에 "프로에서 받아요"를 그린다 */
+	private boolean available(Long userId) {
+		return planService.planOf(userId).allows(DriverFeature.RECOMMENDATION);
 	}
 
 	/** 공차는 출발점(상하차지 또는 세운 자리)에서 시작한다. 경유가는 상차지 시도 평균 */

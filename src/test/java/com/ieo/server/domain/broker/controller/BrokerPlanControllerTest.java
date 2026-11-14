@@ -1,5 +1,13 @@
 package com.ieo.server.domain.broker.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.ieo.server.domain.broker.service.BrokerPlanService;
+import com.ieo.server.domain.plan.entity.PlanPayment;
+import com.ieo.server.domain.plan.enums.PlanOwnerType;
+import com.ieo.server.domain.plan.repository.PlanPaymentRepository;
+import jakarta.persistence.EntityManager;
+import org.springframework.jdbc.core.JdbcTemplate;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -46,6 +54,18 @@ class BrokerPlanControllerTest {
 	@Autowired
 	private JwtProvider jwtProvider;
 
+	@Autowired
+	private BrokerPlanService planService;
+
+	@Autowired
+	private PlanPaymentRepository paymentRepository;
+
+	@Autowired
+	private JdbcTemplate jdbc;
+
+	@Autowired
+	private EntityManager em;
+
 	private MockMvc mockMvc;
 	private User owner;
 	private int phoneSeq;
@@ -63,22 +83,19 @@ class BrokerPlanControllerTest {
 				.andExpect(jsonPath("$.plan.plan").value("BASIC"))
 				.andExpect(jsonPath("$.plan.planLabel").value("베이직"))
 				.andExpect(jsonPath("$.plan.features").isEmpty())
-				.andExpect(jsonPath("$.plan.limits.members").value(1))
-				.andExpect(jsonPath("$.plan.limits.shareLinksPerMonth").value(20))
+				.andExpect(jsonPath("$.plan.limits").doesNotExist())
 				.andExpect(jsonPath("$.plan.startedAt").doesNotExist());
 
 		changePlan(owner, "PRO")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.plan.plan").value("PRO"))
+				.andExpect(jsonPath("$.plan.price").value(39000))
 				.andExpect(jsonPath("$.plan.features[*].code").value(Matchers.containsInAnyOrder("REPORTS", "DRIVER_RECORDS")))
 				.andExpect(jsonPath("$.plan.features[0].label").exists())
-				.andExpect(jsonPath("$.plan.limits.members").value(10))
-				.andExpect(jsonPath("$.plan.limits.shareLinksPerMonth").doesNotExist())
 				.andExpect(jsonPath("$.plan.startedAt").exists());
-		changePlan(owner, "PRO_PLUS")
-				.andExpect(jsonPath("$.plan.features.length()").value(4))
-				.andExpect(jsonPath("$.plan.limits.members").doesNotExist());
 
+		// 프로 플러스는 뺐다 (2026-11-14)
+		changePlan(owner, "PRO_PLUS").andExpect(status().isBadRequest());
 		changePlan(owner, "GOLD").andExpect(status().isBadRequest());
 		perform(put("/api/brokers/me/plan").contentType(MediaType.APPLICATION_JSON).content("{}"), owner)
 				.andExpect(status().isBadRequest());
@@ -97,54 +114,81 @@ class BrokerPlanControllerTest {
 		perform(get("/api/brokers/me/reports/routes"), owner).andExpect(status().isOk());
 		perform(get("/api/brokers/me/reports/drivers"), owner).andExpect(status().isOk());
 
-		// 내리면 다시 막힌다. 데이터는 그대로 (PLAN-004)
+		// 해지해도 남은 날까지는 프로. 기간이 끝나면 다시 막힌다. 데이터는 그대로 (PLAN-004)
 		changePlan(owner, "BASIC");
+		perform(get("/api/brokers/me/reports/company"), owner).andExpect(status().isOk());
+		endPeriodNow();
 		perform(get("/api/brokers/me/reports/company"), owner).andExpect(status().isForbidden());
 	}
 
 	@Test
-	void 담당자는_플랜을_못_바꾸고_담당자_수는_플랜_한도까지다() throws Exception {
-		// BASIC은 대표 1명이 한도라 초대부터 막힌다
-		invite(owner, "01090010201")
-				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("PLAN_403_MEMBER_LIMIT"));
+	void 프로는_30일이고_해지하면_남은_날까지_쓰고_다시_고르면_해지만_취소한다() throws Exception {
+		changePlan(owner, "PRO")
+				.andExpect(jsonPath("$.plan.plan").value("PRO"))
+				.andExpect(jsonPath("$.plan.periodEnd").exists())
+				.andExpect(jsonPath("$.plan.cancelAtPeriodEnd").value(false));
+		assertThat(payments()).hasSize(1);
 
-		changePlan(owner, "PRO");
+		changePlan(owner, "BASIC")
+				.andExpect(jsonPath("$.plan.plan").value("PRO"))
+				.andExpect(jsonPath("$.plan.cancelAtPeriodEnd").value(true));
+		changePlan(owner, "PRO")
+				.andExpect(jsonPath("$.plan.cancelAtPeriodEnd").value(false));
+		assertThat(payments()).hasSize(1);
+
+		// 기간이 끝나면 새벽 정리가 다음 30일을 결제(데모)한다. 정리 전에도 프로로 보인다
+		endPeriodNow();
+		perform(get("/api/brokers/me"), owner)
+				.andExpect(jsonPath("$.plan.plan").value("PRO"))
+				.andExpect(jsonPath("$.plan.periodEnd").exists());
+		planService.settleExpired();
+		em.flush();
+		em.clear();
+		assertThat(payments()).hasSize(2);
+
+		// 해지한 채 기간이 끝나면 베이직으로 내려간다
+		changePlan(owner, "BASIC");
+		endPeriodNow();
+		planService.settleExpired();
+		em.flush();
+		em.clear();
+		perform(get("/api/brokers/me"), owner)
+				.andExpect(jsonPath("$.plan.plan").value("BASIC"))
+				.andExpect(jsonPath("$.plan.periodEnd").doesNotExist());
+		assertThat(payments()).hasSize(2);
+	}
+
+	/** 지금 기간을 방금 끝난 것으로 옮긴다 */
+	private void endPeriodNow() {
+		em.flush();
+		jdbc.update("update broker_subscriptions set period_end = ? where broker_id = ?",
+				java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(1)), brokerId());
+		em.clear();
+	}
+
+	private java.util.List<PlanPayment> payments() {
+		return paymentRepository.findAllByOwnerTypeAndOwnerIdOrderByPaidAtDesc(PlanOwnerType.BROKER, brokerId());
+	}
+
+	private Long brokerId() {
+		return jdbc.queryForObject("select broker_id from broker_members where user_id = ?", Long.class, owner.getId());
+	}
+
+	@Test
+	void 담당자는_플랜을_못_바꾸고_담당자_수는_플랜과_상관없이_무제한이다() throws Exception {
+		// 베이직에서도 여러 명을 초대하고 받을 수 있다 (2026-11-14)
 		User staff = user("01090010201", UserRole.BROKER, "이담당");
 		long invitationId = idOf(invite(owner, "01090010201").andExpect(status().isCreated()));
 		perform(post("/api/broker-invitations/{id}/accept", invitationId), staff)
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.plan.plan").value("PRO"));
-		changePlan(staff, "PRO_PLUS")
-				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("BROKER_403_OWNER"));
-
-		// 담당자 2명인 채로 BASIC으로 내려도 내보내지 않는다. 새 초대만 막힌다
-		changePlan(owner, "BASIC").andExpect(status().isOk());
-		perform(get("/api/brokers/me/members"), owner)
-				.andExpect(jsonPath("$.length()").value(2));
-		invite(owner, "01090010202")
-				.andExpect(jsonPath("$.code").value("PLAN_403_MEMBER_LIMIT"));
-
-		// 대기 중인 초대도 자리를 차지한다: PRO(10명)에서 담당자 2 + 초대 8이면 9번째 초대는 막힘
-		changePlan(owner, "PRO");
-		for (int i = 3; i <= 10; i++) {
+				.andExpect(jsonPath("$.plan.plan").value("BASIC"));
+		for (int i = 2; i <= 12; i++) {
 			invite(owner, "010900102%02d".formatted(i)).andExpect(status().isCreated());
 		}
-		invite(owner, "01090010211")
-				.andExpect(jsonPath("$.code").value("PLAN_403_MEMBER_LIMIT"));
-	}
 
-	@Test
-	void 초대를_받은_뒤_플랜이_내려가면_수락할_때_막힌다() throws Exception {
-		changePlan(owner, "PRO");
-		User staff = user("01090010201", UserRole.BROKER, "이담당");
-		long invitationId = idOf(invite(owner, "01090010201"));
-		changePlan(owner, "BASIC");
-
-		perform(post("/api/broker-invitations/{id}/accept", invitationId), staff)
+		changePlan(staff, "PRO")
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("PLAN_403_MEMBER_LIMIT"));
+				.andExpect(jsonPath("$.code").value("BROKER_403_OWNER"));
 	}
 
 	private ResultActions changePlan(User user, String plan) throws Exception {

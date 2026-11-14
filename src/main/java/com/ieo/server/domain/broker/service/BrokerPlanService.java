@@ -4,10 +4,7 @@ import com.ieo.server.domain.broker.dto.BrokerPlanResponse;
 import com.ieo.server.domain.broker.entity.Broker;
 import com.ieo.server.domain.broker.entity.BrokerSubscription;
 import com.ieo.server.domain.broker.enums.BrokerFeature;
-import com.ieo.server.domain.broker.enums.BrokerInvitationStatus;
 import com.ieo.server.domain.broker.enums.BrokerPlan;
-import com.ieo.server.domain.broker.repository.BrokerInvitationRepository;
-import com.ieo.server.domain.broker.repository.BrokerMemberRepository;
 import com.ieo.server.domain.broker.repository.BrokerSubscriptionRepository;
 import com.ieo.server.domain.plan.entity.PlanPayment;
 import com.ieo.server.domain.plan.enums.PlanOwnerType;
@@ -16,12 +13,16 @@ import com.ieo.server.global.error.BusinessException;
 import com.ieo.server.global.error.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 주선사 플랜 (12장 PLAN-001~004). 구독 줄이 없으면 BASIC.
+ * 주선사 플랜 (12장 PLAN-001~004, PLAN-008, BILL-004). 구독 줄이 없으면 BASIC.
+ * 프로는 30일 단위다. 기간이 끝나면 다음 30일을 결제(데모)하고, 해지했으면 베이직으로 내린다.
+ * 정리는 바꿀 때와 매일 새벽([settleExpired])에 한다. 읽을 때는 고치지 않고, 아직 정리 전인 자동 갱신 구독은 프로로 본다.
  * 기능 검사는 각 API의 서비스가 requireFeature를 부른다. 플랜을 내려도 데이터는 지우지 않고 보기·추가만 막는다 (PLAN-004)
  */
 @Service
@@ -30,19 +31,23 @@ import org.springframework.transaction.annotation.Transactional;
 public class BrokerPlanService {
 
 	private final BrokerSubscriptionRepository subscriptionRepository;
-	private final BrokerMemberRepository memberRepository;
-	private final BrokerInvitationRepository invitationRepository;
 	private final PlanPaymentRepository paymentRepository;
 	private final Clock clock;
 
 	public BrokerPlan planOf(Long brokerId) {
-		return subscriptionRepository.findById(brokerId).map(BrokerSubscription::getPlan).orElse(BrokerPlan.BASIC);
+		Instant now = clock.instant();
+		return subscriptionRepository.findById(brokerId)
+				.map(subscription -> subscription.isExpiredAt(now) && !subscription.isCancelAtPeriodEnd()
+						? subscription.getPlan() // 자동 갱신 대상: 새벽 정리나 다음 변경 때 결제(데모)된다
+						: subscription.planAt(now))
+				.orElse(BrokerPlan.BASIC);
 	}
 
 	public BrokerPlanResponse getPlan(Long brokerId) {
+		Instant now = clock.instant();
 		return subscriptionRepository.findById(brokerId)
-				.map(subscription -> BrokerPlanResponse.of(subscription.getPlan(), subscription.getStartedAt()))
-				.orElseGet(() -> BrokerPlanResponse.of(BrokerPlan.BASIC, null));
+				.map(subscription -> BrokerPlanResponse.of(subscription, planOf(brokerId), now))
+				.orElseGet(() -> BrokerPlanResponse.basic());
 	}
 
 	/** 이 플랜에 없는 기능이면 403 PLAN_403_UPGRADE. 메시지에 필요한 플랜을 넣는다 (PLAN-003 안내용) */
@@ -56,50 +61,61 @@ public class BrokerPlanService {
 	}
 
 	/**
-	 * 담당자를 한 명 더 둘 수 있는지 (초대 보낼 때, 초대 수락할 때). 지금 담당자 + 대기 중인 초대가 한도 이상이면 403.
-	 * 플랜을 내려서 이미 한도를 넘은 회사는 담당자를 내보내지 않고 새로 들어오는 것만 막는다
+	 * 플랜 고르기 (부르는 쪽이 대표인지 확인한다). 데모 결제라 바로 적용한다 (BILL-007).
+	 * 프로: 새 30일을 시작하고 결제 기록을 남긴다. 해지해 둔 프로를 다시 고르면 해지만 취소한다(결제 없음).
+	 * 베이직: 해지. 남은 날까지 프로를 쓰고 기간이 끝나면 베이직이 된다
 	 */
-	public void requireMemberRoom(Long brokerId) {
-		Integer limit = planOf(brokerId).getMemberLimit();
-		if (limit == null) {
-			return;
-		}
-		Instant now = clock.instant();
-		long members = memberRepository.findAllByBrokerIdAndRemovedAtIsNullOrderByCreatedAtAsc(brokerId).size();
-		long pending = invitationRepository
-				.findAllByBrokerIdAndStatusOrderByCreatedAtDesc(brokerId, BrokerInvitationStatus.PENDING).stream()
-				.filter(invitation -> invitation.isPendingAt(now))
-				.count();
-		if (members + pending >= limit) {
-			throw new BusinessException(ErrorCode.PLAN_MEMBER_LIMIT,
-					"지금 플랜은 담당자를 %d명까지 둘 수 있어요. 더 두려면 플랜을 올려 주세요.".formatted(limit));
-		}
-	}
-
-	/** 초대를 수락해 들어올 때는 대기 중인 초대 자신이 한 자리를 이미 차지하고 있으므로 담당자 수만 본다 */
-	public void requireMemberRoomForAccept(Long brokerId) {
-		Integer limit = planOf(brokerId).getMemberLimit();
-		if (limit != null && memberRepository.findAllByBrokerIdAndRemovedAtIsNullOrderByCreatedAtAsc(brokerId).size() >= limit) {
-			throw new BusinessException(ErrorCode.PLAN_MEMBER_LIMIT,
-					"이 회사의 플랜은 담당자를 %d명까지 둘 수 있어서 지금은 합류할 수 없어요. 대표에게 알려 주세요.".formatted(limit));
-		}
-	}
-
-	/** 플랜 바꾸기. 데모 결제라 바로 적용하고 유료 플랜이면 결제 기록(30일)을 남긴다 (BILL-007). 부르는 쪽이 대표인지 확인한다 */
 	@Transactional
 	public BrokerPlanResponse change(Broker broker, BrokerPlan plan) {
-		Instant now = clock.instant();
-		BrokerPlan before = planOf(broker.getId());
-		BrokerSubscription subscription = subscriptionRepository.findById(broker.getId())
-				.map(found -> {
-					found.change(plan, now);
-					return found;
-				})
-				.orElseGet(() -> subscriptionRepository.save(BrokerSubscription.of(broker, plan, now)));
-		if (plan.getPrice() > 0 && before != plan) {
-			paymentRepository.save(PlanPayment.demo(PlanOwnerType.BROKER, broker.getId(), plan.name(), plan.getPrice(),
-					now, now.plus(PlanPayment.PERIOD), now));
+		if (plan == null) {
+			throw new BusinessException(ErrorCode.PLAN_INVALID);
 		}
-		return BrokerPlanResponse.of(subscription.getPlan(), subscription.getStartedAt());
+		Instant now = clock.instant();
+		BrokerSubscription subscription = current(broker, now);
+		if (plan == BrokerPlan.BASIC) {
+			if (subscription.planAt(now) != BrokerPlan.BASIC) {
+				subscription.cancel();
+			}
+		} else if (subscription.planAt(now) == plan) {
+			subscription.resume();
+		} else {
+			subscription.subscribe(plan, now);
+			pay(subscription, now);
+		}
+		return BrokerPlanResponse.of(subscription, subscription.planAt(now), now);
+	}
+
+	/** 매일 새벽 기간이 끝난 프로를 다음 30일로 결제(데모)하거나, 해지했으면 베이직으로 내린다 */
+	@Scheduled(cron = "0 10 4 * * *", zone = "Asia/Seoul")
+	@Transactional
+	public void settleExpired() {
+		Instant now = clock.instant();
+		List<BrokerSubscription> expired = subscriptionRepository.findAllByPeriodEndLessThanEqual(now);
+		expired.forEach(subscription -> settle(subscription, now));
+	}
+
+	/** 기간이 끝난 구독을 정리하고 돌려준다. 줄이 없으면 BASIC 줄을 만든다 */
+	private BrokerSubscription current(Broker broker, Instant now) {
+		BrokerSubscription subscription = subscriptionRepository.findById(broker.getId())
+				.orElseGet(() -> subscriptionRepository.save(BrokerSubscription.basic(broker, now)));
+		settle(subscription, now);
+		return subscription;
+	}
+
+	private void settle(BrokerSubscription subscription, Instant now) {
+		while (subscription.isExpiredAt(now)) {
+			if (subscription.isCancelAtPeriodEnd()) {
+				subscription.downgrade(now);
+			} else {
+				subscription.renew();
+				pay(subscription, now);
+			}
+		}
+	}
+
+	private void pay(BrokerSubscription subscription, Instant now) {
+		BrokerPlan plan = subscription.getPlan();
+		paymentRepository.save(PlanPayment.demo(PlanOwnerType.BROKER, subscription.getBrokerId(), plan.name(), plan.getPrice(),
+				subscription.getPeriodStart(), subscription.getPeriodEnd(), now));
 	}
 }
