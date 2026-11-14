@@ -15,7 +15,9 @@ public enum OrderCloseReason {
 	/** 상차 가능 시간이 끝나도록 배차되지 않아 서버가 자동으로 마감 (OrderExpirer) */
 	EXPIRED("상차 시간 지남"),
 	/** 확정된 배차를 취소하면서 다시 모집하지 않고 내림 */
-	CANCELED("배차 취소");
+	CANCELED("배차 취소"),
+	/** 지정한 단골 차주와 연결이 해제되어 서버가 마감 (BRK-011, 2026-11-13) */
+	UNLINKED("단골 해제");
 
 	private final String label;
 }

@@ -561,15 +561,37 @@ class DispatchControllerTest {
 	}
 
 	@Test
-	void 단골을_해제하면_새_지정은_막히고_이미_올린_지정_오더는_그대로다() throws Exception {
+	void 지정_오더를_올리면_그_단골_차주에게_알림이_간다() throws Exception {
 		Long regular = linkedDriver(Tonnage.TON_5, BodyType.WING);
 		Integer targeted = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", regular)));
-		linkRepository.findAll().forEach(link -> link.unlink(Instant.now()));
+
+		mockMvc.perform(get("/api/notifications").header("Authorization", bearer(regular)))
+				.andExpect(jsonPath("$[0].type").value("ORDER_TARGETED"))
+				.andExpect(jsonPath("$[0].orderId").value(targeted))
+				.andExpect(jsonPath("$[0].message").value(org.hamcrest.Matchers.containsString("나에게만 보이는 오더를 보냈어요")));
+		// 마켓 공개 오더는 알리지 않는다
+		Long other = newDriver(Tonnage.TON_5, BodyType.WING);
+		registerOrder(orderJson("TON_5", "WING", "SELECT", null));
+		mockMvc.perform(get("/api/notifications").header("Authorization", bearer(other)))
+				.andExpect(jsonPath("$.length()").value(0));
+	}
+
+	@Test
+	void 단골을_해제하면_새_지정은_막히고_모집_중이던_지정_오더는_마감된다() throws Exception {
+		Long regular = linkedDriver(Tonnage.TON_5, BodyType.WING);
+		Integer targeted = idOf(registerOrder(orderJson("TON_5", "WING", "SELECT", regular)));
+		Long linkId = linkRepository.findAll().getFirst().getId();
+		mockMvc.perform(post("/api/brokers/me/drivers/" + linkId + "/unlink").header("Authorization", broker))
+				.andExpect(status().isNoContent());
 
 		registerOrder(orderJson("TON_5", "WING", "SELECT", regular))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("ORDER_400_TARGET"));
-		request(bearer(regular), targeted).andExpect(status().isCreated());
+		request(bearer(regular), targeted).andExpect(status().is4xxClientError());
+		mockMvc.perform(get("/api/broker/orders/" + targeted).header("Authorization", broker))
+				.andExpect(jsonPath("$.status").value("CLOSED"))
+				.andExpect(jsonPath("$.closeReason").value("UNLINKED"))
+				.andExpect(jsonPath("$.closeReasonLabel").value("단골 해제"));
 	}
 
 	@Test

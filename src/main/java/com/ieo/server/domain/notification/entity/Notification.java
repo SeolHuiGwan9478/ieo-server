@@ -2,6 +2,7 @@ package com.ieo.server.domain.notification.entity;
 
 import com.ieo.server.domain.broker.entity.BrokerDriverLink;
 import com.ieo.server.domain.dispatch.entity.DispatchRequest;
+import com.ieo.server.domain.dispatch.entity.Order;
 import com.ieo.server.domain.notification.enums.NotificationType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -53,6 +54,11 @@ public class Notification {
 	@JoinColumn(name = "dispatch_request_id")
 	private DispatchRequest dispatchRequest;
 
+	/** 지정 오더 알림이면 그 오더. 다른 알림이면 null */
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "order_id")
+	private Order order;
+
 	/** 단골 요청 알림이면 그 요청. 배차 알림이면 null */
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "driver_link_id")
@@ -70,6 +76,16 @@ public class Notification {
 
 	public static Notification about(DispatchRequest request, NotificationType type, Instant now) {
 		return new Notification(request, type, now);
+	}
+
+	/** 지정 오더를 받은 단골 차주에게 */
+	public static Notification aboutTargetedOrder(Order order, Long driverUserId, Instant now) {
+		Notification notification = new Notification();
+		notification.userId = driverUserId;
+		notification.type = NotificationType.ORDER_TARGETED;
+		notification.order = order;
+		notification.createdAt = now;
+		return notification;
 	}
 
 	/** 단골 연결 요청을 받은 차주에게 */

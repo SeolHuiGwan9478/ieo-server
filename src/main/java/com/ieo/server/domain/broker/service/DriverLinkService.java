@@ -41,6 +41,7 @@ public class DriverLinkService {
 	private final Clock clock;
 	private final BrokerMetricsService metricsService;
 	private final TripRepository tripRepository;
+	private final com.ieo.server.domain.dispatch.service.TargetedOrderCloser targetedOrderCloser;
 
 	/** 내 번호로 온, 수락을 기다리는 요청 */
 	@Transactional(readOnly = true)
@@ -91,13 +92,15 @@ public class DriverLinkService {
 		findInvitedToMe(driver, linkId).decline(clock.instant());
 	}
 
-	/** 해제하면 그 회사에 위치 공유가 끝나고 새 지정 배차도 오지 않는다. 진행 중인 운행은 그대로 */
+	/** 해제하면 그 회사에 위치 공유가 끝나고 새 지정 배차도 오지 않는다. 모집 중이던 지정 오더는 마감한다. 진행 중인 운행은 그대로 */
 	public void unlink(Long userId, Long linkId) {
 		requireDriver(userId);
 		BrokerDriverLink link = linkRepository.findByIdForUpdate(linkId)
 				.filter(found -> found.isLinkedTo(userId))
 				.orElseThrow(() -> new BusinessException(ErrorCode.DRIVER_LINK_NOT_FOUND));
-		link.unlink(clock.instant());
+		Instant now = clock.instant();
+		link.unlink(now);
+		targetedOrderCloser.closeFor(link.getBroker().getId(), userId, now);
 	}
 
 	/** 내 번호로 온 요청이 아니면 있는지도 알려 주지 않는다 */

@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -100,10 +101,9 @@ public class BrokerMetricsCalculator {
 
 	/**
 	 * 매일 새벽: 지표가 있는 회사를 모두 다시 계산한다 (날짜가 지나 지연이 된 건, 기간에서 빠진 건 반영).
-	 * TODO: 상하차지 통계와 같이 자동 실행은 꺼 두었다. 켤 때 아래 주석을 푼다.
 	 * 처음부터 다시 계산하는 방식이라 서버 여러 대에서 같이 돌아도 결과는 같다
 	 */
-	// @Scheduled(cron = "0 40 4 * * *", zone = "Asia/Seoul")
+	@Scheduled(cron = "0 40 4 * * *", zone = "Asia/Seoul")
 	@Transactional
 	public void recalculateAll() {
 		List<Long> brokerIds = metricsRepository.findAllBrokerIds();

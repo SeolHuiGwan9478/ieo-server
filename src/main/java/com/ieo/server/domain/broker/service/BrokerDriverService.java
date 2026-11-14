@@ -39,6 +39,7 @@ public class BrokerDriverService {
 	private final UserRepository userRepository;
 	private final VehicleRepository vehicleRepository;
 	private final NotificationService notificationService;
+	private final com.ieo.server.domain.dispatch.service.TargetedOrderCloser targetedOrderCloser;
 	private final Clock clock;
 	private final DriverRecordService driverRecordService;
 
@@ -111,10 +112,15 @@ public class BrokerDriverService {
 		findOurs(me, linkId).cancel(clock.instant());
 	}
 
-	/** 단골 해제. 이미 확정된 배차와 운행은 그대로 두고, 새 지정 배차만 막힌다 */
+	/** 단골 해제. 새 지정 배차가 막히고, 모집 중이던 지정 오더는 마감한다. 이미 확정된 배차와 운행은 그대로 */
 	public void unlink(Long userId, Long linkId) {
 		BrokerMember me = requireActiveMember(userId);
-		findOurs(me, linkId).unlink(clock.instant());
+		BrokerDriverLink link = findOurs(me, linkId);
+		Instant now = clock.instant();
+		link.unlink(now);
+		if (link.getDriver() != null) {
+			targetedOrderCloser.closeFor(me.getBroker().getId(), link.getDriver().getUserId(), now);
+		}
 	}
 
 	/** 다른 회사의 요청·연결은 있는지도 알려 주지 않는다 */

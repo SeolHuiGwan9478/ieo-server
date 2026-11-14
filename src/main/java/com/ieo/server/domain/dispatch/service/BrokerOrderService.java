@@ -55,6 +55,7 @@ public class BrokerOrderService {
 	/** 같은 상하차지로 보는 거리. SiteService.findOrCreate의 SAME_SITE_METERS와 같다 */
 	private static final double SAME_SITE_METERS = 100;
 
+	private final com.ieo.server.domain.notification.service.NotificationService notificationService;
 	private final OrderRepository orderRepository;
 	private final DispatchRequestRepository requestRepository;
 	private final BrokerMemberRepository memberRepository;
@@ -138,6 +139,9 @@ public class BrokerOrderService {
 				.create();
 		Order saved = orderRepository.save(order);
 		markIfReconsigned(saved);
+		if (target != null) {
+			notificationService.orderTargeted(saved, target.getUserId());
+		}
 		return OrderResponse.forBroker(saved, clock.instant(), 0L);
 	}
 
@@ -181,12 +185,17 @@ public class BrokerOrderService {
 			}
 			order.changeBilling(billedFare, request.customerName());
 		} else {
+			Long before = order.targetDriverId();
 			Driver target = request.targetDriverId() == null ? null : requireLinkedDriver(member, request.targetDriverId());
 			order.change(resolveSite(request.pickup()), resolveSite(request.dropoff()),
 					request.pickupFrom(), request.pickupUntil(), request.dropoffBy(),
 					request.cargoCategory(), request.cargoType(), request.weightKg(), request.tonnage(), request.bodyType(),
 					request.loadingMethod(), request.fare(), billedFare, request.customerName(), request.paymentType(), paymentDays,
 					request.consignmentType(), request.confirmMode(), target);
+			// 새로 지정했거나 다른 단골로 바꿨으면 그 차주에게 알린다
+			if (target != null && !target.getUserId().equals(before)) {
+				notificationService.orderTargeted(order, target.getUserId());
+			}
 		}
 		try {
 			orderRepository.flush();

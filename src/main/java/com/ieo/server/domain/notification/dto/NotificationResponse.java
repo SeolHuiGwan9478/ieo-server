@@ -26,6 +26,13 @@ public record NotificationResponse(
 					link.getBroker().getName() + "에서 단골 연결을 요청했어요. 휴대폰 앱에서 수락하거나 거절할 수 있어요",
 					null, null, link.getId(), notification.getCreatedAt());
 		}
+		Order targeted = notification.getOrder();
+		if (targeted != null) {
+			return new NotificationResponse(notification.getId(), notification.getType(),
+					targeted.getBroker().getName() + "에서 나에게만 보이는 오더를 보냈어요. "
+							+ targeted.getPickupSite().getName() + "에서 " + targeted.getDropoffSite().getName() + "까지예요",
+					null, targeted.getId(), null, notification.getCreatedAt());
+		}
 		DispatchRequest request = notification.getDispatchRequest();
 		Order order = request.getOrder();
 		return new NotificationResponse(notification.getId(), notification.getType(),
@@ -38,7 +45,7 @@ public record NotificationResponse(
 			case DISPATCH_CONFIRMED -> order.getBroker().getName() + "에서 배차를 확정했어요. " + route + "까지, 내 배차에 넣었어요";
 			case DISPATCH_DECLINED -> route + "까지 가는 배차는 마감됐어요";
 			case DISPATCH_EXPIRED -> route + "까지 가는 배차 요청이 10분 안에 확정되지 않았어요";
-			case DRIVER_LINK_REQUESTED -> throw new IllegalStateException("단골 요청 알림은 위에서 만든다");
+			case DRIVER_LINK_REQUESTED, ORDER_TARGETED -> throw new IllegalStateException("단골 요청·지정 오더 알림은 위에서 만든다");
 		};
 	}
 }

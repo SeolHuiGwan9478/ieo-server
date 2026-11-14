@@ -51,6 +51,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 	/** 자동 마감: 상차 가능 시간이 끝났는데 아직 모집 중인 오더 (OrderExpirer). idx_orders_status_pickup을 탄다 */
 	List<Order> findAllByStatusAndPickupUntilLessThanEqual(OrderStatus status, Instant now);
 
+	/** 이 회사가 이 차주에게 지정한, 아직 모집 중인 오더 (단골 해제 때 마감) */
+	List<Order> findAllByBrokerIdAndTargetDriverUserIdAndStatus(Long brokerId, Long driverUserId, OrderStatus status);
+
 	/** 리포트: 기간 안에 등록한 오더 수 (BRK-042) */
 	long countByBrokerIdAndCreatedAtBetween(Long brokerId, Instant from, Instant to);
 

@@ -9,5 +9,7 @@ public enum NotificationType {
 	/** 10분 안에 확정되지 않았다 */
 	DISPATCH_EXPIRED,
 	/** 주선사가 단골 연결을 요청했다. 수락·거절은 휴대폰에서만 한다 (BRK-002) */
-	DRIVER_LINK_REQUESTED
+	DRIVER_LINK_REQUESTED,
+	/** 단골인 주선사가 나에게만 보이는 오더를 보냈다 (BRK-011) */
+	ORDER_TARGETED
 }

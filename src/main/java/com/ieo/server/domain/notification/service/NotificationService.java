@@ -69,6 +69,13 @@ public class NotificationService {
 		afterCommit(() -> deliver(driverUserId, response));
 	}
 
+	/** 지정 오더를 받은 단골 차주에게 알린다 (BRK-011). 휴대폰 푸시를 누르면 오더 탭이 열린다 */
+	public void orderTargeted(com.ieo.server.domain.dispatch.entity.Order order, Long driverUserId) {
+		Notification saved = notificationRepository.save(Notification.aboutTargetedOrder(order, driverUserId, clock.instant()));
+		NotificationResponse response = NotificationResponse.of(saved);
+		afterCommit(() -> deliver(driverUserId, response));
+	}
+
 	/** after 다음 알림. after가 없으면 최근 20건 */
 	public List<NotificationResponse> list(Long userId, Long after) {
 		fillMissedExpiries(userId);

@@ -417,6 +417,16 @@ public class Order extends BaseTimeEntity {
 		this.closeReason = null;
 	}
 
+	/** 지정한 단골 차주와 연결이 해제됐다. 아직 모집 중인 지정 오더만 마감한다 */
+	public boolean closeForUnlink() {
+		if (status != OrderStatus.OPEN) {
+			return false;
+		}
+		this.status = OrderStatus.CLOSED;
+		this.closeReason = OrderCloseReason.UNLINKED;
+		return true;
+	}
+
 	/** 확정된 배차가 취소되고 오더도 내린다 */
 	public void closeAfterCancel() {
 		requireAssigned();
