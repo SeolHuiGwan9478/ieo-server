@@ -46,8 +46,9 @@ public class AuthController {
 	@PostMapping("/phone/code")
 	public ResponseEntity<SendCodeResponse> sendCode(@Valid @RequestBody SendCodeRequest request) {
 		String code = phoneAuthService.sendCode(request.phone());
-		boolean demo = environment.matchesProfiles("local & !prod & !dev")
-				&& environment.getProperty("ieo.auth.show-demo-code", Boolean.class, false);
+		// 문자 업체를 붙이기 전 시연 기간에는 화면에 번호를 보여 준다 (2026-11-14, 공모전 운영 서버도 켬).
+		// 켜면 아무 번호로나 로그인할 수 있으니, 실제 문자를 보내기 시작하면 IEO_AUTH_SHOW_DEMO_CODE를 끈다
+		boolean demo = environment.getProperty("ieo.auth.show-demo-code", Boolean.class, false);
 		if (demo) {
 			return ResponseEntity.ok().cacheControl(CacheControl.noStore())
 					.body(new SendCodeResponse(code, PhoneVerification.CODE_TTL.toSeconds()));

@@ -17,7 +17,7 @@ class AuthDemoCodeTest {
     private final AuthController controller = new AuthController(phoneAuth, mock(SocialAuthService.class), mock(AuthService.class), environment);
 
     @Test
-    void 로컬에서_명시적으로_켠_경우에만_시연번호를_보여준다() {
+    void 설정을_켠_경우에만_시연번호를_보여준다() {
         environment.setActiveProfiles("local");
         environment.setProperty("ieo.auth.show-demo-code", "true");
         when(phoneAuth.sendCode("01012345678")).thenReturn("012345");
@@ -37,12 +37,11 @@ class AuthDemoCodeTest {
     }
 
     @Test
-    void 운영과_개발배포에서는_설정을_켜도_번호를_반환하지_않는다() {
+    void 운영에서도_설정을_켜면_보여준다() {
+        environment.setActiveProfiles("prod");
         environment.setProperty("ieo.auth.show-demo-code", "true");
-        for (String[] profiles : new String[][] {{"prod"}, {"dev"}, {"test"}, {"local", "prod"}, {"local", "dev"}}) {
-            environment.setActiveProfiles(profiles);
-            assertHidden();
-        }
+        when(phoneAuth.sendCode("01012345678")).thenReturn("012345");
+        assertThat(controller.sendCode(new SendCodeRequest("01012345678")).getBody().demoCode()).isEqualTo("012345");
     }
 
     private void assertHidden() {

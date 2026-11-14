@@ -22,7 +22,7 @@ logging:
     com.ieo.server: debug
 
 ieo:
-  # 공모전 로컬 시연용. prod/dev에서는 활성화해도 응답에 인증번호를 포함하지 않는다
+  # 공모전 시연용: 인증번호를 응답에 담아 화면에 보여 준다. 운영은 환경변수 IEO_AUTH_SHOW_DEMO_CODE로 켠다
   auth:
     show-demo-code: true
   # 리포트에서 노선·상하차지를 보여 주는 최소 건수 (BRK-044는 10, 데이터가 적은 동안 낮춤)
