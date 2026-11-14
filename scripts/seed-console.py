@@ -3,6 +3,7 @@
 별도 [시연] 회사에만 생성한다. 기존 데이터 삭제 없음. 고정 태그로 중복을 피한다.
 정상 API로 생성하며, 과거 이력의 시각만 해당 시드 ID 범위에서 SQL로 보정한다.
 로컬 시연 인증과 localhost:5432/ieo DB가 필요하다. 인증정보는 출력/저장하지 않는다.
+운영: cloud-sql-proxy --port 5433을 띄우고 IEO_API_BASE=<서버 주소> IEO_SEED_DB_PORT=5433 IEO_SEED_DB_PASSWORD=<Secret Manager ieo-DB_PASSWORD>로 실행한다 (서버가 시연 인증번호를 줘야 한다).
 """
 import argparse
 import importlib.util
@@ -64,10 +65,14 @@ class Database:
             if '=' in line and (not line.lstrip().startswith('#')):
                 k, v = line.split('=', 1)
                 settings[k.strip()] = v.strip()
-        if settings.get('DB_URL') != 'jdbc:postgresql://localhost:5432/ieo':
+        # 운영 DB는 cloud-sql-proxy로 연 로컬 포트(IEO_SEED_DB_PORT)와 IEO_SEED_DB_PASSWORD로 붙는다
+        port = os.environ.get('IEO_SEED_DB_PORT')
+        if port:
+            settings = {'DB_USERNAME': 'ieo', 'DB_PASSWORD': os.environ.get('IEO_SEED_DB_PASSWORD', '')}
+        elif settings.get('DB_URL') != 'jdbc:postgresql://localhost:5432/ieo':
             raise RuntimeError('localhost:5432/ieo DB에서만 실행할 수 있습니다.')
         self.env = dict(os.environ, PGPASSWORD=settings.get('DB_PASSWORD', ''), PGCLIENTENCODING='UTF8')
-        self.cmd = [psql, '-X', '-q', '-t', '-A', '-w', '-h', 'localhost', '-p', '5432', '-U', settings.get('DB_USERNAME', 'postgres'), '-d', 'ieo', '-v', 'ON_ERROR_STOP=1']
+        self.cmd = [psql, '-X', '-q', '-t', '-A', '-w', '-h', 'localhost', '-p', port or '5432', '-U', settings.get('DB_USERNAME', 'postgres'), '-d', 'ieo', '-v', 'ON_ERROR_STOP=1']
 
     def run(self, sql):
         res = subprocess.run(self.cmd, input=sql, encoding='utf-8', capture_output=True, env=self.env)

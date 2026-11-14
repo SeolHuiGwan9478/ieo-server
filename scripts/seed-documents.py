@@ -9,6 +9,7 @@ seed-console.py가 만든 [시연] 차주 6명과 주선사 두 곳([시연] 한
 - 사업자등록증은 사업자번호·개업일을 같이 보낸다. 서버가 NTS_STUB=true면 번호 아홉째 자리로 국세청 결과가 정해진다 (0~6 계속사업자, 7 휴업, 8 폐업, 9 불일치)
 - 서버 주소는 IEO_API_BASE (기본 http://localhost:8080). local 프로필의 시연 인증번호(demoCode) 응답이 필요하다
 - DB는 .env의 DB_URL이 localhost:5432/ieo일 때만 건드린다 (seed-console.py와 같은 규칙)
+- 운영 DB는 IEO_SEED_DB_PORT·IEO_SEED_DB_PASSWORD로 붙는다 (seed-console.py 머리말)
 
 운영자 페이지: 콘솔의 /admin/login 에서 010-0000-0099 로 로그인한다.
 """
@@ -133,12 +134,16 @@ class Database:
             if '=' in line and not line.lstrip().startswith('#'):
                 key, value = line.split('=', 1)
                 settings[key.strip()] = value.strip()
-        if settings.get('DB_URL') != 'jdbc:postgresql://localhost:5432/ieo':
+        # 운영 DB는 cloud-sql-proxy로 연 로컬 포트(IEO_SEED_DB_PORT)와 IEO_SEED_DB_PASSWORD로 붙는다
+        port = os.environ.get('IEO_SEED_DB_PORT')
+        if port:
+            settings = {'DB_USERNAME': 'ieo', 'DB_PASSWORD': os.environ.get('IEO_SEED_DB_PASSWORD', '')}
+        elif settings.get('DB_URL') != 'jdbc:postgresql://localhost:5432/ieo':
             raise RuntimeError('localhost:5432/ieo DB에서만 실행할 수 있습니다.')
         # LC_ALL=C: psql 오류 문구를 영어로 받는다 (Windows는 한글 문구를 콘솔 코드페이지로 찍어 읽기 어렵다)
         self.settings = settings
         self.env = dict(os.environ, PGPASSWORD=settings.get('DB_PASSWORD', ''), PGCLIENTENCODING='UTF8', LC_ALL='C')
-        self.cmd = [psql, '-X', '-q', '-t', '-A', '-w', '-h', 'localhost', '-p', '5432', '-U', settings.get('DB_USERNAME', 'postgres'),
+        self.cmd = [psql, '-X', '-q', '-t', '-A', '-w', '-h', 'localhost', '-p', port or '5432', '-U', settings.get('DB_USERNAME', 'postgres'),
                     '-d', 'ieo', '-v', 'ON_ERROR_STOP=1']
 
     def run(self, sql):
